@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "830196826026",
+    "project_id": "uniandessport",
+    "storage_bucket": "uniandessport.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:830196826026:android:16ef7cae323dc7fb9bf5d3",
+        "android_client_info": {
+          "package_name": "com.uniandes.uniandessport_flutter"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDBkpJtCgjs1wvd_2xFxvo5EYQVMP5zz4s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
