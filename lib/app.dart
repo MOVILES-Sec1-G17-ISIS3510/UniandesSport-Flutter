@@ -1,0 +1,110 @@
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import 'core/theme/app_theme.dart';
+import 'features/auth/data/auth_repository.dart';
+import 'features/auth/presentation/controllers/auth_controller.dart';
+import 'features/auth/presentation/pages/auth_gate.dart';
+
+class UniandesSportsApp extends StatefulWidget {
+  const UniandesSportsApp({super.key});
+
+  @override
+  State<UniandesSportsApp> createState() => _UniandesSportsAppState();
+}
+
+class _UniandesSportsAppState extends State<UniandesSportsApp> {
+  late final Future<FirebaseApp> _firebaseInitFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _firebaseInitFuture = Firebase.initializeApp();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<FirebaseApp>(
+      future: _firebaseInitFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: AppTheme.light,
+            home: const _SplashLoadingPage(),
+          );
+        }
+
+        if (snapshot.hasError) {
+          return MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: AppTheme.light,
+            home: _FirebaseErrorPage(error: snapshot.error.toString()),
+          );
+        }
+
+        return MultiProvider(
+          providers: [
+            Provider<AuthRepository>(
+              create: (_) => AuthRepository(),
+            ),
+            ChangeNotifierProxyProvider<AuthRepository, AuthController>(
+              create: (context) => AuthController(context.read<AuthRepository>()),
+              update: (context, repository, controller) =>
+                  controller ?? AuthController(repository),
+            ),
+          ],
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            title: 'Uniandes Sports',
+            theme: AppTheme.light,
+            home: const AuthGate(),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _SplashLoadingPage extends StatelessWidget {
+  const _SplashLoadingPage();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(
+        child: CircularProgressIndicator(),
+      ),
+    );
+  }
+}
+
+class _FirebaseErrorPage extends StatelessWidget {
+  const _FirebaseErrorPage({required this.error});
+
+  final String error;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Error inicializando Firebase',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+              const SizedBox(height: 12),
+              Text(error),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
