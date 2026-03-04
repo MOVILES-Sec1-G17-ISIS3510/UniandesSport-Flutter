@@ -2,7 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../../home/presentation/pages/home_page.dart';
+import '../../../home/presentation/pages/app_shell.dart';
 import '../../data/auth_repository.dart';
 import '../../domain/models/user_profile.dart';
 import '../../domain/models/user_role.dart';
@@ -40,7 +40,7 @@ class AuthGate extends StatelessWidget {
 
             final profile = profileSnapshot.data;
             if (profile == null) {
-              return HomePage(
+              return AppShell(
                 profile: UserProfile(
                   uid: firebaseUser.uid,
                   email: firebaseUser.email ?? '',
@@ -50,7 +50,7 @@ class AuthGate extends StatelessWidget {
               );
             }
 
-            return HomePage(profile: profile);
+            return AppShell(profile: profile);
           },
         );
       },

@@ -5,11 +5,9 @@ import '../domain/models/user_profile.dart';
 import '../domain/models/user_role.dart';
 
 class AuthRepository {
-  AuthRepository({
-    FirebaseAuth? firebaseAuth,
-    FirebaseFirestore? firestore,
-  })  : _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance,
-        _firestore = firestore ?? FirebaseFirestore.instance;
+  AuthRepository({FirebaseAuth? firebaseAuth, FirebaseFirestore? firestore})
+    : _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance,
+      _firestore = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseAuth _firebaseAuth;
   final FirebaseFirestore _firestore;
@@ -48,7 +46,9 @@ class AuthRepository {
       email: email.trim(),
       fullName: fullName.trim(),
       role: role,
-      university: university?.trim().isEmpty ?? true ? null : university?.trim(),
+      university: university?.trim().isEmpty ?? true
+          ? null
+          : university?.trim(),
       program: program?.trim().isEmpty ?? true ? null : program?.trim(),
       semester: semester,
       mainSport: mainSport?.trim().isEmpty ?? true ? null : mainSport?.trim(),
@@ -65,6 +65,41 @@ class AuthRepository {
     }
 
     return UserProfile.fromJson(snapshot.data()!);
+  }
+
+  Stream<UserProfile?> userProfileChanges(String uid) {
+    return _firestore.collection('users').doc(uid).snapshots().map((snapshot) {
+      if (!snapshot.exists || snapshot.data() == null) {
+        return null;
+      }
+      return UserProfile.fromJson(snapshot.data()!);
+    });
+  }
+
+  Future<void> updateUserProfile({
+    required String uid,
+    String? fullName,
+    String? university,
+    String? program,
+    int? semester,
+    String? mainSport,
+  }) async {
+    final updates = <String, dynamic>{
+      if (fullName != null) 'fullName': fullName.trim(),
+      if (university != null)
+        'university': university.trim().isEmpty ? null : university.trim(),
+      if (program != null)
+        'program': program.trim().isEmpty ? null : program.trim(),
+      if (semester != null) 'semester': semester,
+      if (mainSport != null)
+        'mainSport': mainSport.trim().isEmpty ? null : mainSport.trim(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+
+    await _firestore
+        .collection('users')
+        .doc(uid)
+        .set(updates, SetOptions(merge: true));
   }
 
   String getReadableError(Object error) {
