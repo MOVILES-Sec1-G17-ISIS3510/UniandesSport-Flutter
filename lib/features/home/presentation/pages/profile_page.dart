@@ -1,10 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
-import '../../../auth/data/auth_repository.dart';
 import '../../../auth/domain/models/user_profile.dart';
-import '../../../auth/domain/models/user_role.dart';
-import '../../../auth/presentation/controllers/auth_controller.dart';
 
 class ProfilePage extends StatefulWidget {
   final UserProfile profile;
@@ -16,312 +12,629 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  late TextEditingController _fullNameController;
-  late TextEditingController _universityController;
-  late TextEditingController _programController;
-  late TextEditingController _semesterController;
-  late TextEditingController _mainSportController;
-  bool _isEditing = false;
+  int _selectedTab = 2; // 0=Rankings, 1=History, 2=Badges
 
-  @override
-  void initState() {
-    super.initState();
-    _fullNameController = TextEditingController(text: widget.profile.fullName);
-    _universityController = TextEditingController(
-      text: widget.profile.university ?? '',
-    );
-    _programController = TextEditingController(
-      text: widget.profile.program ?? '',
-    );
-    _semesterController = TextEditingController(
-      text: widget.profile.semester?.toString() ?? '',
-    );
-    _mainSportController = TextEditingController(
-      text: widget.profile.mainSport ?? '',
-    );
-  }
+  String get _initials {
+    final parts = widget.profile.fullName
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((part) => part.isNotEmpty)
+        .toList();
 
-  @override
-  void dispose() {
-    _fullNameController.dispose();
-    _universityController.dispose();
-    _programController.dispose();
-    _semesterController.dispose();
-    _mainSportController.dispose();
-    super.dispose();
+    if (parts.isEmpty) return 'US';
+    if (parts.length == 1) return parts.first[0].toUpperCase();
+    return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const BackButton(),
-                    _isEditing
-                        ? Row(
-                            children: [
-                              TextButton(
-                                onPressed: () =>
-                                    setState(() => _isEditing = false),
-                                child: const Text('Cancelar'),
-                              ),
-                              ElevatedButton(
-                                onPressed: _saveProfile,
-                                child: const Text('Guardar'),
-                              ),
-                            ],
-                          )
-                        : ElevatedButton.icon(
-                            onPressed: () => setState(() => _isEditing = true),
-                            icon: const Icon(Icons.edit),
-                            label: const Text('Editar'),
-                          ),
-                  ],
+        child: Column(
+          children: [
+            // Header con gradiente azul
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF1E3A8A), Color(0xFF3B82F6)],
                 ),
-                const SizedBox(height: 24),
-
-                // Profile Header
-                Center(
-                  child: Column(
-                    children: [
-                      CircleAvatar(
-                        radius: 50,
-                        backgroundColor: Colors.teal,
-                        child: Text(
-                          widget.profile.fullName
-                              .split(' ')
-                              .take(2)
-                              .map((e) => e[0])
-                              .join()
-                              .toUpperCase(),
-                          style: const TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      if (!_isEditing)
-                        Column(
-                          children: [
-                            Text(
-                              widget.profile.fullName.toUpperCase(),
-                              style: Theme.of(context).textTheme.headlineSmall
-                                  ?.copyWith(fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              widget.profile.university ??
-                                  'Universidad no especificada',
-                              style: Theme.of(context).textTheme.bodyMedium,
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '${widget.profile.semester ?? 0}º Semestre - ${widget.profile.role.label}',
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                          ],
-                        ),
-                    ],
-                  ),
+                borderRadius: BorderRadius.only(
+                  bottomLeft: Radius.circular(30),
+                  bottomRight: Radius.circular(30),
                 ),
-                const SizedBox(height: 32),
-
-                // Stats
-                if (!_isEditing)
+              ),
+              child: Column(
+                children: [
+                  // Back button y dark mode
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      _StatBox(label: 'MATCHES', value: '34'),
-                      _StatBox(label: 'WIN RATE', value: '66%'),
-                      _StatBox(label: 'AVG PACE', value: '5:23 min/km'),
-                      _StatBox(label: 'STREAK', value: '7d'),
+                      IconButton(
+                        icon: const Icon(Icons.arrow_back, color: Colors.white),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                      IconButton(
+                        icon: const Icon(
+                          Icons.dark_mode_outlined,
+                          color: Colors.white,
+                        ),
+                        onPressed: () {
+                          // TODO: Implementar modo oscuro
+                        },
+                      ),
                     ],
                   ),
-                if (!_isEditing) const SizedBox(height: 32),
+                  const SizedBox(height: 10),
 
-                // Form
-                if (_isEditing) ...[
-                  const Text('Nombre completo'),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _fullNameController,
-                    decoration: InputDecoration(
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
+                  // Avatar
+                  Container(
+                    width: 90,
+                    height: 90,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E3A8A),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.white, width: 3),
+                    ),
+                    child: Center(
+                      child: Text(
+                        _initials,
+                        style: TextStyle(
+                          fontSize: 36,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
                   ),
                   const SizedBox(height: 16),
-                  const Text('Universidad'),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _universityController,
-                    decoration: InputDecoration(
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
+
+                  // Nombre
+                  Text(
+                    widget.profile.fullName.toUpperCase(),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1,
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  const Text('Programa'),
                   const SizedBox(height: 8),
-                  TextField(
-                    controller: _programController,
-                    decoration: InputDecoration(
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
+
+                  // Universidad
+                  Text(
+                    widget.profile.university ?? 'Universidad no especificada',
+                    style: const TextStyle(color: Colors.white70, fontSize: 16),
+                  ),
+                  const SizedBox(height: 4),
+
+                  // Programa y semestre
+                  Text(
+                    '${widget.profile.semester ?? 0}th Semester — '
+                    '${widget.profile.program ?? 'Programa no especificado'}',
+                    style: const TextStyle(color: Colors.white70, fontSize: 14),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Stats cards
+                  Row(
+                    children: const [
+                      Expanded(
+                        child: _MiniStatCard(label: 'MATCHES', value: '34'),
                       ),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: _MiniStatCard(label: 'WIN RATE', value: '66%'),
+                      ),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: _MiniStatCard(
+                          label: 'AVG PACE',
+                          value: '6:23\nMIN/KM',
+                        ),
+                      ),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: _MiniStatCard(label: 'STREAK', value: '70'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            // Tabs
+            Container(
+              margin: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _TabButton(
+                      label: 'Rankings',
+                      isSelected: _selectedTab == 0,
+                      onTap: () => setState(() => _selectedTab = 0),
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  const Text('Semestre'),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _semesterController,
-                    keyboardType: TextInputType.number,
-                    decoration: InputDecoration(
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
+                  Expanded(
+                    child: _TabButton(
+                      label: 'History',
+                      isSelected: _selectedTab == 1,
+                      onTap: () => setState(() => _selectedTab = 1),
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  const Text('Deporte principal'),
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(
-                    initialValue: _mainSportController.text.isEmpty
-                        ? null
-                        : _mainSportController.text,
-                    items: ['Football', 'Tennis', 'Running', 'Calisthenics']
-                        .map((s) => DropdownMenuItem(value: s, child: Text(s)))
-                        .toList(),
-                    onChanged: (value) {
-                      if (value != null) {
-                        _mainSportController.text = value;
-                      }
-                    },
-                    decoration: InputDecoration(
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 32),
-                ] else ...[
-                  // Perfil Info
-                  _ProfileInfoCard(
-                    icon: Icons.school,
-                    title: 'Universidad',
-                    value: widget.profile.university ?? 'No especificada',
-                  ),
-                  const SizedBox(height: 12),
-                  _ProfileInfoCard(
-                    icon: Icons.category,
-                    title: 'Programa',
-                    value: widget.profile.program ?? 'No especificado',
-                  ),
-                  const SizedBox(height: 12),
-                  _ProfileInfoCard(
-                    icon: Icons.calendar_today,
-                    title: 'Semestre',
-                    value: '${widget.profile.semester ?? 0}°',
-                  ),
-                  const SizedBox(height: 12),
-                  _ProfileInfoCard(
-                    icon: Icons.sports_soccer,
-                    title: 'Deporte Principal',
-                    value: widget.profile.mainSport ?? 'No especificado',
-                  ),
-                  const SizedBox(height: 12),
-                  _ProfileInfoCard(
-                    icon: Icons.email,
-                    title: 'Email',
-                    value: widget.profile.email,
-                  ),
-                  const SizedBox(height: 32),
-                  ElevatedButton.icon(
-                    onPressed: () => context.read<AuthController>().signOut(),
-                    icon: const Icon(Icons.logout),
-                    label: const Text('Cerrar sesión'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red,
-                      foregroundColor: Colors.white,
+                  Expanded(
+                    child: _TabButton(
+                      label: 'Badges',
+                      isSelected: _selectedTab == 2,
+                      onTap: () => setState(() => _selectedTab = 2),
                     ),
                   ),
                 ],
-              ],
+              ),
+            ),
+
+            // Contenido
+            Expanded(child: _buildTabContent()),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTabContent() {
+    switch (_selectedTab) {
+      case 0:
+        return _buildRankingsTab();
+      case 1:
+        return _buildHistoryTab();
+      case 2:
+        return _buildBadgesTab();
+      default:
+        return const SizedBox();
+    }
+  }
+
+  Widget _buildRankingsTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'COMMUNITY RANKINGS',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 20),
+          _CommunityRankCard(
+            communityName: 'Running UniAndes',
+            sport: 'Running',
+            rank: 12,
+            total: 67,
+            progress: 0.82,
+            topPercent: '18%',
+          ),
+          const SizedBox(height: 16),
+          _CommunityRankCard(
+            communityName: 'UniAndes Football Club',
+            sport: 'Soccer',
+            rank: 5,
+            total: 48,
+            progress: 0.90,
+            topPercent: '10%',
+          ),
+          const SizedBox(height: 16),
+          _CommunityRankCard(
+            communityName: 'Calisthenics Crew',
+            sport: 'Calisthenics',
+            rank: 3,
+            total: 29,
+            progress: 0.90,
+            topPercent: '10%',
+          ),
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHistoryTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'MATCH HISTORY',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 20),
+          _MatchHistoryCard(
+            icon: Icons.sports_soccer,
+            title: '5v5 Soccer',
+            status: 'Won',
+            statusColor: const Color(0xFF0C8E8B),
+            detail: '4-2',
+            date: 'Feb 24, 2026',
+            opponent: 'vs Team Alpha',
+          ),
+          const SizedBox(height: 16),
+          _MatchHistoryCard(
+            icon: Icons.directions_run,
+            title: '5K Campus Run',
+            status: 'Completed',
+            statusColor: const Color(0xFF3B82F6),
+            detail: '24:15',
+            date: 'Feb 22, 2026',
+            opponent: '',
+          ),
+          const SizedBox(height: 16),
+          _MatchHistoryCard(
+            icon: Icons.sports_soccer,
+            title: '5v5 Casual',
+            status: 'Lost',
+            statusColor: Colors.red,
+            detail: '1-3',
+            date: 'Feb 20, 2026',
+            opponent: 'vs Team Beta',
+          ),
+          const SizedBox(height: 16),
+          _MatchHistoryCard(
+            icon: Icons.fitness_center,
+            title: 'Push-up Challenge',
+            status: 'Completed',
+            statusColor: const Color(0xFF3B82F6),
+            detail: '150 reps',
+            date: 'Feb 18, 2026',
+            opponent: '',
+          ),
+          const SizedBox(height: 16),
+          _MatchHistoryCard(
+            icon: Icons.sports_soccer,
+            title: 'Copa Turing R1',
+            status: 'Won',
+            statusColor: const Color(0xFF0C8E8B),
+            detail: '3-1',
+            date: 'Feb 15, 2026',
+            opponent: 'vs Team Gamma',
+          ),
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBadgesTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'EARNED BADGES',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              Text(
+                '6/9',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF0C8E8B),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          GridView.count(
+            crossAxisCount: 3,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            mainAxisSpacing: 16,
+            crossAxisSpacing: 16,
+            childAspectRatio: 0.75,
+            children: [
+              _BadgeCard(
+                icon: Icons.sports_esports,
+                title: 'First Match',
+                description: 'Complete your first match',
+                earned: true,
+              ),
+              _BadgeCard(
+                icon: Icons.local_fire_department,
+                title: '7-Day Streak',
+                description: 'Stay active for 7 days straight',
+                earned: true,
+              ),
+              _BadgeCard(
+                icon: Icons.bolt,
+                title: 'Speed Demon',
+                description: 'Run 5K under 25 minutes',
+                earned: true,
+              ),
+              _BadgeCard(
+                icon: Icons.groups,
+                title: 'Team Player',
+                description: 'Join 3 communities',
+                earned: true,
+              ),
+              _BadgeCard(
+                icon: Icons.directions_run,
+                title: '100K Runner',
+                description: 'Run 100 km total',
+                earned: false,
+              ),
+              _BadgeCard(
+                icon: Icons.emoji_events,
+                title: 'Tournament Champ',
+                description: 'Win a tournament',
+                earned: false,
+              ),
+              _BadgeCard(
+                icon: Icons.star,
+                title: 'Coach Rated',
+                description: 'Rate a coaching session',
+                earned: true,
+              ),
+              _BadgeCard(
+                icon: Icons.verified,
+                title: 'Challenge Creator',
+                description: 'Create a community challenge',
+                earned: false,
+              ),
+              _BadgeCard(
+                icon: Icons.workspace_premium,
+                title: 'Top 10',
+                description: 'Reach Top 10 in any community',
+                earned: true,
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+}
+
+class _MiniStatCard extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _MiniStatCard({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TabButton extends StatelessWidget {
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _TabButton({
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF1E3A8A) : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Center(
+          child: Text(
+            label,
+            style: TextStyle(
+              color: isSelected ? Colors.white : Colors.grey[600],
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              fontSize: 15,
             ),
           ),
         ),
       ),
     );
   }
-
-  void _saveProfile() async {
-    final repository = context.read<AuthRepository>();
-    final semester = int.tryParse(_semesterController.text);
-
-    await repository.updateUserProfile(
-      uid: widget.profile.uid,
-      fullName: _fullNameController.text,
-      university: _universityController.text,
-      program: _programController.text,
-      semester: semester,
-      mainSport: _mainSportController.text,
-    );
-
-    setState(() => _isEditing = false);
-
-    if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Perfil actualizado')));
-    }
-  }
 }
 
-class _StatBox extends StatelessWidget {
-  final String label;
-  final String value;
+class _CommunityRankCard extends StatelessWidget {
+  final String communityName;
+  final String sport;
+  final int rank;
+  final int total;
+  final double progress;
+  final String topPercent;
 
-  const _StatBox({required this.label, required this.value});
+  const _CommunityRankCard({
+    required this.communityName,
+    required this.sport,
+    required this.rank,
+    required this.total,
+    required this.progress,
+    required this.topPercent,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: Theme.of(
-            context,
-          ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 4),
-        Text(label, style: Theme.of(context).textTheme.labelSmall),
-      ],
+    IconData sportIcon;
+    switch (sport.toLowerCase()) {
+      case 'running':
+        sportIcon = Icons.directions_run;
+        break;
+      case 'soccer':
+        sportIcon = Icons.sports_soccer;
+        break;
+      case 'calisthenics':
+        sportIcon = Icons.fitness_center;
+        break;
+      default:
+        sportIcon = Icons.sports;
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: const BoxDecoration(
+                  color: Color(0xFFE8F6F5),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(sportIcon, color: const Color(0xFF0C8E8B)),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      communityName,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF3B82F6).withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        sport,
+                        style: const TextStyle(
+                          color: Color(0xFF3B82F6),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '#$rank',
+                    style: const TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1E3A8A),
+                    ),
+                  ),
+                  Text(
+                    'of $total',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: LinearProgressIndicator(
+              value: progress,
+              backgroundColor: Colors.grey[200],
+              valueColor: const AlwaysStoppedAnimation<Color>(
+                Color(0xFF0C8E8B),
+              ),
+              minHeight: 10,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Top $topPercent',
+              style: const TextStyle(
+                color: Color(0xFF0C8E8B),
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
 
-class _ProfileInfoCard extends StatelessWidget {
+class _MatchHistoryCard extends StatelessWidget {
   final IconData icon;
   final String title;
-  final String value;
+  final String status;
+  final Color statusColor;
+  final String detail;
+  final String date;
+  final String opponent;
 
-  const _ProfileInfoCard({
+  const _MatchHistoryCard({
     required this.icon,
     required this.title,
-    required this.value,
+    required this.status,
+    required this.statusColor,
+    required this.detail,
+    required this.date,
+    required this.opponent,
   });
 
   @override
@@ -329,25 +642,140 @@ class _ProfileInfoCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.grey[100],
-        borderRadius: BorderRadius.circular(8),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey[200]!),
       ),
       child: Row(
         children: [
-          Icon(icon, color: Colors.teal),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: const BoxDecoration(
+              color: Color(0xFFE8F6F5),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: const Color(0xFF0C8E8B)),
+          ),
           const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Text(
+                      status,
+                      style: TextStyle(
+                        color: statusColor,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      detail,
+                      style: TextStyle(
+                        color: Colors.grey[700],
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
           Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(title, style: Theme.of(context).textTheme.labelSmall),
-              const SizedBox(height: 4),
               Text(
-                value,
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                date,
+                style: TextStyle(color: Colors.grey[600], fontSize: 12),
               ),
+              if (opponent.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  opponent,
+                  style: TextStyle(color: Colors.grey[600], fontSize: 11),
+                ),
+              ],
             ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BadgeCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String description;
+  final bool earned;
+
+  const _BadgeCard({
+    required this.icon,
+    required this.title,
+    required this.description,
+    required this.earned,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: earned ? Colors.white : Colors.grey[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: earned ? Colors.grey[200]! : Colors.grey[300]!,
+        ),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: earned ? const Color(0xFFE8F6F5) : Colors.grey[200],
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              icon,
+              color: earned ? const Color(0xFF0C8E8B) : Colors.grey[400],
+              size: 28,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+              color: earned ? Colors.black : Colors.grey[400],
+            ),
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            description,
+            style: TextStyle(
+              fontSize: 10,
+              color: earned ? Colors.grey[600] : Colors.grey[400],
+            ),
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
