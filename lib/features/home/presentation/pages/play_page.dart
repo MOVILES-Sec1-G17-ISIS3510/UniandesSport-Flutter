@@ -1,155 +1,357 @@
 import 'package:flutter/material.dart';
+
+import '../../../../core/theme/app_theme.dart';
 import '../../../auth/domain/models/user_profile.dart';
+import '../../data/events_repository.dart';
+import '../../domain/models/event_modality.dart';
+import '../../domain/models/sport_event.dart';
+import '../widgets/action_buttons_section.dart';
+import '../widgets/event_card.dart';
+import '../widgets/modality_selector.dart';
+import '../widgets/sport_selector.dart';
+import 'create_casual_event_page.dart';
+import 'event_registration_result_page.dart';
 
-class PlayPage extends StatelessWidget {
+class PlayPage extends StatefulWidget {
   final UserProfile profile;
+  final VoidCallback? onGoHome;
 
-  const PlayPage({super.key, required this.profile});
+  const PlayPage({super.key, required this.profile, this.onGoHome});
+
+  @override
+  State<PlayPage> createState() => _PlayPageState();
+}
+
+class _PlayPageState extends State<PlayPage> {
+  String? _selectedSport;
+  EventModality? _selectedModality;
+  bool _hasSearched = false;
+  final EventsRepository _eventsRepository = EventsRepository();
+  Future<List<SportEvent>>? _searchFuture;
+  String? _joiningEventId;
+
+  bool get _canSearch => _selectedSport != null && _selectedModality != null;
+  bool get _canCreate =>
+      _canSearch && _selectedModality == EventModality.casual;
+
+  /// Formatea la fecha/hora para mostrar "Hoy HH:MM PM", "Mañana HH:MM PM", etc.
+  String _formatSchedule(DateTime dateTime) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = today.add(const Duration(days: 1));
+    final eventDate = DateTime(dateTime.year, dateTime.month, dateTime.day);
+
+    String dayLabel;
+    if (eventDate == today) {
+      dayLabel = 'Hoy';
+    } else if (eventDate == tomorrow) {
+      dayLabel = 'Mañana';
+    } else {
+      dayLabel = '${eventDate.day}/${eventDate.month}';
+    }
+
+    final hour = dateTime.hour;
+    final minute = dateTime.minute.toString().padLeft(2, '0');
+    final period = hour >= 12 ? 'PM' : 'AM';
+    final displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
+
+    return '$dayLabel ${displayHour}:$minute $period';
+  }
+
+  Future<void> _handleJoinEvent(SportEvent event) async {
+    if (_joiningEventId != null) return;
+
+    setState(() {
+      _joiningEventId = event.id;
+    });
+
+    final result = await _eventsRepository.registerUserInEventWithMessage(
+      eventId: event.id,
+      userId: widget.profile.uid,
+    );
+
+    final success = result['success'] as bool;
+    final message = result['message'] as String;
+
+    if (!mounted) return;
+
+    setState(() {
+      _joiningEventId = null;
+      if (success) {
+        // Refresca el listado para mostrar contador actualizado.
+        _searchFuture = _eventsRepository.searchEvents(
+          sport: _selectedSport!,
+          modality: _selectedModality!,
+        );
+      }
+    });
+
+    final goToStart = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => EventRegistrationResultPage(
+          isSuccess: success,
+          message: message,
+        ),
+      ),
+    );
+
+    if (!mounted) return;
+
+    if (goToStart == true) {
+      setState(() {
+        _hasSearched = false;
+        _searchFuture = null;
+      });
+      return;
+    }
+
+    if (goToStart == false && _selectedSport != null && _selectedModality != null) {
+      setState(() {
+        // Al fallar, vuelve a resultados y recarga búsqueda.
+        _searchFuture = _eventsRepository.searchEvents(
+          sport: _selectedSport!,
+          modality: _selectedModality!,
+        );
+      });
+    }
+  }
+
+  Future<void> _openCreateCasualEventForm() async {
+    if (!_canCreate || _selectedSport == null) return;
+
+    final goHome = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => CreateCasualEventPage(
+          profile: widget.profile,
+          sport: _selectedSport!,
+        ),
+      ),
+    );
+
+    if (!mounted || goHome != true) return;
+
+    setState(() {
+      _hasSearched = false;
+      _searchFuture = null;
+    });
+
+    widget.onGoHome?.call();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
         child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (!_hasSearched) ...[
                 Text(
-                  'ENCUENTRA PARTIDO',
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: Colors.teal,
-                    letterSpacing: 2,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text('Play', style: Theme.of(context).textTheme.headlineSmall),
-                const SizedBox(height: 24),
-
-                // Sport selector
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: ['Calistenia', 'Running']
-                        .map(
-                          (sport) => Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: FilterChip(
-                              label: Text(sport),
-                              onSelected: (selected) {},
-                            ),
-                          ),
-                        )
-                        .toList(),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  'OPEN MATCHES',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.bold),
-                ),
-                Text(
-                  '5 available',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.copyWith(color: Colors.teal),
+                  'Encuentra tu deporte',
+                  style: Theme.of(context).textTheme.headlineSmall,
                 ),
                 const SizedBox(height: 16),
-                _MatchCard(
-                  icon: '⚽',
-                  title: 'Fútbol 5v5',
-                  time: 'Hoy 3:00 PM',
-                  spots: '7/10',
-                  color: Colors.green,
+                SportSelector(
+                  selectedSport: _selectedSport,
+                  onSportSelected: (sport) {
+                    setState(() => _selectedSport = sport);
+                  },
                 ),
-                const SizedBox(height: 12),
-                _MatchCard(
-                  icon: '🏀',
-                  title: 'Basketball 3v3',
-                  time: 'Hoy 5:30 PM',
-                  spots: '4/6',
-                  color: Colors.orange,
+                const SizedBox(height: 24),
+                ModalitySelector(
+                  selectedModality: _selectedModality,
+                  onModalitySelected: (modality) {
+                    setState(() => _selectedModality = modality);
+                  },
                 ),
-                const SizedBox(height: 12),
-                _MatchCard(
-                  icon: '🎾',
-                  title: 'Tennis Doubles',
-                  time: 'Mañana 10:00 AM',
-                  spots: '3/4',
-                  color: Colors.yellow[700]!,
+                const SizedBox(height: 24),
+                ActionButtonsSection(
+                  canSearch: _canSearch,
+                  canCreate: _canCreate,
+                  onSearchPressed: () {
+                    if (!_canSearch) return;
+                    setState(() {
+                      _hasSearched = true;
+                      _searchFuture = _eventsRepository.searchEvents(
+                        sport: _selectedSport!,
+                        modality: _selectedModality!,
+                      );
+                    });
+                  },
+                  onCreatePressed: _openCreateCasualEventForm,
+                ),
+                const SizedBox(height: 32),
+                // Eventos recomendados debe ir debajo del buscador.
+                Text(
+                  'Eventos recomendados',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Basados en tu perfil',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: AppTheme.softTeal,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.lightbulb_outline,
+                        color: AppTheme.teal,
+                        size: 40,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Proximamente',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              color: AppTheme.teal,
+                            ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Aqui apareceran eventos recomendados para ti',
+                        style: Theme.of(context).textTheme.bodySmall,
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 32),
               ],
-            ),
+              if (_hasSearched &&
+                  _selectedSport != null &&
+                  _selectedModality != null &&
+                  _searchFuture != null) ...[
+                TextButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      _hasSearched = false;
+                      _searchFuture = null;
+                    });
+                  },
+                  icon: const Icon(Icons.arrow_back),
+                  label: const Text('Volver'),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'RESULTADOS DE BUSQUEDA',
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: AppTheme.teal,
+                        letterSpacing: 2,
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+                const SizedBox(height: 16),
+                FutureBuilder<List<SportEvent>>(
+                  future: _searchFuture,
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+
+                    if (snapshot.hasError) {
+                      return Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.red),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Error al buscar eventos',
+                              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                    color: Colors.red,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              snapshot.error.toString(),
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    final events = snapshot.data ?? [];
+                    if (events.isEmpty) {
+                      return Container(
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          color: AppTheme.softTeal,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Column(
+                          children: [
+                            Icon(
+                              Icons.search_off,
+                              color: AppTheme.teal,
+                              size: 40,
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'No hay eventos disponibles',
+                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    color: AppTheme.teal,
+                                  ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'Intenta cambiar tu busqueda o crea un evento',
+                              style: Theme.of(context).textTheme.bodySmall,
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    return Column(
+                      children: [
+                        Text(
+                          '${events.length} evento${events.length != 1 ? 's' : ''} encontrado${events.length != 1 ? 's' : ''}',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: 16),
+                        ...List.generate(events.length, (index) {
+                          final event = events[index];
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: EventCard(
+                              title: event.title,
+                              sport: event.sport,
+                              modality: event.modality.label,
+                              participants:
+                                  '${event.currentParticipants}/${event.maxParticipants}',
+                              schedule: _formatSchedule(event.scheduledAt),
+                              location: event.location,
+                              description: event.description,
+                              isJoining: _joiningEventId == event.id,
+                              onJoinPressed: () => _handleJoinEvent(event),
+                            ),
+                          );
+                        }),
+                      ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 32),
+              ],
+            ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _MatchCard extends StatelessWidget {
-  final String icon;
-  final String title;
-  final String time;
-  final String spots;
-  final Color color;
-
-  const _MatchCard({
-    required this.icon,
-    required this.title,
-    required this.time,
-    required this.spots,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[200]!),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(icon, style: const TextStyle(fontSize: 32)),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                Text(time, style: Theme.of(context).textTheme.bodySmall),
-              ],
-            ),
-          ),
-          Text(
-            spots,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: color,
-            ),
-          ),
-        ],
       ),
     );
   }

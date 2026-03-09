@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -8,6 +10,7 @@ import '../../presentation/pages/play_page.dart';
 import '../../presentation/pages/social_page.dart';
 import '../../presentation/pages/profes_page.dart';
 import '../../presentation/pages/profile_page.dart';
+import '../widgets/play_nav_item.dart';
 
 class AppShell extends StatefulWidget {
   final UserProfile profile;
@@ -21,12 +24,42 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   late UserProfile _profile;
   int _selectedIndex = 0;
+  int _playSportIndex = 0;
+  Timer? _playSportTimer;
+
+  static const List<IconData> _playSportIcons = [
+    Icons.sports_soccer,
+    Icons.fitness_center,
+    Icons.directions_run,
+    Icons.sports_basketball,
+    Icons.sports_tennis,
+    Icons.pool,
+    Icons.sports,
+    Icons.pool,
+    Icons.sports_golf,
+  ];
 
   @override
   void initState() {
     super.initState();
     _profile = widget.profile;
     _setupProfileListener();
+    _startPlayIconRotation();
+  }
+
+  @override
+  void dispose() {
+    _playSportTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startPlayIconRotation() {
+    _playSportTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      if (!mounted) return;
+      setState(() {
+        _playSportIndex = (_playSportIndex + 1) % _playSportIcons.length;
+      });
+    });
   }
 
   void _setupProfileListener() {
@@ -52,18 +85,25 @@ class _AppShellState extends State<AppShell> {
           });
         },
         type: BottomNavigationBarType.fixed,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(
+        items: [
+          const BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+          const BottomNavigationBarItem(
             icon: Icon(Icons.emoji_events),
             label: 'Retos',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.sports_soccer),
-            label: 'Play',
+            icon: PlayNavItem(
+              sportIcon: _playSportIcons[_playSportIndex],
+              isSelected: false,
+            ),
+            activeIcon: PlayNavItem(
+              sportIcon: _playSportIcons[_playSportIndex],
+              isSelected: true,
+            ),
+            label: '',
           ),
-          BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Social'),
-          BottomNavigationBarItem(
+          const BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Social'),
+          const BottomNavigationBarItem(
             icon: Icon(Icons.person_outline),
             label: 'Profes',
           ),
@@ -88,7 +128,15 @@ class _AppShellState extends State<AppShell> {
       case 1:
         return RetosPage(profile: _profile);
       case 2:
-        return PlayPage(profile: _profile);
+        return PlayPage(
+          profile: _profile,
+          onGoHome: () {
+            if (!mounted) return;
+            setState(() {
+              _selectedIndex = 0;
+            });
+          },
+        );
       case 3:
         return SocialPage(profile: _profile);
       case 4:
