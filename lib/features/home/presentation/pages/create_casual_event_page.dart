@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/app_sports.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../auth/domain/models/user_profile.dart';
 import '../../data/events_repository.dart';
@@ -31,6 +32,14 @@ class _CreateCasualEventPageState extends State<CreateCasualEventPage> {
 
   DateTime? _scheduledAt;
   bool _isSubmitting = false;
+
+  String get _displaySportName {
+    if (AppSports.sportKeys.contains(widget.sport)) {
+      return AppSports.getSport(widget.sport).name;
+    }
+    // Capitalizar la primera letra para deportes personalizados
+    return widget.sport.substring(0, 1).toUpperCase() + widget.sport.substring(1);
+  }
 
   @override
   void dispose() {
@@ -80,11 +89,21 @@ class _CreateCasualEventPageState extends State<CreateCasualEventPage> {
       return;
     }
 
+    if (widget.profile.semester == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Debes tener semestre registrado en tu perfil para crear eventos'),
+        ),
+      );
+      return;
+    }
+
     setState(() => _isSubmitting = true);
 
     try {
       await _repository.createEvent(
         createdBy: widget.profile.uid,
+        creatorSemester: widget.profile.semester!,
         title: _titleController.text.trim(),
         sport: widget.sport,
         modality: EventModality.casual,
@@ -170,7 +189,7 @@ class _CreateCasualEventPageState extends State<CreateCasualEventPage> {
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
-                  initialValue: widget.sport,
+                  initialValue: _displaySportName,
                   enabled: false,
                   decoration: const InputDecoration(labelText: 'Deporte'),
                 ),

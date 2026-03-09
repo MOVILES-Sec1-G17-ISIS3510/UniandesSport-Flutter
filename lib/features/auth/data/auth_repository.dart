@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import '../../../core/theme/app_sports.dart';
 import '../domain/models/user_profile.dart';
 import '../domain/models/user_role.dart';
 
@@ -40,6 +41,10 @@ class AuthRepository {
       password: password.trim(),
     );
 
+    final normalizedMainSport = mainSport?.trim().isEmpty ?? true
+        ? null
+        : AppSports.normalizeSportKey(mainSport!);
+
     final uid = credential.user!.uid;
     final profile = UserProfile(
       uid: uid,
@@ -51,7 +56,10 @@ class AuthRepository {
           : university?.trim(),
       program: program?.trim().isEmpty ?? true ? null : program?.trim(),
       semester: semester,
-      mainSport: mainSport?.trim().isEmpty ?? true ? null : mainSport?.trim(),
+      mainSport: normalizedMainSport,
+      inferredPreferences: AppSports.buildInitialInferredPreferences(
+        favoriteSport: normalizedMainSport,
+      ),
       createdAt: DateTime.now(),
     );
 
@@ -92,7 +100,9 @@ class AuthRepository {
         'program': program.trim().isEmpty ? null : program.trim(),
       if (semester != null) 'semester': semester,
       if (mainSport != null)
-        'mainSport': mainSport.trim().isEmpty ? null : mainSport.trim(),
+        'mainSport': mainSport.trim().isEmpty
+            ? null
+            : AppSports.normalizeSportKey(mainSport),
       'updatedAt': FieldValue.serverTimestamp(),
     };
 
