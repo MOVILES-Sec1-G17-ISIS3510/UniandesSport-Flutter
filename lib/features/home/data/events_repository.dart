@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
+import '../../../core/theme/app_sports.dart';
 import '../domain/models/event_modality.dart';
 import '../domain/models/sport_event.dart';
 
@@ -16,6 +18,20 @@ class EventsRepository {
     required EventModality modality,
     String status = 'active',
   }) async {
+
+    // 1. Registrar la búsqueda en segundo plano (Fire-and-forget)
+    try {
+      FirebaseFunctions.instance
+          .httpsCallable('logSportSearch')
+      // Usamos toLowerCase() por si el usuario escribe "Fútbol" en mayúscula
+          .call({'sport': AppSports.normalizeSportKey(sport)});
+    } catch (e) {
+      // Si la función falla (ej. problemas de red), no queremos que la app explote.
+      // Solo imprimimos el error en consola, pero dejamos que la búsqueda continúe.
+      debugPrint('Advertencia: No se pudo registrar el +1 de busqueda: $e');
+    }
+
+    // 2. Tu consulta original de búsqueda
     try {
       final snapshot = await _firestore
           .collection('events')
@@ -23,14 +39,120 @@ class EventsRepository {
           .where('modality', isEqualTo: modality.code)
           .where('status', isEqualTo: status)
           .orderBy('scheduledAt', descending: false)
+          .limit(10)
           .get();
 
-      return snapshot.docs
-          .map((doc) => SportEvent.fromFirestore(doc))
-          .toList();
+      final events = snapshot.docs.map((doc) => SportEvent.fromFirestore(doc)).toList();
+      return _pickVariedEvents(events, maxResults: 5);
     } catch (e) {
       throw Exception('Error buscando eventos: $e');
     }
+  }
+
+  List<SportEvent> _pickVariedEvents(List<SportEvent> events, {required int maxResults}) {
+    if (events.length <= maxResults) return events;
+
+    final selected = <SportEvent>[];
+    final step = (events.length - 1) / (maxResults - 1);
+    for (var i = 0; i < maxResults; i++) {
+      final index = (i * step).round();
+      selected.add(events[index]);
+    }
+    return selected;
+  }
+
+  Future<List<SportEvent>> getRecommendedEvents(String userId, {int limit = 10}) async {
+    try {
+      final userDoc = await _firestore.collection('users').doc(userId).get();
+      final userData = userDoc.data();
+      if (userData == null) return [];
+
+      final rawPrefs = userData['inferredPreferences'];
+      final prefs = <String, num>{};
+      if (rawPrefs is Map) {
+        rawPrefs.forEach((key, value) {
+          if (key is String && value is num) {
+            prefs[key] = value;
+          }
+        });
+      }
+
+      List<String> topSports;
+      if (prefs.isEmpty) {
+        final mainSport = userData['mainSport'] as String?;
+        if (mainSport == null || mainSport.trim().isEmpty) return [];
+        topSports = [AppSports.normalizeSportKey(mainSport)];
+      } else {
+        final sorted = prefs.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+        topSports = sorted.take(3).map((e) => AppSports.normalizeSportKey(e.key)).toList();
+      }
+
+      if (topSports.isEmpty) return [];
+
+      final snapshot = await _firestore
+          .collection('events')
+          .where('status', isEqualTo: 'active')
+          .where('sport', whereIn: topSports)
+          .limit(limit)
+          .get();
+
+      final events = snapshot.docs
+          .map(SportEvent.fromFirestore)
+          // No recomendar eventos del propio usuario ni eventos donde ya participa.
+          .where((event) => event.createdBy != userId && !event.participants.contains(userId))
+          .toList();
+
+      events.sort((a, b) {
+        final aScore = (prefs[a.sport] ?? 0).toDouble();
+        final bScore = (prefs[b.sport] ?? 0).toDouble();
+        final byScore = bScore.compareTo(aScore);
+        if (byScore != 0) return byScore;
+        return a.scheduledAt.compareTo(b.scheduledAt);
+      });
+
+      // Mostrar solo 5 recomendaciones, priorizando variedad entre deportes.
+      return _pickVariedRecommendedEvents(events, topSports: topSports, maxResults: 5);
+    } catch (e) {
+      throw Exception('Error obteniendo recomendaciones: $e');
+    }
+  }
+
+  List<SportEvent> _pickVariedRecommendedEvents(
+      List<SportEvent> events, {
+        required List<String> topSports,
+        required int maxResults,
+      }) {
+    if (events.length <= maxResults) return events;
+
+    final buckets = <String, List<SportEvent>>{
+      for (final sport in topSports) sport: [],
+    };
+
+    for (final event in events) {
+      final sport = AppSports.normalizeSportKey(event.sport);
+      if (buckets.containsKey(sport)) {
+        buckets[sport]!.add(event);
+      }
+    }
+
+    final selected = <SportEvent>[];
+
+    // Round-robin por deportes preferidos para evitar concentracion en uno solo.
+    while (selected.length < maxResults) {
+      var addedInCycle = false;
+
+      for (final sport in topSports) {
+        final queue = buckets[sport];
+        if (queue != null && queue.isNotEmpty && selected.length < maxResults) {
+          selected.add(queue.removeAt(0));
+          addedInCycle = true;
+        }
+      }
+
+      if (!addedInCycle) break;
+    }
+
+    return selected;
   }
 
   /// Obtener un evento específico por ID
@@ -49,6 +171,7 @@ class EventsRepository {
   /// Crear un nuevo evento
   Future<String> createEvent({
     required String createdBy,
+    required int creatorSemester,
     required String title,
     required String sport,
     required EventModality modality,
@@ -76,9 +199,12 @@ class EventsRepository {
         updatedAt: now,
       );
 
-      final docRef = await _firestore
-          .collection('events')
-          .add(event.toJson());
+      final eventJson = event.toJson();
+      eventJson['metadata'] = {
+        'creatorSemester': creatorSemester,
+      };
+
+      final docRef = await _firestore.collection('events').add(eventJson);
 
       return docRef.id;
     } catch (e) {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/theme/app_sports.dart';
 import '../../domain/models/user_role.dart';
 import '../controllers/auth_controller.dart';
 
@@ -37,14 +38,20 @@ class _RegisterPageState extends State<RegisterPage> {
     super.dispose();
   }
 
+  String _buildUniandesEmail(String username) {
+    final normalized = username.trim().toLowerCase();
+    return '$normalized@uniandes.edu.co';
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final semester = int.tryParse(_semesterController.text.trim());
+    final semester = int.parse(_semesterController.text.trim());
     final controller = context.read<AuthController>();
+    final institutionalEmail = _buildUniandesEmail(_emailController.text);
 
     final success = await controller.signUp(
-      email: _emailController.text,
+      email: institutionalEmail,
       password: _passwordController.text,
       fullName: _nameController.text,
       role: _selectedRole,
@@ -116,15 +123,22 @@ class _RegisterPageState extends State<RegisterPage> {
                         const SizedBox(height: 12),
                         TextFormField(
                           controller: _emailController,
-                          keyboardType: TextInputType.emailAddress,
+                          keyboardType: TextInputType.text,
                           decoration: const InputDecoration(
-                            labelText: 'Correo',
-                            prefixIcon: Icon(Icons.mail_outline),
+                            labelText: 'Usuario uniandes',
+                            hintText: 'Ej: jperez',
+                            prefixIcon: Icon(Icons.person_outline),
                           ),
                           validator: (value) {
                             final text = value?.trim() ?? '';
-                            if (text.isEmpty) return 'Ingresa tu correo';
-                            if (!text.contains('@')) return 'Correo inválido';
+                            if (text.isEmpty) return 'Ingresa tu usuario Uniandes';
+                            if (text.contains('@')) {
+                              return 'Solo ingresa el usuario, sin @dominio';
+                            }
+                            final isValid = RegExp(r'^[a-zA-Z0-9._-]+$').hasMatch(text);
+                            if (!isValid) {
+                              return 'Usuario invalido';
+                            }
                             return null;
                           },
                         ),
@@ -214,9 +228,18 @@ class _RegisterPageState extends State<RegisterPage> {
                           controller: _semesterController,
                           keyboardType: TextInputType.number,
                           decoration: const InputDecoration(
-                            labelText: 'Semestre (opcional)',
+                            labelText: 'Semestre',
                             prefixIcon: Icon(Icons.calendar_today_outlined),
                           ),
+                          validator: (value) {
+                            final text = value?.trim() ?? '';
+                            if (text.isEmpty) return 'El semestre es obligatorio';
+                            final parsed = int.tryParse(text);
+                            if (parsed == null || parsed <= 0) {
+                              return 'Ingresa un semestre valido';
+                            }
+                            return null;
+                          },
                         ),
                         const SizedBox(height: 12),
                         DropdownButtonFormField<String>(
@@ -225,14 +248,19 @@ class _RegisterPageState extends State<RegisterPage> {
                             labelText: 'Deporte principal (opcional)',
                             prefixIcon: Icon(Icons.sports_soccer_outlined),
                           ),
-                          items: const [
-                            DropdownMenuItem(value: 'Futbol', child: Text('Futbol')),
-                            DropdownMenuItem(value: 'Tenis', child: Text('Tenis')),
-                            DropdownMenuItem(value: 'Running', child: Text('Running')),
-                            DropdownMenuItem(value: 'Calistenia', child: Text('Calistenia')),
-                          ],
+                          items: AppSports.sportKeys
+                              .map(
+                                (key) => DropdownMenuItem(
+                                  value: key,
+                                  child: Text(AppSports.getSport(key).name),
+                                ),
+                              )
+                              .toList(),
                           onChanged: (value) {
-                            setState(() => _selectedSport = value);
+                            setState(() {
+                              _selectedSport =
+                                  value == null ? null : AppSports.normalizeSportKey(value);
+                            });
                           },
                         ),
                         const SizedBox(height: 20),
