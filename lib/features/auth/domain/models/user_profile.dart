@@ -12,6 +12,7 @@ class UserProfile {
     this.program,
     this.semester,
     this.mainSport,
+    this.inferredPreferences,
     this.photoUrl,
     this.createdAt,
   });
@@ -24,6 +25,7 @@ class UserProfile {
   final String? program;
   final int? semester;
   final String? mainSport;
+  final Map<String, double>? inferredPreferences;
   final String? photoUrl;
   final DateTime? createdAt;
 
@@ -37,6 +39,7 @@ class UserProfile {
       'program': program,
       'semester': semester,
       'mainSport': mainSport,
+      'inferredPreferences': inferredPreferences,
       'photoUrl': photoUrl,
       'createdAt': createdAt != null
           ? Timestamp.fromDate(createdAt!)
@@ -46,6 +49,7 @@ class UserProfile {
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
     final createdAtValue = json['createdAt'];
+    final rawPreferences = json['inferredPreferences'] as Map<String, dynamic>?;
 
     return UserProfile(
       uid: (json['uid'] as String?) ?? '',
@@ -56,6 +60,11 @@ class UserProfile {
       program: json['program'] as String?,
       semester: (json['semester'] as num?)?.toInt(),
       mainSport: json['mainSport'] as String?,
+      inferredPreferences: rawPreferences == null
+          ? null
+          : rawPreferences.map(
+              (key, value) => MapEntry(key, (value as num).toDouble()),
+            ),
       photoUrl: json['photoUrl'] as String?,
       createdAt: createdAtValue is Timestamp ? createdAtValue.toDate() : null,
     );

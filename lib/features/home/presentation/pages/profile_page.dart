@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../../core/theme/app_sports.dart';
 import '../../../auth/data/auth_repository.dart';
 import '../../../auth/domain/models/user_profile.dart';
 import '../../../auth/domain/models/user_role.dart';
@@ -53,6 +54,14 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   Widget build(BuildContext context) {
+    final selectedMainSportKey = _mainSportController.text.trim().isEmpty
+        ? null
+        : AppSports.normalizeSportKey(_mainSportController.text);
+    final selectedMainSportForDropdown =
+        AppSports.sportKeys.contains(selectedMainSportKey)
+            ? selectedMainSportKey
+            : null;
+
     return Scaffold(
       body: SafeArea(
         child: SingleChildScrollView(
@@ -199,16 +208,17 @@ class _ProfilePageState extends State<ProfilePage> {
                   const Text('Deporte principal'),
                   const SizedBox(height: 8),
                   DropdownButtonFormField<String>(
-                    initialValue: _mainSportController.text.isEmpty
-                        ? null
-                        : _mainSportController.text,
-                    items: ['Football', 'Tennis', 'Running', 'Calisthenics']
-                        .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                    initialValue: selectedMainSportForDropdown,
+                    items: AppSports.sportKeys
+                        .map(
+                          (key) => DropdownMenuItem(
+                            value: key,
+                            child: Text(AppSports.getSport(key).name),
+                          ),
+                        )
                         .toList(),
                     onChanged: (value) {
-                      if (value != null) {
-                        _mainSportController.text = value;
-                      }
+                      _mainSportController.text = value ?? '';
                     },
                     decoration: InputDecoration(
                       border: OutlineInputBorder(
@@ -240,7 +250,9 @@ class _ProfilePageState extends State<ProfilePage> {
                   _ProfileInfoCard(
                     icon: Icons.sports_soccer,
                     title: 'Deporte Principal',
-                    value: widget.profile.mainSport ?? 'No especificado',
+                    value: AppSports.formatSportLabel(widget.profile.mainSport).isEmpty
+                        ? 'No especificado'
+                        : AppSports.formatSportLabel(widget.profile.mainSport),
                   ),
                   const SizedBox(height: 12),
                   _ProfileInfoCard(
