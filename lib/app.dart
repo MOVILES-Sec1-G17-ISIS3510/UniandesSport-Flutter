@@ -7,6 +7,11 @@ import 'features/auth/data/auth_repository.dart';
 import 'features/auth/presentation/controllers/auth_controller.dart';
 import 'features/auth/presentation/pages/auth_gate.dart';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:uniandessport_flutter/features/coach/presentation/viewmodels/coaches_view_model.dart';
+import 'package:uniandessport_flutter/features/home/data/coach_repository.dart';
+
+
 class UniandesSportsApp extends StatefulWidget {
   const UniandesSportsApp({super.key});
 
@@ -46,6 +51,11 @@ class _UniandesSportsAppState extends State<UniandesSportsApp> {
 
         return MultiProvider(
           providers: [
+            ChangeNotifierProvider(
+              create: (_) => CoachesViewModel(
+                CoachRepositoryImpl(firestore: FirebaseFirestore.instance),
+              )..loadCoaches(),
+            ),
             Provider<AuthRepository>(
               create: (_) => AuthRepository(),
             ),
