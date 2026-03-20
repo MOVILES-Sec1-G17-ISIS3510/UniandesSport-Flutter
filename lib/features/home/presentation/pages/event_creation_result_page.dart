@@ -14,7 +14,7 @@ class EventCreationResultPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final actionLabel = isSuccess ? 'Ir al home' : 'Volver al formulario';
+    final actionLabel = isSuccess ? 'Go to home' : 'Back to form';
 
     return Scaffold(
       appBar: AppBar(
@@ -22,7 +22,7 @@ class EventCreationResultPage extends StatelessWidget {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.of(context).pop(isSuccess),
         ),
-        title: const Text('Resultado de creacion'),
+        title: const Text('Creation Result'),
       ),
       body: SafeArea(
         child: Center(
@@ -59,4 +59,3 @@ class EventCreationResultPage extends StatelessWidget {
     );
   }
 }
-

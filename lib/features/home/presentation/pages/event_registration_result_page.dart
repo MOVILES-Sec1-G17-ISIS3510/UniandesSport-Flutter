@@ -14,8 +14,10 @@ class EventRegistrationResultPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final title = message ?? (isSuccess ? 'Registro exitoso' : 'Registro no exitoso');
-    final actionLabel = isSuccess ? 'Volver al inicio' : 'Volver a buscar';
+    final title =
+        message ??
+        (isSuccess ? 'Registration successful' : 'Registration failed');
+    final actionLabel = isSuccess ? 'Back to home' : 'Back to search';
 
     return Scaffold(
       appBar: AppBar(
@@ -23,7 +25,7 @@ class EventRegistrationResultPage extends StatelessWidget {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.of(context).pop(isSuccess),
         ),
-        title: const Text('Resultado de registro'),
+        title: const Text('Registration Result'),
       ),
       body: SafeArea(
         child: Center(
@@ -42,8 +44,8 @@ class EventRegistrationResultPage extends StatelessWidget {
                   title,
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        color: isSuccess ? AppTheme.navy : Colors.red,
-                      ),
+                    color: isSuccess ? AppTheme.navy : Colors.red,
+                  ),
                 ),
                 const SizedBox(height: 24),
                 SizedBox(
@@ -62,4 +64,3 @@ class EventRegistrationResultPage extends StatelessWidget {
     );
   }
 }
-

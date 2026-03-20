@@ -46,11 +46,10 @@ class _UniandesSportsAppState extends State<UniandesSportsApp> {
 
         return MultiProvider(
           providers: [
-            Provider<AuthRepository>(
-              create: (_) => AuthRepository(),
-            ),
+            Provider<AuthRepository>(create: (_) => AuthRepository()),
             ChangeNotifierProxyProvider<AuthRepository, AuthController>(
-              create: (context) => AuthController(context.read<AuthRepository>()),
+              create: (context) =>
+                  AuthController(context.read<AuthRepository>()),
               update: (context, repository, controller) =>
                   controller ?? AuthController(repository),
             ),
@@ -72,11 +71,7 @@ class _SplashLoadingPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(
-        child: CircularProgressIndicator(),
-      ),
-    );
+    return const Scaffold(body: Center(child: CircularProgressIndicator()));
   }
 }
 
@@ -96,7 +91,7 @@ class _FirebaseErrorPage extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Error inicializando Firebase',
+                'Error initializing Firebase',
                 style: Theme.of(context).textTheme.headlineSmall,
               ),
               const SizedBox(height: 12),

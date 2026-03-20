@@ -14,7 +14,7 @@ class ProfesPage extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'APRENDE CON EXPERTOS',
+                  'LEARN FROM EXPERTS',
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
                     color: Colors.teal,
                     letterSpacing: 2,
@@ -22,7 +22,7 @@ class ProfesPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Profesores',
+                  'Coaches',
                   style: Theme.of(context).textTheme.headlineSmall,
                 ),
                 const SizedBox(height: 24),

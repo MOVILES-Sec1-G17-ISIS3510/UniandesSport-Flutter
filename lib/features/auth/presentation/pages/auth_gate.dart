@@ -44,7 +44,7 @@ class AuthGate extends StatelessWidget {
                 profile: UserProfile(
                   uid: firebaseUser.uid,
                   email: firebaseUser.email ?? '',
-                  fullName: firebaseUser.displayName ?? 'Usuario',
+                  fullName: firebaseUser.displayName ?? 'User',
                   role: UserRole.athlete,
                 ),
               );

@@ -10,7 +10,7 @@ class EventsRepository {
   final FirebaseFirestore _firestore;
 
   EventsRepository({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+    : _firestore = firestore ?? FirebaseFirestore.instance;
 
   /// Buscar eventos por deporte, modalidad y estado
   Future<List<SportEvent>> searchEvents({
@@ -18,17 +18,15 @@ class EventsRepository {
     required EventModality modality,
     String status = 'active',
   }) async {
-
     // 1. Registrar la búsqueda en segundo plano (Fire-and-forget)
     try {
-      FirebaseFunctions.instance
-          .httpsCallable('logSportSearch')
+      FirebaseFunctions.instance.httpsCallable('logSportSearch')
       // Usamos toLowerCase() por si el usuario escribe "Fútbol" en mayúscula
-          .call({'sport': AppSports.normalizeSportKey(sport)});
+      .call({'sport': AppSports.normalizeSportKey(sport)});
     } catch (e) {
       // Si la función falla (ej. problemas de red), no queremos que la app explote.
       // Solo imprimimos el error en consola, pero dejamos que la búsqueda continúe.
-      debugPrint('Advertencia: No se pudo registrar el +1 de busqueda: $e');
+      debugPrint('Warning: Failed to register +1 search count: $e');
     }
 
     // 2. Tu consulta original de búsqueda
@@ -42,14 +40,19 @@ class EventsRepository {
           .limit(10)
           .get();
 
-      final events = snapshot.docs.map((doc) => SportEvent.fromFirestore(doc)).toList();
+      final events = snapshot.docs
+          .map((doc) => SportEvent.fromFirestore(doc))
+          .toList();
       return _pickVariedEvents(events, maxResults: 5);
     } catch (e) {
-      throw Exception('Error buscando eventos: $e');
+      throw Exception('Error searching events: $e');
     }
   }
 
-  List<SportEvent> _pickVariedEvents(List<SportEvent> events, {required int maxResults}) {
+  List<SportEvent> _pickVariedEvents(
+    List<SportEvent> events, {
+    required int maxResults,
+  }) {
     if (events.length <= maxResults) return events;
 
     final selected = <SportEvent>[];
@@ -61,7 +64,10 @@ class EventsRepository {
     return selected;
   }
 
-  Future<List<SportEvent>> getRecommendedEvents(String userId, {int limit = 10}) async {
+  Future<List<SportEvent>> getRecommendedEvents(
+    String userId, {
+    int limit = 10,
+  }) async {
     try {
       final userDoc = await _firestore.collection('users').doc(userId).get();
       final userData = userDoc.data();
@@ -83,8 +89,12 @@ class EventsRepository {
         if (mainSport == null || mainSport.trim().isEmpty) return [];
         topSports = [AppSports.normalizeSportKey(mainSport)];
       } else {
-        final sorted = prefs.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
-        topSports = sorted.take(3).map((e) => AppSports.normalizeSportKey(e.key)).toList();
+        final sorted = prefs.entries.toList()
+          ..sort((a, b) => b.value.compareTo(a.value));
+        topSports = sorted
+            .take(3)
+            .map((e) => AppSports.normalizeSportKey(e.key))
+            .toList();
       }
 
       if (topSports.isEmpty) return [];
@@ -99,7 +109,11 @@ class EventsRepository {
       final events = snapshot.docs
           .map(SportEvent.fromFirestore)
           // No recomendar eventos del propio usuario ni eventos donde ya participa.
-          .where((event) => event.createdBy != userId && !event.participants.contains(userId))
+          .where(
+            (event) =>
+                event.createdBy != userId &&
+                !event.participants.contains(userId),
+          )
           .toList();
 
       events.sort((a, b) {
@@ -111,17 +125,21 @@ class EventsRepository {
       });
 
       // Mostrar solo 5 recomendaciones, priorizando variedad entre deportes.
-      return _pickVariedRecommendedEvents(events, topSports: topSports, maxResults: 5);
+      return _pickVariedRecommendedEvents(
+        events,
+        topSports: topSports,
+        maxResults: 5,
+      );
     } catch (e) {
-      throw Exception('Error obteniendo recomendaciones: $e');
+      throw Exception('Error fetching recommendations: $e');
     }
   }
 
   List<SportEvent> _pickVariedRecommendedEvents(
-      List<SportEvent> events, {
-        required List<String> topSports,
-        required int maxResults,
-      }) {
+    List<SportEvent> events, {
+    required List<String> topSports,
+    required int maxResults,
+  }) {
     if (events.length <= maxResults) return events;
 
     final buckets = <String, List<SportEvent>>{
@@ -164,7 +182,7 @@ class EventsRepository {
 
       return SportEvent.fromFirestore(doc);
     } catch (e) {
-      throw Exception('Error obteniendo evento: $e');
+      throw Exception('Error fetching event: $e');
     }
   }
 
@@ -200,15 +218,13 @@ class EventsRepository {
       );
 
       final eventJson = event.toJson();
-      eventJson['metadata'] = {
-        'creatorSemester': creatorSemester,
-      };
+      eventJson['metadata'] = {'creatorSemester': creatorSemester};
 
       final docRef = await _firestore.collection('events').add(eventJson);
 
       return docRef.id;
     } catch (e) {
-      throw Exception('Error creando evento: $e');
+      throw Exception('Error creating event: $e');
     }
   }
 
@@ -223,7 +239,7 @@ class EventsRepository {
         'updatedAt': Timestamp.now(),
       });
     } catch (e) {
-      throw Exception('Error uniéndose al evento: $e');
+      throw Exception('Error joining event: $e');
     }
   }
 
@@ -238,7 +254,7 @@ class EventsRepository {
         'updatedAt': Timestamp.now(),
       });
     } catch (e) {
-      throw Exception('Error abandonando el evento: $e');
+      throw Exception('Error leaving event: $e');
     }
   }
 
@@ -251,11 +267,9 @@ class EventsRepository {
           .orderBy('createdAt', descending: true)
           .get();
 
-      return snapshot.docs
-          .map((doc) => SportEvent.fromFirestore(doc))
-          .toList();
+      return snapshot.docs.map((doc) => SportEvent.fromFirestore(doc)).toList();
     } catch (e) {
-      throw Exception('Error obteniendo eventos del usuario: $e');
+      throw Exception('Error fetching user events: $e');
     }
   }
 
@@ -268,11 +282,9 @@ class EventsRepository {
           .orderBy('scheduledAt', descending: false)
           .get();
 
-      return snapshot.docs
-          .map((doc) => SportEvent.fromFirestore(doc))
-          .toList();
+      return snapshot.docs.map((doc) => SportEvent.fromFirestore(doc)).toList();
     } catch (e) {
-      throw Exception('Error obteniendo eventos del usuario: $e');
+      throw Exception('Error fetching user events: $e');
     }
   }
 
@@ -287,7 +299,7 @@ class EventsRepository {
         'updatedAt': Timestamp.now(),
       });
     } catch (e) {
-      throw Exception('Error actualizando estado del evento: $e');
+      throw Exception('Error updating event status: $e');
     }
   }
 
@@ -296,7 +308,7 @@ class EventsRepository {
     try {
       await _firestore.collection('events').doc(eventId).delete();
     } catch (e) {
-      throw Exception('Error eliminando evento: $e');
+      throw Exception('Error deleting event: $e');
     }
   }
 
@@ -314,78 +326,76 @@ class EventsRepository {
     required String userId,
   }) async {
     try {
-      debugPrint('[registerUserInEvent] Intentando registrar userId=$userId en eventId=$eventId');
+      debugPrint(
+        '[registerUserInEvent] Trying to register userId=$userId in eventId=$eventId',
+      );
 
-      final result = await _firestore.runTransaction<Map<String, dynamic>>((transaction) async {
+      final result = await _firestore.runTransaction<Map<String, dynamic>>((
+        transaction,
+      ) async {
         final eventRef = _firestore.collection('events').doc(eventId);
         final snapshot = await transaction.get(eventRef);
 
         if (!snapshot.exists) {
-          debugPrint('[registerUserInEvent] El evento $eventId no existe');
-          return {
-            'success': false,
-            'message': 'El evento no existe',
-          };
+          debugPrint('[registerUserInEvent] Event $eventId does not exist');
+          return {'success': false, 'message': 'The event does not exist'};
         }
 
         final data = snapshot.data() as Map<String, dynamic>;
         final participants = List<String>.from(data['participants'] ?? []);
         final maxParticipants = (data['maxParticipants'] ?? 0) as int;
-        final title = data['title'] ?? 'Evento desconocido';
+        final title = data['title'] ?? 'Unknown event';
 
-        debugPrint('[registerUserInEvent] Evento: $title | Participantes: ${participants.length}/$maxParticipants');
+        debugPrint(
+          '[registerUserInEvent] Event: $title | Participants: ${participants.length}/$maxParticipants',
+        );
 
         if (participants.contains(userId)) {
-          debugPrint('[registerUserInEvent] Usuario $userId ya estaba registrado');
+          debugPrint(
+            '[registerUserInEvent] User $userId was already registered',
+          );
           return {
             'success': true,
-            'message': 'Ya estabas registrado en este evento',
+            'message': 'You were already registered in this event',
           };
         }
 
         if (participants.length >= maxParticipants) {
-          debugPrint('[registerUserInEvent] Evento $eventId está lleno');
-          return {
-            'success': false,
-            'message': 'El evento está lleno',
-          };
+          debugPrint('[registerUserInEvent] Event $eventId is full');
+          return {'success': false, 'message': 'The event is full'};
         }
 
-        debugPrint('[registerUserInEvent] Agregando $userId a participantes');
+        debugPrint('[registerUserInEvent] Adding $userId to participants');
         transaction.update(eventRef, {
           'participants': FieldValue.arrayUnion([userId]),
           'updatedAt': Timestamp.now(),
         });
 
-        return {
-          'success': true,
-          'message': 'Registrado exitosamente',
-        };
+        return {'success': true, 'message': 'Successfully registered'};
       });
 
-      debugPrint('[registerUserInEvent] Resultado: $result');
+      debugPrint('[registerUserInEvent] Result: $result');
       return result;
     } on FirebaseException catch (e) {
-      debugPrint('[registerUserInEvent] FirebaseException: ${e.code} - ${e.message}');
+      debugPrint(
+        '[registerUserInEvent] FirebaseException: ${e.code} - ${e.message}',
+      );
 
       String message;
       if (e.code == 'permission-denied') {
-        message = 'Permiso denegado. Verifica las reglas de seguridad.';
+        message = 'Permission denied. Check your security rules.';
       } else if (e.code == 'not-found') {
-        message = 'El evento no existe';
+        message = 'The event does not exist';
       } else {
-        message = 'Error Firebase: ${e.message}';
+        message = 'Firebase error: ${e.message}';
       }
 
-      return {
-        'success': false,
-        'message': message,
-      };
+      return {'success': false, 'message': message};
     } catch (e) {
-      debugPrint('[registerUserInEvent] Error inesperado: $e');
+      debugPrint('[registerUserInEvent] Unexpected error: $e');
       return {
         'success': false,
-        'message': 'Error al registrar: ${e.toString()}',
+        'message': 'Registration error: ${e.toString()}',
       };
     }
   }
@@ -395,7 +405,10 @@ class EventsRepository {
     required String eventId,
     required String userId,
   }) async {
-    final result = await registerUserInEventWithMessage(eventId: eventId, userId: userId);
+    final result = await registerUserInEventWithMessage(
+      eventId: eventId,
+      userId: userId,
+    );
     return result['success'] as bool;
   }
 }

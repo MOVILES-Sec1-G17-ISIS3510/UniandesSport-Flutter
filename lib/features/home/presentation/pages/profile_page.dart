@@ -59,8 +59,8 @@ class _ProfilePageState extends State<ProfilePage> {
         : AppSports.normalizeSportKey(_mainSportController.text);
     final selectedMainSportForDropdown =
         AppSports.sportKeys.contains(selectedMainSportKey)
-            ? selectedMainSportKey
-            : null;
+        ? selectedMainSportKey
+        : null;
 
     return Scaffold(
       body: SafeArea(
@@ -80,18 +80,18 @@ class _ProfilePageState extends State<ProfilePage> {
                               TextButton(
                                 onPressed: () =>
                                     setState(() => _isEditing = false),
-                                child: const Text('Cancelar'),
+                                child: const Text('Cancel'),
                               ),
                               ElevatedButton(
                                 onPressed: _saveProfile,
-                                child: const Text('Guardar'),
+                                child: const Text('Save'),
                               ),
                             ],
                           )
                         : ElevatedButton.icon(
                             onPressed: () => setState(() => _isEditing = true),
                             icon: const Icon(Icons.edit),
-                            label: const Text('Editar'),
+                            label: const Text('Edit'),
                           ),
                   ],
                 ),
@@ -130,12 +130,12 @@ class _ProfilePageState extends State<ProfilePage> {
                             const SizedBox(height: 4),
                             Text(
                               widget.profile.university ??
-                                  'Universidad no especificada',
+                                  'University not specified',
                               style: Theme.of(context).textTheme.bodyMedium,
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              '${widget.profile.semester ?? 0}º Semestre - ${widget.profile.role.label}',
+                              'Semester ${widget.profile.semester ?? 0} - ${widget.profile.role.label}',
                               style: Theme.of(context).textTheme.bodySmall,
                             ),
                           ],
@@ -160,7 +160,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
                 // Form
                 if (_isEditing) ...[
-                  const Text('Nombre completo'),
+                  const Text('Full Name'),
                   const SizedBox(height: 8),
                   TextField(
                     controller: _fullNameController,
@@ -171,7 +171,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  const Text('Universidad'),
+                  const Text('University'),
                   const SizedBox(height: 8),
                   TextField(
                     controller: _universityController,
@@ -182,7 +182,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  const Text('Programa'),
+                  const Text('Program'),
                   const SizedBox(height: 8),
                   TextField(
                     controller: _programController,
@@ -193,7 +193,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  const Text('Semestre'),
+                  const Text('Semester'),
                   const SizedBox(height: 8),
                   TextField(
                     controller: _semesterController,
@@ -205,7 +205,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  const Text('Deporte principal'),
+                  const Text('Main Sport'),
                   const SizedBox(height: 8),
                   DropdownButtonFormField<String>(
                     initialValue: selectedMainSportForDropdown,
@@ -231,27 +231,30 @@ class _ProfilePageState extends State<ProfilePage> {
                   // Perfil Info
                   _ProfileInfoCard(
                     icon: Icons.school,
-                    title: 'Universidad',
-                    value: widget.profile.university ?? 'No especificada',
+                    title: 'University',
+                    value: widget.profile.university ?? 'Not specified',
                   ),
                   const SizedBox(height: 12),
                   _ProfileInfoCard(
                     icon: Icons.category,
-                    title: 'Programa',
-                    value: widget.profile.program ?? 'No especificado',
+                    title: 'Program',
+                    value: widget.profile.program ?? 'Not specified',
                   ),
                   const SizedBox(height: 12),
                   _ProfileInfoCard(
                     icon: Icons.calendar_today,
-                    title: 'Semestre',
-                    value: '${widget.profile.semester ?? 0}°',
+                    title: 'Semester',
+                    value: '${widget.profile.semester ?? 0}',
                   ),
                   const SizedBox(height: 12),
                   _ProfileInfoCard(
                     icon: Icons.sports_soccer,
-                    title: 'Deporte Principal',
-                    value: AppSports.formatSportLabel(widget.profile.mainSport).isEmpty
-                        ? 'No especificado'
+                    title: 'Main Sport',
+                    value:
+                        AppSports.formatSportLabel(
+                          widget.profile.mainSport,
+                        ).isEmpty
+                        ? 'Not specified'
                         : AppSports.formatSportLabel(widget.profile.mainSport),
                   ),
                   const SizedBox(height: 12),
@@ -264,7 +267,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   ElevatedButton.icon(
                     onPressed: () => context.read<AuthController>().signOut(),
                     icon: const Icon(Icons.logout),
-                    label: const Text('Cerrar sesión'),
+                    label: const Text('Sign Out'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.red,
                       foregroundColor: Colors.white,
@@ -297,7 +300,7 @@ class _ProfilePageState extends State<ProfilePage> {
     if (mounted) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Perfil actualizado')));
+      ).showSnackBar(const SnackBar(content: Text('Profile updated')));
     }
   }
 }

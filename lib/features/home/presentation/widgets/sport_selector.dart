@@ -20,7 +20,7 @@ class SportSelector extends StatefulWidget {
 
 class _SportSelectorState extends State<SportSelector> {
   bool _isExpanded = false;
-  String? _customSport; // Solo un deporte personalizado a la vez
+  String? _customSport;
 
   List<String> get _visibleSports {
     final keys = [...AppSports.sportKeys];
@@ -38,23 +38,25 @@ class _SportSelectorState extends State<SportSelector> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Agregar deporte'),
+          title: const Text('Add sport'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Ingresa el nombre del deporte:'),
+              const Text('Enter sport name:'),
               const SizedBox(height: 12),
               TextField(
                 controller: controller,
                 decoration: InputDecoration(
-                  hintText: 'Ej: Voleibol',
+                  hintText: 'Ex: Volleyball',
                   errorText: errorText,
                   border: const OutlineInputBorder(),
                 ),
                 onChanged: (value) {
-                  // Solo permitir letras y espacios
-                  final filtered = value.replaceAll(RegExp(r'[^a-zA-ZáéíóúÁÉÍÓÚñÑ\s]'), '');
+                  final filtered = value.replaceAll(
+                    RegExp(r'[^a-zA-ZáéíóúÁÉÍÓÚñÑ\s]'),
+                    '',
+                  );
                   if (filtered != value) {
                     controller.text = filtered;
                     controller.selection = TextSelection.fromPosition(
@@ -69,35 +71,35 @@ class _SportSelectorState extends State<SportSelector> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Solo letras y espacios. No se permiten números ni caracteres especiales.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Colors.grey[600],
-                    ),
+                'Only letters and spaces. Numbers and special characters are not allowed.',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
               ),
             ],
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancelar'),
+              child: const Text('Cancel'),
             ),
             ElevatedButton(
               onPressed: () {
                 final text = controller.text.trim();
                 if (text.isEmpty) {
-                  setDialogState(() => errorText = 'Ingresa un deporte');
+                  setDialogState(() => errorText = 'Enter a sport');
                   return;
                 }
                 if (text.length < 3) {
-                  setDialogState(() => errorText = 'Debe tener al menos 3 letras');
+                  setDialogState(
+                    () => errorText = 'Must have at least 3 letters',
+                  );
                   return;
                 }
                 Navigator.of(context).pop(text);
               },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.teal,
-              ),
-              child: const Text('Agregar'),
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.teal),
+              child: const Text('Add'),
             ),
           ],
         ),
@@ -105,11 +107,11 @@ class _SportSelectorState extends State<SportSelector> {
     );
 
     if (result != null && result.isNotEmpty) {
-      // Normalizar: quitar espacios y pasar a minúsculas
+      // Normalize: remove spaces and use lowercase.
       final normalized = result.toLowerCase().replaceAll(' ', '');
 
       setState(() {
-        // Sobreescribe el deporte personalizado anterior
+        // Replace previous custom sport.
         _customSport = normalized;
         widget.onSportSelected(normalized);
         _isExpanded = false;
@@ -123,7 +125,7 @@ class _SportSelectorState extends State<SportSelector> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Escoge tu deporte',
+          'Choose your sport',
           style: Theme.of(context).textTheme.titleMedium,
         ),
         const SizedBox(height: 12),
@@ -132,12 +134,11 @@ class _SportSelectorState extends State<SportSelector> {
           runSpacing: 8,
           children: [
             ..._visibleSports.map((key) {
-              // Si es un deporte predefinido, usa AppSports
-              // Si es personalizado, usa color gris e ícono de add
               final bool isCustom = !AppSports.sportKeys.contains(key);
               final sport = isCustom
                   ? SportStyle(
-                      name: key.substring(0, 1).toUpperCase() + key.substring(1),
+                      name:
+                          key.substring(0, 1).toUpperCase() + key.substring(1),
                       color: Colors.grey[600]!,
                       icon: Icons.add_circle_outline,
                     )
@@ -152,46 +153,34 @@ class _SportSelectorState extends State<SportSelector> {
                 },
               );
             }),
-            // Botón expandir
             if (!_isExpanded)
-              _ExpandButton(
-                onTap: () => setState(() => _isExpanded = true),
-              ),
-            // Opción agregar deporte
-            if (_isExpanded)
-              _AddSportButton(
-                onTap: _showAddSportDialog,
-              ),
+              _ExpandButton(onTap: () => setState(() => _isExpanded = true)),
+            if (_isExpanded) _AddSportButton(onTap: _showAddSportDialog),
           ],
         ),
-        // Check de confirmación
         if (widget.selectedSport != null && !_isExpanded)
           Padding(
             padding: const EdgeInsets.only(top: 12),
             child: Row(
               children: [
-                Icon(
-                  Icons.check_circle,
-                  color: AppTheme.navy,
-                  size: 18,
-                ),
+                Icon(Icons.check_circle, color: AppTheme.navy, size: 18),
                 const SizedBox(width: 6),
                 Text(
-                  'Deporte seleccionado',
+                  'Selected sport',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppTheme.navy,
-                        fontWeight: FontWeight.w600,
-                      ),
+                    color: AppTheme.navy,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 const Spacer(),
                 TextButton(
                   onPressed: () => setState(() => _isExpanded = true),
                   child: Text(
-                    'Cambiar',
+                    'Change',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: AppTheme.teal,
-                          fontWeight: FontWeight.w600,
-                        ),
+                      color: AppTheme.teal,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ],
@@ -226,18 +215,14 @@ class _ExpandButton extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.expand_more,
-              color: Colors.grey[600],
-              size: 20,
-            ),
+            Icon(Icons.expand_more, color: Colors.grey[600], size: 20),
             const SizedBox(width: 8),
             Text(
-              'Ver más',
+              'See more',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.grey[600],
-                    fontWeight: FontWeight.w600,
-                  ),
+                color: Colors.grey[600],
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ],
         ),
@@ -270,18 +255,14 @@ class _AddSportButton extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.add,
-              color: Colors.grey[600],
-              size: 20,
-            ),
+            Icon(Icons.add, color: Colors.grey[600], size: 20),
             const SizedBox(width: 8),
             Text(
-              'Agregar',
+              'Add',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.grey[600],
-                    fontWeight: FontWeight.w600,
-                  ),
+                color: Colors.grey[600],
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ],
         ),
@@ -289,4 +270,3 @@ class _AddSportButton extends StatelessWidget {
     );
   }
 }
-

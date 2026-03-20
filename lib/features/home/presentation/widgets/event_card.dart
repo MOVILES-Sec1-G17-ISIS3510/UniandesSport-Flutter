@@ -40,7 +40,9 @@ class _EventCardState extends State<EventCard> {
     final sportStyle = AppSports.sportKeys.contains(widget.sport)
         ? AppSports.getSport(widget.sport)
         : SportStyle(
-            name: widget.sport.substring(0, 1).toUpperCase() + widget.sport.substring(1),
+            name:
+                widget.sport.substring(0, 1).toUpperCase() +
+                widget.sport.substring(1),
             color: Colors.grey[600]!,
             icon: Icons.add_circle_outline,
           );
@@ -81,11 +83,7 @@ class _EventCardState extends State<EventCard> {
                     color: sportStyle.color,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Icon(
-                    sportStyle.icon,
-                    color: Colors.white,
-                    size: 24,
-                  ),
+                  child: Icon(sportStyle.icon, color: Colors.white, size: 24),
                 ),
                 const SizedBox(width: 12),
 
@@ -96,9 +94,8 @@ class _EventCardState extends State<EventCard> {
                     children: [
                       Text(
                         widget.title,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 6),
                       Container(
@@ -112,11 +109,11 @@ class _EventCardState extends State<EventCard> {
                         ),
                         child: Text(
                           widget.modality,
-                          style:
-                              Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: sportStyle.color,
-                                    fontWeight: FontWeight.w600,
-                                  ),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: sportStyle.color,
+                                fontWeight: FontWeight.w600,
+                              ),
                         ),
                       ),
                     ],
@@ -135,20 +132,11 @@ class _EventCardState extends State<EventCard> {
             const SizedBox(height: 12),
 
             // Metadatos (participantes, hora, ubicación)
-            _EventMetadata(
-              icon: Icons.people,
-              text: widget.participants,
-            ),
+            _EventMetadata(icon: Icons.people, text: widget.participants),
             const SizedBox(height: 8),
-            _EventMetadata(
-              icon: Icons.schedule,
-              text: widget.schedule,
-            ),
+            _EventMetadata(icon: Icons.schedule, text: widget.schedule),
             const SizedBox(height: 8),
-            _EventMetadata(
-              icon: Icons.location_on,
-              text: widget.location,
-            ),
+            _EventMetadata(icon: Icons.location_on, text: widget.location),
 
             // Descripción (solo cuando está expandido)
             if (_isExpanded) ...[
@@ -156,16 +144,16 @@ class _EventCardState extends State<EventCard> {
               const Divider(),
               const SizedBox(height: 12),
               Text(
-                'Descripción',
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+                'Description',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
               Text(
                 widget.description?.isNotEmpty == true
                     ? widget.description!
-                    : 'Sin descripción disponible',
+                    : 'No description available',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: widget.description?.isNotEmpty == true
                       ? null
@@ -212,10 +200,7 @@ class _EventMetadata extends StatelessWidget {
   final IconData icon;
   final String text;
 
-  const _EventMetadata({
-    required this.icon,
-    required this.text,
-  });
+  const _EventMetadata({required this.icon, required this.text});
 
   @override
   Widget build(BuildContext context) {
@@ -225,9 +210,9 @@ class _EventMetadata extends StatelessWidget {
         const SizedBox(width: 6),
         Text(
           text,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Colors.grey[700],
-              ),
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(color: Colors.grey[700]),
         ),
       ],
     );

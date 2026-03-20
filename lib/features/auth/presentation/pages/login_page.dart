@@ -37,7 +37,7 @@ class _LoginPageState extends State<LoginPage> {
     if (!mounted || success) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(controller.errorMessage ?? 'No fue posible iniciar sesión')),
+      SnackBar(content: Text(controller.errorMessage ?? 'Unable to sign in')),
     );
   }
 
@@ -56,19 +56,19 @@ class _LoginPageState extends State<LoginPage> {
               Text(
                 'UNIANDES SPORTS',
                 style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      color: AppTheme.teal,
-                      letterSpacing: 3,
-                      fontWeight: FontWeight.w700,
-                    ),
+                  color: AppTheme.teal,
+                  letterSpacing: 3,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               const SizedBox(height: 8),
               Text(
-                'Bienvenido 👋',
+                'Welcome 👋',
                 style: Theme.of(context).textTheme.headlineSmall,
               ),
               const SizedBox(height: 6),
               Text(
-                'Inicia sesión para encontrar partidos, retos y entrenadores.',
+                'Sign in to find matches, challenges, and coaches.',
                 style: Theme.of(context).textTheme.bodyLarge,
               ),
               const SizedBox(height: 30),
@@ -81,7 +81,7 @@ class _LoginPageState extends State<LoginPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Iniciar sesión',
+                          'Sign In',
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
                         const SizedBox(height: 16),
@@ -89,13 +89,13 @@ class _LoginPageState extends State<LoginPage> {
                           controller: _emailController,
                           keyboardType: TextInputType.emailAddress,
                           decoration: const InputDecoration(
-                            labelText: 'Correo institucional',
+                            labelText: 'Institutional Email',
                             prefixIcon: Icon(Icons.mail_outline),
                           ),
                           validator: (value) {
                             final text = value?.trim() ?? '';
-                            if (text.isEmpty) return 'Ingresa tu correo';
-                            if (!text.contains('@')) return 'Correo inválido';
+                            if (text.isEmpty) return 'Enter your email';
+                            if (!text.contains('@')) return 'Invalid email';
                             return null;
                           },
                         ),
@@ -104,7 +104,7 @@ class _LoginPageState extends State<LoginPage> {
                           controller: _passwordController,
                           obscureText: _obscurePassword,
                           decoration: InputDecoration(
-                            labelText: 'Contraseña',
+                            labelText: 'Password',
                             prefixIcon: const Icon(Icons.lock_outline),
                             suffixIcon: IconButton(
                               onPressed: () => setState(() {
@@ -119,7 +119,7 @@ class _LoginPageState extends State<LoginPage> {
                           ),
                           validator: (value) {
                             if ((value ?? '').isEmpty) {
-                              return 'Ingresa tu contraseña';
+                              return 'Enter your password';
                             }
                             return null;
                           },
@@ -131,9 +131,11 @@ class _LoginPageState extends State<LoginPage> {
                               ? const SizedBox(
                                   width: 20,
                                   height: 20,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
                                 )
-                              : const Text('Entrar'),
+                              : const Text('Sign In'),
                         ),
                         const SizedBox(height: 8),
                         Align(
@@ -149,7 +151,7 @@ class _LoginPageState extends State<LoginPage> {
                                       ),
                                     );
                                   },
-                            child: const Text('¿No tienes cuenta? Regístrate'),
+                            child: const Text("Don't have an account? Sign up"),
                           ),
                         ),
                       ],

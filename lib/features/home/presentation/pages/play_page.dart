@@ -34,7 +34,7 @@ class _PlayPageState extends State<PlayPage> {
   bool get _canCreate =>
       _canSearch && _selectedModality == EventModality.casual;
 
-  /// Formatea la fecha/hora para mostrar "Hoy HH:MM PM", "Mañana HH:MM PM", etc.
+  /// Formats the date/time as "Today HH:MM PM", "Tomorrow HH:MM PM", etc.
   String _formatSchedule(DateTime dateTime) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -43,9 +43,9 @@ class _PlayPageState extends State<PlayPage> {
 
     String dayLabel;
     if (eventDate == today) {
-      dayLabel = 'Hoy';
+      dayLabel = 'Today';
     } else if (eventDate == tomorrow) {
-      dayLabel = 'Mañana';
+      dayLabel = 'Tomorrow';
     } else {
       dayLabel = '${eventDate.day}/${eventDate.month}';
     }
@@ -78,7 +78,7 @@ class _PlayPageState extends State<PlayPage> {
     setState(() {
       _joiningEventId = null;
       if (success) {
-        // Refresca el listado para mostrar contador actualizado.
+        // Refresh list to show updated participant count.
         _searchFuture = _eventsRepository.searchEvents(
           sport: _selectedSport!,
           modality: _selectedModality!,
@@ -88,10 +88,8 @@ class _PlayPageState extends State<PlayPage> {
 
     final goToStart = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) => EventRegistrationResultPage(
-          isSuccess: success,
-          message: message,
-        ),
+        builder: (_) =>
+            EventRegistrationResultPage(isSuccess: success, message: message),
       ),
     );
 
@@ -105,9 +103,11 @@ class _PlayPageState extends State<PlayPage> {
       return;
     }
 
-    if (goToStart == false && _selectedSport != null && _selectedModality != null) {
+    if (goToStart == false &&
+        _selectedSport != null &&
+        _selectedModality != null) {
       setState(() {
-        // Al fallar, vuelve a resultados y recarga búsqueda.
+        // On failure, return to results and reload search.
         _searchFuture = _eventsRepository.searchEvents(
           sport: _selectedSport!,
           modality: _selectedModality!,
@@ -149,7 +149,7 @@ class _PlayPageState extends State<PlayPage> {
             children: [
               if (!_hasSearched) ...[
                 Text(
-                  'Encuentra tu deporte',
+                  'Find your sport',
                   style: Theme.of(context).textTheme.headlineSmall,
                 ),
                 const SizedBox(height: 16),
@@ -196,16 +196,16 @@ class _PlayPageState extends State<PlayPage> {
                     });
                   },
                   icon: const Icon(Icons.arrow_back),
-                  label: const Text('Volver'),
+                  label: const Text('Back'),
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'RESULTADOS DE BUSQUEDA',
+                  'SEARCH RESULTS',
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: AppTheme.teal,
-                        letterSpacing: 2,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    color: AppTheme.teal,
+                    letterSpacing: 2,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(height: 16),
                 FutureBuilder<List<SportEvent>>(
@@ -227,8 +227,9 @@ class _PlayPageState extends State<PlayPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Error al buscar eventos',
-                              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                              'Error searching events',
+                              style: Theme.of(context).textTheme.titleSmall
+                                  ?.copyWith(
                                     color: Colors.red,
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -260,14 +261,13 @@ class _PlayPageState extends State<PlayPage> {
                             ),
                             const SizedBox(height: 12),
                             Text(
-                              'No hay eventos disponibles',
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    color: AppTheme.teal,
-                                  ),
+                              'No events available',
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(color: AppTheme.teal),
                             ),
                             const SizedBox(height: 6),
                             Text(
-                              'Intenta cambiar tu busqueda o crea un evento',
+                              'Try changing your search or create an event',
                               style: Theme.of(context).textTheme.bodySmall,
                               textAlign: TextAlign.center,
                             ),
@@ -279,7 +279,7 @@ class _PlayPageState extends State<PlayPage> {
                     return Column(
                       children: [
                         Text(
-                          '${events.length} evento${events.length != 1 ? 's' : ''} encontrado${events.length != 1 ? 's' : ''}',
+                          '${events.length} event${events.length != 1 ? 's' : ''} found',
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                         const SizedBox(height: 16),
