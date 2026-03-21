@@ -11,6 +11,7 @@ import '../../presentation/pages/social_page.dart';
 import '../../presentation/pages/profes_page.dart';
 import '../../presentation/pages/profile_page.dart';
 import '../widgets/play_nav_item.dart';
+import '../widgets/recommended_events_section.dart';
 
 class AppShell extends StatefulWidget {
   final UserProfile profile;
@@ -290,6 +291,21 @@ class _HomePageWrapper extends StatelessWidget {
                     ],
                   ),
                 ),
+                const SizedBox(height: 28),
+
+                Text(
+                  'EVENTOS RECOMENDADOS',
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Descubre opciones segun tus preferencias',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 16),
+                RecommendedEventsSection(userId: profile.uid),
                 const SizedBox(height: 32),
 
                 // Quick Activity section

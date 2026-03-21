@@ -20,10 +20,101 @@ class SportSelector extends StatefulWidget {
 
 class _SportSelectorState extends State<SportSelector> {
   bool _isExpanded = false;
+  String? _customSport; // Solo un deporte personalizado a la vez
 
   List<String> get _visibleSports {
-    final keys = AppSports.sportKeys;
+    final keys = [...AppSports.sportKeys];
+    if (_customSport != null) {
+      keys.add(_customSport!);
+    }
     return _isExpanded ? keys : keys.take(3).toList();
+  }
+
+  Future<void> _showAddSportDialog() async {
+    final controller = TextEditingController();
+    String? errorText;
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Agregar deporte'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Ingresa el nombre del deporte:'),
+              const SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                decoration: InputDecoration(
+                  hintText: 'Ej: Voleibol',
+                  errorText: errorText,
+                  border: const OutlineInputBorder(),
+                ),
+                onChanged: (value) {
+                  // Solo permitir letras y espacios
+                  final filtered = value.replaceAll(RegExp(r'[^a-zA-ZáéíóúÁÉÍÓÚñÑ\s]'), '');
+                  if (filtered != value) {
+                    controller.text = filtered;
+                    controller.selection = TextSelection.fromPosition(
+                      TextPosition(offset: filtered.length),
+                    );
+                  }
+                  if (errorText != null) {
+                    setDialogState(() => errorText = null);
+                  }
+                },
+                maxLength: 30,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Solo letras y espacios. No se permiten números ni caracteres especiales.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Colors.grey[600],
+                    ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final text = controller.text.trim();
+                if (text.isEmpty) {
+                  setDialogState(() => errorText = 'Ingresa un deporte');
+                  return;
+                }
+                if (text.length < 3) {
+                  setDialogState(() => errorText = 'Debe tener al menos 3 letras');
+                  return;
+                }
+                Navigator.of(context).pop(text);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.teal,
+              ),
+              child: const Text('Agregar'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (result != null && result.isNotEmpty) {
+      // Normalizar: quitar espacios y pasar a minúsculas
+      final normalized = result.toLowerCase().replaceAll(' ', '');
+
+      setState(() {
+        // Sobreescribe el deporte personalizado anterior
+        _customSport = normalized;
+        widget.onSportSelected(normalized);
+        _isExpanded = false;
+      });
+    }
   }
 
   @override
@@ -41,7 +132,16 @@ class _SportSelectorState extends State<SportSelector> {
           runSpacing: 8,
           children: [
             ..._visibleSports.map((key) {
-              final sport = AppSports.getSport(key);
+              // Si es un deporte predefinido, usa AppSports
+              // Si es personalizado, usa color gris e ícono de add
+              final bool isCustom = !AppSports.sportKeys.contains(key);
+              final sport = isCustom
+                  ? SportStyle(
+                      name: key.substring(0, 1).toUpperCase() + key.substring(1),
+                      color: Colors.grey[600]!,
+                      icon: Icons.add_circle_outline,
+                    )
+                  : AppSports.getSport(key);
               return SportChip(
                 sportKey: key,
                 sport: sport,
@@ -60,13 +160,7 @@ class _SportSelectorState extends State<SportSelector> {
             // Opción agregar deporte
             if (_isExpanded)
               _AddSportButton(
-                onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Funcionalidad en desarrollo'),
-                    ),
-                  );
-                },
+                onTap: _showAddSportDialog,
               ),
           ],
         ),

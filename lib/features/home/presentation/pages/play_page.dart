@@ -183,48 +183,6 @@ class _PlayPageState extends State<PlayPage> {
                   onCreatePressed: _openCreateCasualEventForm,
                 ),
                 const SizedBox(height: 32),
-                // Eventos recomendados debe ir debajo del buscador.
-                Text(
-                  'Eventos recomendados',
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Basados en tu perfil',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                const SizedBox(height: 16),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: AppTheme.softTeal,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Column(
-                    children: [
-                      Icon(
-                        Icons.lightbulb_outline,
-                        color: AppTheme.teal,
-                        size: 40,
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Proximamente',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              color: AppTheme.teal,
-                            ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Aqui apareceran eventos recomendados para ti',
-                        style: Theme.of(context).textTheme.bodySmall,
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 32),
               ],
               if (_hasSearched &&
                   _selectedSport != null &&
