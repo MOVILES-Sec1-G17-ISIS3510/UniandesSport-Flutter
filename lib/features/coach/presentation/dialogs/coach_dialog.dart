@@ -154,11 +154,11 @@ class CoachProfileDialog extends StatelessWidget {
 
                 Row(
                   children: [
-                    Expanded(child: _statCard(sessions.toString(), "SESSIONS")),
+                    Expanded(child: _StatCard(sessions.toString(), "SESSIONS")),
                     const SizedBox(width: 10),
-                    Expanded(child: _statCard(wins.toString(), "WINS")),
+                    Expanded(child: _StatCard(wins.toString(), "WINS")),
                     const SizedBox(width: 10),
-                    Expanded(child: _statCard("#$rank", "RANK")),
+                    Expanded(child: _StatCard("#$rank", "RANK")),
                   ],
                 ),
 
@@ -229,8 +229,10 @@ class CoachProfileDialog extends StatelessWidget {
                     return Column(
                       children: reviews.map((doc) {
                         final data = doc.data() as Map<String, dynamic>;
-                        final reviewRating = (data['rating'] as num?)?.toInt() ?? 5;
-                        final userName = (data['userName'] as String?)?.isNotEmpty == true
+                        final reviewRating =
+                            (data['rating'] as num?)?.toInt() ?? 5;
+                        final userName =
+                            (data['userName'] as String?)?.isNotEmpty == true
                             ? data['userName'] as String
                             : 'Anonymous';
                         final comment = data['comment'] as String? ?? '';
@@ -310,8 +312,18 @@ class CoachProfileDialog extends StatelessWidget {
 
   String _monthName(int month) {
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     return months[month - 1];
   }
@@ -350,11 +362,11 @@ Widget _infoCard(String title, String value, {bool full = false}) {
   );
 }
 
-class _statCard extends StatelessWidget {
+class _StatCard extends StatelessWidget {
   final String value;
   final String label;
 
-  const _statCard(this.value, this.label, {super.key});
+  const _StatCard(this.value, this.label);
 
   @override
   Widget build(BuildContext context) {
@@ -419,10 +431,7 @@ Widget _reviewCard(String name, String date, String review, int rating) {
           const SizedBox(height: 4),
           Text(date, style: const TextStyle(fontSize: 12, color: Colors.grey)),
         ],
-        if (review.isNotEmpty) ...[
-          const SizedBox(height: 6),
-          Text(review),
-        ],
+        if (review.isNotEmpty) ...[const SizedBox(height: 6), Text(review)],
       ],
     ),
   );
