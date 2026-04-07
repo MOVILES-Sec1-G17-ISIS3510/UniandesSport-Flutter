@@ -28,7 +28,7 @@ class _CreateCasualEventPageState extends State<CreateCasualEventPage> {
   final _locationController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _maxParticipantsController = TextEditingController(text: '10');
-  final _repository = EventsRepository();
+  final _repository = EventsRepository.instance;
 
   DateTime? _scheduledAt;
   bool _isSubmitting = false;

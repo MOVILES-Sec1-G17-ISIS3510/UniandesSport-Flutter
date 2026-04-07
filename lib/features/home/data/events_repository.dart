@@ -6,11 +6,26 @@ import '../../../core/theme/app_sports.dart';
 import '../domain/models/event_modality.dart';
 import '../domain/models/sport_event.dart';
 
+/// Repositorio de eventos deportivos.
+///
+/// Implementa el patrón **Singleton** para garantizar que exista una sola
+/// instancia en toda la aplicación. Esto tiene sentido porque:
+/// - No tiene estado mutable propio (solo coordina llamadas a Firestore).
+/// - Firebase gestiona internamente su propio pool de conexiones.
+/// - Evita crear/destruir objetos innecesariamente cuando múltiples widgets
+///   lo necesitan al mismo tiempo (PlayPage, HomePage, AppShell).
+///
+/// Uso:  `final repo = EventsRepository.instance;`
 class EventsRepository {
+  // Constructor privado: nadie fuera de esta clase puede hacer `EventsRepository()`.
+  EventsRepository._internal()
+      : _firestore = FirebaseFirestore.instance;
+
+  /// Única instancia global de la clase (Singleton eager).
+  static final EventsRepository instance = EventsRepository._internal();
+
   final FirebaseFirestore _firestore;
 
-  EventsRepository({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
 
   /// Buscar eventos por deporte, modalidad y estado
   Future<List<SportEvent>> searchEvents({

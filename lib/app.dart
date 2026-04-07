@@ -4,8 +4,11 @@ import 'package:provider/provider.dart';
 
 import 'core/theme/app_theme.dart';
 import 'features/auth/data/auth_repository.dart';
+import 'features/auth/domain/models/user_profile.dart';
 import 'features/auth/presentation/controllers/auth_controller.dart';
 import 'features/auth/presentation/pages/auth_gate.dart';
+import 'features/home/data/events_repository.dart';
+import 'features/home/presentation/controllers/play_view_model.dart';
 
 class UniandesSportsApp extends StatefulWidget {
   const UniandesSportsApp({super.key});
@@ -46,13 +49,35 @@ class _UniandesSportsAppState extends State<UniandesSportsApp> {
 
         return MultiProvider(
           providers: [
+            // ── Capa de datos ─────────────────────────────────────────────
+            // AuthRepository: instancia normal (1 por árbol, pero no Singleton
+            // porque podría necesitar distintas instancias en tests).
             Provider<AuthRepository>(
               create: (_) => AuthRepository(),
             ),
+            // EventsRepository: Singleton — se comparte la MISMA instancia
+            // en toda la app (PlayPage, HomePage, etc.) sin recrearla.
+            Provider<EventsRepository>(
+              create: (_) => EventsRepository.instance,
+            ),
+
+            // ── ViewModels (MVVM) ─────────────────────────────────────────
+            // AuthController depende de AuthRepository → ProxyProvider.
             ChangeNotifierProxyProvider<AuthRepository, AuthController>(
               create: (context) => AuthController(context.read<AuthRepository>()),
               update: (context, repository, controller) =>
                   controller ?? AuthController(repository),
+            ),
+            // PlayViewModel depende de EventsRepository y del perfil del usuario.
+            // El perfil se inyecta más abajo desde AppShell cuando ya existe sesión.
+            // Aquí se provisiona con un perfil vacío que AppShell sobreescribe.
+            ChangeNotifierProxyProvider<EventsRepository, PlayViewModel>(
+              create: (context) => PlayViewModel(
+                repository: context.read<EventsRepository>(),
+                profile: UserProfile.empty(),
+              ),
+              update: (context, repo, vm) =>
+                  vm ?? PlayViewModel(repository: repo, profile: UserProfile.empty()),
             ),
           ],
           child: MaterialApp(

@@ -1,10 +1,17 @@
+/// PlayPage — View en el patrón MVVM.
+///
+/// Esta clase SOLO se encarga de dibujar la UI. Toda la lógica de negocio,
+/// el estado y las llamadas al repositorio viven en [PlayViewModel].
+///
+/// Regla de oro: si un widget necesita "pensar", ese pensamiento va al ViewModel.
+/// La View solo pregunta "¿qué muestro?" y llama métodos del ViewModel.
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../auth/domain/models/user_profile.dart';
-import '../../data/events_repository.dart';
-import '../../domain/models/event_modality.dart';
 import '../../domain/models/sport_event.dart';
+import '../controllers/play_view_model.dart';
 import '../widgets/action_buttons_section.dart';
 import '../widgets/event_card.dart';
 import '../widgets/modality_selector.dart';
@@ -12,79 +19,25 @@ import '../widgets/sport_selector.dart';
 import 'create_casual_event_page.dart';
 import 'event_registration_result_page.dart';
 
-class PlayPage extends StatefulWidget {
+class PlayPage extends StatelessWidget {
   final UserProfile profile;
   final VoidCallback? onGoHome;
 
   const PlayPage({super.key, required this.profile, this.onGoHome});
 
-  @override
-  State<PlayPage> createState() => _PlayPageState();
-}
+  // ─── Navegación (único rol de la View además de dibujar) ─────────────────
 
-class _PlayPageState extends State<PlayPage> {
-  String? _selectedSport;
-  EventModality? _selectedModality;
-  bool _hasSearched = false;
-  final EventsRepository _eventsRepository = EventsRepository();
-  Future<List<SportEvent>>? _searchFuture;
-  String? _joiningEventId;
+  Future<void> _handleJoinEvent(
+    BuildContext context,
+    PlayViewModel vm,
+    SportEvent event,
+  ) async {
+    final result = await vm.joinEvent(event);
 
-  bool get _canSearch => _selectedSport != null && _selectedModality != null;
-  bool get _canCreate =>
-      _canSearch && _selectedModality == EventModality.casual;
-
-  /// Formatea la fecha/hora para mostrar "Hoy HH:MM PM", "Mañana HH:MM PM", etc.
-  String _formatSchedule(DateTime dateTime) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final tomorrow = today.add(const Duration(days: 1));
-    final eventDate = DateTime(dateTime.year, dateTime.month, dateTime.day);
-
-    String dayLabel;
-    if (eventDate == today) {
-      dayLabel = 'Hoy';
-    } else if (eventDate == tomorrow) {
-      dayLabel = 'Mañana';
-    } else {
-      dayLabel = '${eventDate.day}/${eventDate.month}';
-    }
-
-    final hour = dateTime.hour;
-    final minute = dateTime.minute.toString().padLeft(2, '0');
-    final period = hour >= 12 ? 'PM' : 'AM';
-    final displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
-
-    return '$dayLabel ${displayHour}:$minute $period';
-  }
-
-  Future<void> _handleJoinEvent(SportEvent event) async {
-    if (_joiningEventId != null) return;
-
-    setState(() {
-      _joiningEventId = event.id;
-    });
-
-    final result = await _eventsRepository.registerUserInEventWithMessage(
-      eventId: event.id,
-      userId: widget.profile.uid,
-    );
+    if (!context.mounted) return;
 
     final success = result['success'] as bool;
     final message = result['message'] as String;
-
-    if (!mounted) return;
-
-    setState(() {
-      _joiningEventId = null;
-      if (success) {
-        // Refresca el listado para mostrar contador actualizado.
-        _searchFuture = _eventsRepository.searchEvents(
-          sport: _selectedSport!,
-          modality: _selectedModality!,
-        );
-      }
-    });
 
     final goToStart = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
@@ -95,51 +48,40 @@ class _PlayPageState extends State<PlayPage> {
       ),
     );
 
-    if (!mounted) return;
+    if (!context.mounted) return;
 
+    // Si el usuario pide volver al inicio, resetea búsqueda y navega a Home.
     if (goToStart == true) {
-      setState(() {
-        _hasSearched = false;
-        _searchFuture = null;
-      });
-      return;
-    }
-
-    if (goToStart == false && _selectedSport != null && _selectedModality != null) {
-      setState(() {
-        // Al fallar, vuelve a resultados y recarga búsqueda.
-        _searchFuture = _eventsRepository.searchEvents(
-          sport: _selectedSport!,
-          modality: _selectedModality!,
-        );
-      });
+      vm.resetSearch();
+      onGoHome?.call();
     }
   }
 
-  Future<void> _openCreateCasualEventForm() async {
-    if (!_canCreate || _selectedSport == null) return;
+  Future<void> _openCreateForm(BuildContext context, PlayViewModel vm) async {
+    if (!vm.canCreate || vm.selectedSport == null) return;
 
     final goHome = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => CreateCasualEventPage(
-          profile: widget.profile,
-          sport: _selectedSport!,
+          profile: vm.profile,
+          sport: vm.selectedSport!,
         ),
       ),
     );
 
-    if (!mounted || goHome != true) return;
+    if (!context.mounted || goHome != true) return;
 
-    setState(() {
-      _hasSearched = false;
-      _searchFuture = null;
-    });
-
-    widget.onGoHome?.call();
+    vm.resetSearch();
+    onGoHome?.call();
   }
+
+  // ─── Build ───────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
+    // context.watch: reconstruye el widget cada vez que el ViewModel notifica.
+    final vm = context.watch<PlayViewModel>();
+
     return Scaffold(
       body: SafeArea(
         child: SingleChildScrollView(
@@ -147,170 +89,209 @@ class _PlayPageState extends State<PlayPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (!_hasSearched) ...[
+              if (!vm.hasSearched) ...[
                 Text(
                   'Encuentra tu deporte',
                   style: Theme.of(context).textTheme.headlineSmall,
                 ),
                 const SizedBox(height: 16),
+                // La View pasa callbacks que llaman métodos del ViewModel.
                 SportSelector(
-                  selectedSport: _selectedSport,
-                  onSportSelected: (sport) {
-                    setState(() => _selectedSport = sport);
-                  },
+                  selectedSport: vm.selectedSport,
+                  onSportSelected: vm.selectSport,
                 ),
                 const SizedBox(height: 24),
                 ModalitySelector(
-                  selectedModality: _selectedModality,
-                  onModalitySelected: (modality) {
-                    setState(() => _selectedModality = modality);
-                  },
+                  selectedModality: vm.selectedModality,
+                  onModalitySelected: vm.selectModality,
                 ),
                 const SizedBox(height: 24),
                 ActionButtonsSection(
-                  canSearch: _canSearch,
-                  canCreate: _canCreate,
-                  onSearchPressed: () {
-                    if (!_canSearch) return;
-                    setState(() {
-                      _hasSearched = true;
-                      _searchFuture = _eventsRepository.searchEvents(
-                        sport: _selectedSport!,
-                        modality: _selectedModality!,
-                      );
-                    });
-                  },
-                  onCreatePressed: _openCreateCasualEventForm,
+                  canSearch: vm.canSearch,
+                  canCreate: vm.canCreate,
+                  onSearchPressed: vm.search,
+                  onCreatePressed: () => _openCreateForm(context, vm),
                 ),
                 const SizedBox(height: 32),
               ],
-              if (_hasSearched &&
-                  _selectedSport != null &&
-                  _selectedModality != null &&
-                  _searchFuture != null) ...[
-                TextButton.icon(
-                  onPressed: () {
-                    setState(() {
-                      _hasSearched = false;
-                      _searchFuture = null;
-                    });
-                  },
-                  icon: const Icon(Icons.arrow_back),
-                  label: const Text('Volver'),
+              if (vm.hasSearched) ...[
+                _SearchResults(
+                  vm: vm,
+                  onBack: vm.resetSearch,
+                  onJoin: (event) => _handleJoinEvent(context, vm, event),
                 ),
-                const SizedBox(height: 12),
-                Text(
-                  'RESULTADOS DE BUSQUEDA',
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: AppTheme.teal,
-                        letterSpacing: 2,
-                        fontWeight: FontWeight.bold,
-                      ),
-                ),
-                const SizedBox(height: 16),
-                FutureBuilder<List<SportEvent>>(
-                  future: _searchFuture,
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-
-                    if (snapshot.hasError) {
-                      return Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.red.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.red),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Error al buscar eventos',
-                              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                    color: Colors.red,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              snapshot.error.toString(),
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                          ],
-                        ),
-                      );
-                    }
-
-                    final events = snapshot.data ?? [];
-                    if (events.isEmpty) {
-                      return Container(
-                        padding: const EdgeInsets.all(24),
-                        decoration: BoxDecoration(
-                          color: AppTheme.softTeal,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Column(
-                          children: [
-                            Icon(
-                              Icons.search_off,
-                              color: AppTheme.teal,
-                              size: 40,
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              'No hay eventos disponibles',
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    color: AppTheme.teal,
-                                  ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              'Intenta cambiar tu busqueda o crea un evento',
-                              style: Theme.of(context).textTheme.bodySmall,
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                        ),
-                      );
-                    }
-
-                    return Column(
-                      children: [
-                        Text(
-                          '${events.length} evento${events.length != 1 ? 's' : ''} encontrado${events.length != 1 ? 's' : ''}',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                        const SizedBox(height: 16),
-                        ...List.generate(events.length, (index) {
-                          final event = events[index];
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: EventCard(
-                              title: event.title,
-                              sport: event.sport,
-                              modality: event.modality.label,
-                              participants:
-                                  '${event.currentParticipants}/${event.maxParticipants}',
-                              schedule: _formatSchedule(event.scheduledAt),
-                              location: event.location,
-                              description: event.description,
-                              isJoining: _joiningEventId == event.id,
-                              onJoinPressed: () => _handleJoinEvent(event),
-                            ),
-                          );
-                        }),
-                      ],
-                    );
-                  },
-                ),
-                const SizedBox(height: 32),
               ],
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+// ─── Widget privado: resultados de búsqueda ───────────────────────────────────
+//
+// Extraído para mantener el método build de PlayPage legible.
+// Sigue siendo parte de la View — solo dibuja lo que el ViewModel expone.
+
+class _SearchResults extends StatelessWidget {
+  final PlayViewModel vm;
+  final VoidCallback onBack;
+  final Future<void> Function(SportEvent) onJoin;
+
+  const _SearchResults({
+    required this.vm,
+    required this.onBack,
+    required this.onJoin,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextButton.icon(
+          onPressed: onBack,
+          icon: const Icon(Icons.arrow_back),
+          label: const Text('Volver'),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'RESULTADOS DE BÚSQUEDA',
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: AppTheme.teal,
+                letterSpacing: 2,
+                fontWeight: FontWeight.bold,
+              ),
+        ),
+        const SizedBox(height: 16),
+
+        // Estados de carga, error y resultados.
+        if (vm.isSearching)
+          const Center(child: CircularProgressIndicator())
+        else if (vm.searchError != null)
+          _ErrorBox(error: vm.searchError!)
+        else if (vm.searchResults.isEmpty)
+          const _EmptyResults()
+        else
+          _EventList(
+            events: vm.searchResults,
+            joiningEventId: vm.joiningEventId,
+            formatSchedule: vm.formatSchedule,
+            onJoin: onJoin,
+          ),
+
+        const SizedBox(height: 32),
+      ],
+    );
+  }
+}
+
+class _ErrorBox extends StatelessWidget {
+  final String error;
+  const _ErrorBox({required this.error});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.red.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.red),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Error al buscar eventos',
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  color: Colors.red,
+                  fontWeight: FontWeight.bold,
+                ),
+          ),
+          const SizedBox(height: 8),
+          Text(error, style: Theme.of(context).textTheme.bodySmall),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyResults extends StatelessWidget {
+  const _EmptyResults();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: AppTheme.softTeal,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        children: [
+          Icon(Icons.search_off, color: AppTheme.teal, size: 40),
+          const SizedBox(height: 12),
+          Text(
+            'No hay eventos disponibles',
+            style: Theme.of(context)
+                .textTheme
+                .titleMedium
+                ?.copyWith(color: AppTheme.teal),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Intenta cambiar tu búsqueda o crea un evento',
+            style: Theme.of(context).textTheme.bodySmall,
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EventList extends StatelessWidget {
+  final List<SportEvent> events;
+  final String? joiningEventId;
+  final String Function(DateTime) formatSchedule;
+  final Future<void> Function(SportEvent) onJoin;
+
+  const _EventList({
+    required this.events,
+    required this.joiningEventId,
+    required this.formatSchedule,
+    required this.onJoin,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '${events.length} evento${events.length != 1 ? 's' : ''} '
+          'encontrado${events.length != 1 ? 's' : ''}',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: 16),
+        ...events.map((event) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: EventCard(
+                title: event.title,
+                sport: event.sport,
+                modality: event.modality.label,
+                participants:
+                    '${event.currentParticipants}/${event.maxParticipants}',
+                schedule: formatSchedule(event.scheduledAt),
+                location: event.location,
+                description: event.description,
+                isJoining: joiningEventId == event.id,
+                onJoinPressed: () => onJoin(event),
+              ),
+            )),
+      ],
     );
   }
 }
