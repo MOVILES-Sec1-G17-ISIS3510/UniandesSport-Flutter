@@ -10,6 +10,11 @@ import 'features/auth/presentation/pages/auth_gate.dart';
 import 'features/home/data/events_repository.dart';
 import 'features/home/presentation/controllers/play_view_model.dart';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:uniandessport_flutter/features/coach/presentation/viewmodels/coaches_view_model.dart';
+import 'package:uniandessport_flutter/features/home/data/coach_repository.dart';
+
+
 class UniandesSportsApp extends StatefulWidget {
   const UniandesSportsApp({super.key});
 
@@ -52,6 +57,11 @@ class _UniandesSportsAppState extends State<UniandesSportsApp> {
             // ── Capa de datos ─────────────────────────────────────────────
             // AuthRepository: instancia normal (1 por árbol, pero no Singleton
             // porque podría necesitar distintas instancias en tests).
+            ChangeNotifierProvider(
+              create: (_) => CoachesViewModel(
+                CoachRepositoryImpl(firestore: FirebaseFirestore.instance),
+              )..loadCoaches(),
+            ),
             Provider<AuthRepository>(
               create: (_) => AuthRepository(),
             ),

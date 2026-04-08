@@ -15,7 +15,7 @@ class RecommendedEventsSection extends StatefulWidget {
 }
 
 class _RecommendedEventsSectionState extends State<RecommendedEventsSection> {
-  final EventsRepository _repository = EventsRepository.instance;
+  final EventsRepository _repository = EventsRepository();
   late Future<List<SportEvent>> _future;
 
   @override
