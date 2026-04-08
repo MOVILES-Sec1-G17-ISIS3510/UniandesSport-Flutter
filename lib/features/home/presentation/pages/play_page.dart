@@ -27,17 +27,20 @@ class PlayPage extends StatelessWidget {
 
   // ─── Navegación (único rol de la View además de dibujar) ─────────────────
 
+  Future<void> _handleSearch(BuildContext context, PlayViewModel vm) async {
+    await vm.search();
+  }
+
   Future<void> _handleJoinEvent(
     BuildContext context,
     PlayViewModel vm,
     SportEvent event,
   ) async {
     final result = await vm.joinEvent(event);
-
     if (!context.mounted) return;
 
-    final success = result['success'] as bool;
-    final message = result['message'] as String;
+    final success = result['success'] as bool? ?? false;
+    final message = result['message'] as String? ?? 'No se pudo completar la inscripción';
 
     final goToStart = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
@@ -63,7 +66,7 @@ class PlayPage extends StatelessWidget {
     final goHome = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => CreateCasualEventPage(
-          profile: vm.profile,
+          profile: profile,
           sport: vm.selectedSport!,
         ),
       ),
@@ -107,19 +110,25 @@ class PlayPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 24),
                 ActionButtonsSection(
-                  canSearch: _canSearch,
-                  canCreate: _canCreate,
-                  onSearchPressed: () {
-                    if (!_canSearch) return;
-                    setState(() {
-                      _hasSearched = true;
-                      _searchFuture = _eventsRepository.searchEvents(
-                        sport: _selectedSport!,
-                        modality: _selectedModality!,
-                      );
-                    });
-                  },
-                  onCreatePressed: _openCreateCasualEventForm,
+                  canSearch: vm.canSearch,
+                  canCreate: vm.canCreate,
+                  onSearchPressed: () => _handleSearch(context, vm),
+                  onCreatePressed: () => _openCreateForm(context, vm),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Eventos recomendados',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: AppTheme.navy,
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Aún no hay recomendaciones disponibles',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.grey[600],
+                      ),
                 ),
                 const SizedBox(height: 32),
               ],
@@ -244,10 +253,7 @@ class _EmptyResults extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             'No hay eventos disponibles',
-            style: Theme.of(context)
-                .textTheme
-                .titleMedium
-                ?.copyWith(color: AppTheme.teal),
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(color: AppTheme.teal),
           ),
           const SizedBox(height: 6),
           Text(
@@ -280,26 +286,26 @@ class _EventList extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          '${events.length} evento${events.length != 1 ? 's' : ''} '
-          'encontrado${events.length != 1 ? 's' : ''}',
+          '${events.length} evento${events.length != 1 ? 's' : ''} encontrado${events.length != 1 ? 's' : ''}',
           style: Theme.of(context).textTheme.bodySmall,
         ),
         const SizedBox(height: 16),
-        ...events.map((event) => Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: EventCard(
-                title: event.title,
-                sport: event.sport,
-                modality: event.modality.label,
-                participants:
-                    '${event.currentParticipants}/${event.maxParticipants}',
-                schedule: formatSchedule(event.scheduledAt),
-                location: event.location,
-                description: event.description,
-                isJoining: joiningEventId == event.id,
-                onJoinPressed: () => onJoin(event),
-              ),
-            )),
+        ...events.map(
+          (event) => Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: EventCard(
+              title: event.title,
+              sport: event.sport,
+              modality: event.modality.label,
+              participants: '${event.currentParticipants}/${event.maxParticipants}',
+              schedule: formatSchedule(event.scheduledAt),
+              location: event.location,
+              description: event.description,
+              isJoining: joiningEventId == event.id,
+              onJoinPressed: () => onJoin(event),
+            ),
+          ),
+        ),
       ],
     );
   }
