@@ -10,6 +10,7 @@ import '../../presentation/pages/play_page.dart';
 import '../../presentation/pages/social_page.dart';
 import '../../presentation/pages/profes_page.dart';
 import '../../presentation/pages/profile_page.dart';
+import '../controllers/play_view_model.dart';
 import '../widgets/play_nav_item.dart';
 import '../widgets/recommended_events_section.dart';
 
@@ -46,6 +47,14 @@ class _AppShellState extends State<AppShell> {
     _profile = widget.profile;
     _setupProfileListener();
     _startPlayIconRotation();
+
+    // Inyectar el perfil real en el PlayViewModel tan pronto como AppShell
+    // se construye. Así el ViewModel tiene acceso al UID correcto para
+    // registrar usuarios en eventos.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<PlayViewModel>().updateProfile(_profile);
+    });
   }
 
   @override

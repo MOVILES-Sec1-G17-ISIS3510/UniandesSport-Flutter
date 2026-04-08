@@ -69,4 +69,14 @@ class UserProfile {
       createdAt: createdAtValue is Timestamp ? createdAtValue.toDate() : null,
     );
   }
+
+  /// Perfil vacío utilizado como valor inicial seguro antes de que el usuario
+  /// inicie sesión. Permite registrar [PlayViewModel] en el árbol de Provider
+  /// desde [app.dart] sin requerir un perfil real todavía.
+  factory UserProfile.empty() => const UserProfile(
+        uid: '',
+        email: '',
+        fullName: '',
+        role: UserRole.athlete,
+      );
 }
