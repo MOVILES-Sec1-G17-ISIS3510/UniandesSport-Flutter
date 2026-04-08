@@ -19,8 +19,8 @@ class PlayViewModel extends ChangeNotifier {
   PlayViewModel({
     required EventsRepository repository,
     required UserProfile profile,
-  })  : _repo = repository,
-        _profile = profile;
+  }) : _repo = repository,
+       _profile = profile;
 
   // ─── Dependencias ────────────────────────────────────────────────────────
 
@@ -62,9 +62,11 @@ class PlayViewModel extends ChangeNotifier {
   /// El usuario puede buscar solo si eligió deporte Y modalidad.
   bool get canSearch => _selectedSport != null && _selectedModality != null;
 
-  /// El usuario puede crear un evento solo si eligió casual
-  /// (los torneos solo los crea la coordinación estudiantil).
-  bool get canCreate => canSearch && _selectedModality == EventModality.casual;
+  /// El usuario puede crear un evento casual cuando ya eligio un deporte.
+  ///
+  /// Nota: el formulario de creacion siempre persiste modalidad `casual`,
+  /// asi evitamos bloquear UX por no elegir modalidad antes de crear.
+  bool get canCreate => _selectedSport != null;
 
   // ─── Acceso al perfil ────────────────────────────────────────────────────
 
@@ -163,8 +165,7 @@ class PlayViewModel extends ChangeNotifier {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final tomorrow = today.add(const Duration(days: 1));
-    final eventDate =
-        DateTime(dateTime.year, dateTime.month, dateTime.day);
+    final eventDate = DateTime(dateTime.year, dateTime.month, dateTime.day);
 
     String dayLabel;
     if (eventDate == today) {
@@ -183,6 +184,3 @@ class PlayViewModel extends ChangeNotifier {
     return '$dayLabel $displayHour:$minute $period';
   }
 }
-
-
-
