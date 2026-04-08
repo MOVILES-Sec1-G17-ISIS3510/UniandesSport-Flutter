@@ -11,7 +11,8 @@ class RecommendedEventsSection extends StatefulWidget {
   const RecommendedEventsSection({super.key, required this.userId});
 
   @override
-  State<RecommendedEventsSection> createState() => _RecommendedEventsSectionState();
+  State<RecommendedEventsSection> createState() =>
+      _RecommendedEventsSectionState();
 }
 
 class _RecommendedEventsSectionState extends State<RecommendedEventsSection> {
@@ -22,6 +23,14 @@ class _RecommendedEventsSectionState extends State<RecommendedEventsSection> {
   void initState() {
     super.initState();
     _future = _repository.getRecommendedEvents(widget.userId, limit: 10);
+  }
+
+  @override
+  void didUpdateWidget(covariant RecommendedEventsSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.userId != widget.userId) {
+      _future = _repository.getRecommendedEvents(widget.userId, limit: 10);
+    }
   }
 
   Future<void> _refreshRecommendations() async {
@@ -72,13 +81,16 @@ class _RecommendedEventsSectionState extends State<RecommendedEventsSection> {
                   Text(
                     'Cupos disponibles: ${event.availableSpots}',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: AppTheme.teal,
-                          fontWeight: FontWeight.w700,
-                        ),
+                      color: AppTheme.teal,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                   if (event.description.trim().isNotEmpty) ...[
                     const SizedBox(height: 12),
-                    Text(event.description, style: Theme.of(context).textTheme.bodySmall),
+                    Text(
+                      event.description,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                   ],
                   const SizedBox(height: 18),
                   SizedBox(
@@ -88,30 +100,36 @@ class _RecommendedEventsSectionState extends State<RecommendedEventsSection> {
                           ? null
                           : () async {
                               setSheetState(() => isJoining = true);
-                              final result = await _repository.registerUserInEventWithMessage(
-                                eventId: event.id,
-                                userId: widget.userId,
-                              );
+                              final result = await _repository
+                                  .registerUserInEventWithMessage(
+                                    eventId: event.id,
+                                    userId: widget.userId,
+                                  );
                               if (!mounted) return;
 
                               Navigator.of(sheetContext).pop();
 
                               final success = result['success'] as bool;
                               final message = result['message'] as String;
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text(message)),
-                              );
+                              ScaffoldMessenger.of(
+                                context,
+                              ).showSnackBar(SnackBar(content: Text(message)));
 
                               if (success) {
                                 await _refreshRecommendations();
                               }
                             },
-                      style: ElevatedButton.styleFrom(backgroundColor: AppTheme.teal),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.teal,
+                      ),
                       child: isJoining
                           ? const SizedBox(
                               width: 18,
                               height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
                             )
                           : const Text('Unirme'),
                     ),
@@ -206,14 +224,18 @@ class _RecommendedEventsSectionState extends State<RecommendedEventsSection> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 3,
+                          ),
                           decoration: BoxDecoration(
                             color: AppTheme.softTeal,
                             borderRadius: BorderRadius.circular(999),
                           ),
                           child: Text(
                             sportLabel,
-                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            style: Theme.of(context).textTheme.labelSmall
+                                ?.copyWith(
                                   color: AppTheme.teal,
                                   fontWeight: FontWeight.w700,
                                 ),
@@ -224,18 +246,16 @@ class _RecommendedEventsSectionState extends State<RecommendedEventsSection> {
                           event.title,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(height: 1),
                         Text(
                           event.location,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: Colors.grey[600],
-                              ),
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(color: Colors.grey[600]),
                         ),
                         const Spacer(),
                         Row(
@@ -254,7 +274,10 @@ class _RecommendedEventsSectionState extends State<RecommendedEventsSection> {
                                       _formatDate(event.scheduledAt),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
-                                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(
                                             color: Colors.blueGrey[600],
                                           ),
                                     ),
@@ -267,7 +290,8 @@ class _RecommendedEventsSectionState extends State<RecommendedEventsSection> {
                               '${event.availableSpots} cupos',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
                                     color: AppTheme.teal,
                                     fontWeight: FontWeight.w600,
                                   ),
@@ -286,4 +310,3 @@ class _RecommendedEventsSectionState extends State<RecommendedEventsSection> {
     );
   }
 }
-

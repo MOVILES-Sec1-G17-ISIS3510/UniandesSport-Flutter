@@ -44,10 +44,8 @@ class PlayPage extends StatelessWidget {
 
     final goToStart = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) => EventRegistrationResultPage(
-          isSuccess: success,
-          message: message,
-        ),
+        builder: (_) =>
+            EventRegistrationResultPage(isSuccess: success, message: message),
       ),
     );
 
@@ -142,7 +140,135 @@ class PlayPage extends StatelessWidget {
             ],
           ),
         ),
+        const SizedBox(height: 16),
+
+        // Estados de carga, error y resultados.
+        if (vm.isSearching)
+          const Center(child: CircularProgressIndicator())
+        else if (vm.searchError != null)
+          _ErrorBox(error: vm.searchError!)
+        else if (vm.searchResults.isEmpty)
+          const _EmptyResults()
+        else
+          _EventList(
+            events: vm.searchResults,
+            joiningEventId: vm.joiningEventId,
+            formatSchedule: vm.formatSchedule,
+            onJoin: onJoin,
+          ),
+
+        const SizedBox(height: 32),
+      ],
+    );
+  }
+}
+
+class _ErrorBox extends StatelessWidget {
+  final String error;
+  const _ErrorBox({required this.error});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.red.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.red),
       ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Error al buscar eventos',
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              color: Colors.red,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(error, style: Theme.of(context).textTheme.bodySmall),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyResults extends StatelessWidget {
+  const _EmptyResults();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: AppTheme.softTeal,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        children: [
+          Icon(Icons.search_off, color: AppTheme.teal, size: 40),
+          const SizedBox(height: 12),
+          Text(
+            'No hay eventos disponibles',
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(color: AppTheme.teal),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Intenta cambiar tu búsqueda o crea un evento',
+            style: Theme.of(context).textTheme.bodySmall,
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EventList extends StatelessWidget {
+  final List<SportEvent> events;
+  final String? joiningEventId;
+  final String Function(DateTime) formatSchedule;
+  final Future<void> Function(SportEvent) onJoin;
+
+  const _EventList({
+    required this.events,
+    required this.joiningEventId,
+    required this.formatSchedule,
+    required this.onJoin,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '${events.length} evento${events.length != 1 ? 's' : ''} '
+          'encontrado${events.length != 1 ? 's' : ''}',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: 16),
+        ...events.map(
+          (event) => Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: EventCard(
+              title: event.title,
+              sport: event.sport,
+              modality: event.modality.label,
+              participants:
+                  '${event.currentParticipants}/${event.maxParticipants}',
+              schedule: formatSchedule(event.scheduledAt),
+              location: event.location,
+              description: event.description,
+              isJoining: joiningEventId == event.id,
+              onJoinPressed: () => onJoin(event),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
