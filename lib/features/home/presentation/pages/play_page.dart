@@ -107,10 +107,19 @@ class PlayPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 24),
                 ActionButtonsSection(
-                  canSearch: vm.canSearch,
-                  canCreate: vm.canCreate,
-                  onSearchPressed: vm.search,
-                  onCreatePressed: () => _openCreateForm(context, vm),
+                  canSearch: _canSearch,
+                  canCreate: _canCreate,
+                  onSearchPressed: () {
+                    if (!_canSearch) return;
+                    setState(() {
+                      _hasSearched = true;
+                      _searchFuture = _eventsRepository.searchEvents(
+                        sport: _selectedSport!,
+                        modality: _selectedModality!,
+                      );
+                    });
+                  },
+                  onCreatePressed: _openCreateCasualEventForm,
                 ),
                 const SizedBox(height: 32),
               ],
