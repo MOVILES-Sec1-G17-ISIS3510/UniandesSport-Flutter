@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 
+import '../../../core/services/analytics_service.dart';
 import '../../../core/theme/app_sports.dart';
 import '../domain/models/event_modality.dart';
 import '../domain/models/sport_event.dart';
@@ -34,7 +35,9 @@ class EventsRepository {
     String status = 'active',
   }) async {
 
-    // 1. Registrar la búsqueda en segundo plano (Fire-and-forget)
+    // 1. Registrar la búsqueda en analitica y en backend (fire-and-forget)
+    AnalyticsService.instance.logSearchSportEvent(sportCategory: sport);
+
     try {
       FirebaseFunctions.instance
           .httpsCallable('logSportSearch')
@@ -221,6 +224,9 @@ class EventsRepository {
 
       final docRef = await _firestore.collection('events').add(eventJson);
 
+      // Registro de analitica no bloqueante para no afectar la UX.
+      AnalyticsService.instance.logCreateSportEvent(sportCategory: sport);
+
       return docRef.id;
     } catch (e) {
       throw Exception('Error creando evento: $e');
@@ -355,6 +361,7 @@ class EventsRepository {
           return {
             'success': true,
             'message': 'Ya estabas registrado en este evento',
+            'sportCategory': data['sport'] ?? '',
           };
         }
 
@@ -375,8 +382,17 @@ class EventsRepository {
         return {
           'success': true,
           'message': 'Registrado exitosamente',
+          'sportCategory': data['sport'] ?? '',
         };
       });
+
+      if (result['success'] == true && result['message'] == 'Registrado exitosamente') {
+        final sportCategory = (result['sportCategory'] as String?) ?? '';
+        AnalyticsService.instance.logJoinSportEvent(
+          sportCategory: sportCategory,
+          eventId: eventId,
+        );
+      }
 
       debugPrint('[registerUserInEvent] Resultado: $result');
       return result;
