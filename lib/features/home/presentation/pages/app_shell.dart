@@ -83,10 +83,50 @@ class _AppShellState extends State<AppShell> {
     });
   }
 
+  void _openProfilePage() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => ProfilePage(profile: _profile)));
+  }
+
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Scaffold(
-      body: _buildPage(_selectedIndex),
+      body: Stack(
+        children: [
+          _buildPage(_selectedIndex),
+          if (_selectedIndex != 4)
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 6,
+              right: 14,
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: _openProfilePage,
+                  borderRadius: BorderRadius.circular(24),
+                  child: Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: colorScheme.surfaceContainerHighest.withValues(
+                        alpha: 0.92,
+                      ),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: colorScheme.outlineVariant),
+                    ),
+                    child: Icon(
+                      Icons.account_circle_outlined,
+                      size: 28,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: (index) {
@@ -112,7 +152,10 @@ class _AppShellState extends State<AppShell> {
             ),
             label: '',
           ),
-          const BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Social'),
+          const BottomNavigationBarItem(
+            icon: Icon(Icons.people),
+            label: 'Social',
+          ),
           const BottomNavigationBarItem(
             icon: Icon(Icons.person_outline),
             label: 'Profes',
@@ -304,9 +347,9 @@ class _HomePageWrapper extends StatelessWidget {
 
                 Text(
                   'EVENTOS RECOMENDADOS',
-                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -388,10 +431,17 @@ class _StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: backgroundColor,
+        color: isDark
+            ? Color.alphaBlend(
+                Colors.black.withValues(alpha: 0.35),
+                backgroundColor,
+              )
+            : backgroundColor,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -401,9 +451,9 @@ class _StatCard extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             label,
-            style: Theme.of(
-              context,
-            ).textTheme.labelSmall?.copyWith(color: Colors.grey[600]),
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
           const SizedBox(height: 4),
           Text(
@@ -431,9 +481,11 @@ class _QuickFilterChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return ChipTheme(
       data: ChipThemeData(
-        backgroundColor: const Color(0xFFE8F6F5),
+        backgroundColor: colorScheme.surfaceContainerHighest,
         labelStyle: Theme.of(context).textTheme.bodySmall,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),
@@ -461,12 +513,14 @@ class _ActivityCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[200]!),
+        border: Border.all(color: colorScheme.outlineVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -477,7 +531,7 @@ class _ActivityCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFE8F6F5),
+                  color: colorScheme.surfaceContainerHighest,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(icon, style: const TextStyle(fontSize: 24)),
@@ -506,9 +560,9 @@ class _ActivityCard extends StatelessWidget {
                 children: [
                   Text(
                     duration,
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(

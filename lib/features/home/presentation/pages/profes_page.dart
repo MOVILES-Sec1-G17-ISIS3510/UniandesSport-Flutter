@@ -23,12 +23,14 @@ class _ProfesPageState extends State<ProfesPage> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Scaffold(
       floatingActionButton: Container(
         height: 60,
         width: 60,
         decoration: BoxDecoration(
-          color: Colors.teal,
+          color: colorScheme.secondary,
           shape: BoxShape.circle,
           boxShadow: [
             BoxShadow(
@@ -75,11 +77,14 @@ class _ProfesPageState extends State<ProfesPage> {
                     children: [
                       Container(
                         decoration: BoxDecoration(
-                          color: Colors.grey.shade200,
+                          color: colorScheme.surfaceContainerHighest,
                           shape: BoxShape.circle,
                         ),
                         child: IconButton(
-                          icon: const Icon(Icons.search),
+                          icon: Icon(
+                            Icons.search,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
                           onPressed: () {
                             showSearch(
                               context: context,
@@ -91,11 +96,14 @@ class _ProfesPageState extends State<ProfesPage> {
                       const SizedBox(width: 8),
                       Container(
                         decoration: BoxDecoration(
-                          color: Colors.grey.shade200,
+                          color: colorScheme.surfaceContainerHighest,
                           shape: BoxShape.circle,
                         ),
                         child: IconButton(
-                          icon: const Icon(Icons.tune),
+                          icon: Icon(
+                            Icons.tune,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
                           onPressed: () {
                             showModalBottomSheet(
                               context: context,
@@ -118,7 +126,6 @@ class _ProfesPageState extends State<ProfesPage> {
 
               const SizedBox(height: 24),
 
-
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Consumer<CoachesViewModel>(
@@ -132,11 +139,14 @@ class _ProfesPageState extends State<ProfesPage> {
                             label: Text(sport),
                             selected: isSelected,
                             showCheckmark: true,
-                            selectedColor: Colors.teal.shade300,
-                            checkmarkColor: Colors.white,
-                            backgroundColor: Colors.grey.shade200,
+                            selectedColor: colorScheme.secondaryContainer,
+                            checkmarkColor: colorScheme.onSecondaryContainer,
+                            backgroundColor:
+                                colorScheme.surfaceContainerHighest,
                             labelStyle: TextStyle(
-                              color: isSelected ? Colors.white : Colors.black,
+                              color: isSelected
+                                  ? colorScheme.onSecondaryContainer
+                                  : colorScheme.onSurfaceVariant,
                               fontWeight: FontWeight.w600,
                             ),
                             onSelected: (value) {
@@ -151,7 +161,6 @@ class _ProfesPageState extends State<ProfesPage> {
               ),
 
               const SizedBox(height: 24),
-
 
               Expanded(
                 child: Consumer<CoachesViewModel>(
@@ -172,7 +181,7 @@ class _ProfesPageState extends State<ProfesPage> {
                             Icon(
                               Icons.sports_handball_outlined,
                               size: 80,
-                              color: Colors.grey.shade400,
+                              color: colorScheme.onSurfaceVariant,
                             ),
                             const SizedBox(height: 16),
                             Text(
@@ -181,7 +190,7 @@ class _ProfesPageState extends State<ProfesPage> {
                               style: TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.grey.shade700,
+                                color: colorScheme.onSurface,
                               ),
                             ),
                             const SizedBox(height: 8),
@@ -190,7 +199,7 @@ class _ProfesPageState extends State<ProfesPage> {
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontSize: 14,
-                                color: Colors.grey.shade500,
+                                color: colorScheme.onSurfaceVariant,
                               ),
                             ),
                           ],

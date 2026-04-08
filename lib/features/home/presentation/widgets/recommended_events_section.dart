@@ -41,11 +41,12 @@ class _RecommendedEventsSectionState extends State<RecommendedEventsSection> {
 
   Future<void> _openEventDetails(SportEvent event) async {
     bool isJoining = false;
+    final colorScheme = Theme.of(context).colorScheme;
 
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: colorScheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -209,9 +210,11 @@ class _RecommendedEventsSectionState extends State<RecommendedEventsSection> {
                   child: Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: Theme.of(context).colorScheme.surface,
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: const Color(0xFFE6EBF2)),
+                      border: Border.all(
+                        color: Theme.of(context).colorScheme.outlineVariant,
+                      ),
                       boxShadow: const [
                         BoxShadow(
                           color: Color(0x12000000),
@@ -229,7 +232,9 @@ class _RecommendedEventsSectionState extends State<RecommendedEventsSection> {
                             vertical: 3,
                           ),
                           decoration: BoxDecoration(
-                            color: AppTheme.softTeal,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.surfaceContainerHighest,
                             borderRadius: BorderRadius.circular(999),
                           ),
                           child: Text(
@@ -255,7 +260,11 @@ class _RecommendedEventsSectionState extends State<RecommendedEventsSection> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(color: Colors.grey[600]),
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                              ),
                         ),
                         const Spacer(),
                         Row(
@@ -266,7 +275,9 @@ class _RecommendedEventsSectionState extends State<RecommendedEventsSection> {
                                   Icon(
                                     Icons.calendar_today_outlined,
                                     size: 13,
-                                    color: Colors.blueGrey[600],
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
                                   ),
                                   const SizedBox(width: 5),
                                   Expanded(
@@ -278,7 +289,9 @@ class _RecommendedEventsSectionState extends State<RecommendedEventsSection> {
                                           .textTheme
                                           .bodySmall
                                           ?.copyWith(
-                                            color: Colors.blueGrey[600],
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.onSurfaceVariant,
                                           ),
                                     ),
                                   ),

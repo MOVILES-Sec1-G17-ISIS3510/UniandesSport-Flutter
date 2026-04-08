@@ -9,8 +9,9 @@ import '../../../auth/presentation/controllers/auth_controller.dart';
 
 class ProfilePage extends StatefulWidget {
   final UserProfile profile;
+  final VoidCallback? onBack;
 
-  const ProfilePage({super.key, required this.profile});
+  const ProfilePage({super.key, required this.profile, this.onBack});
 
   @override
   State<ProfilePage> createState() => _ProfilePageState();
@@ -23,6 +24,18 @@ class _ProfilePageState extends State<ProfilePage> {
   late TextEditingController _semesterController;
   late TextEditingController _mainSportController;
   bool _isEditing = false;
+
+  String _buildInitials(String fullName) {
+    final parts = fullName
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((part) => part.isNotEmpty)
+        .toList();
+
+    if (parts.isEmpty) return '?';
+    if (parts.length == 1) return parts.first[0].toUpperCase();
+    return (parts.first[0] + parts.last[0]).toUpperCase();
+  }
 
   @override
   void initState() {
@@ -59,10 +72,17 @@ class _ProfilePageState extends State<ProfilePage> {
         : AppSports.normalizeSportKey(_mainSportController.text);
     final selectedMainSportForDropdown =
         AppSports.sportKeys.contains(selectedMainSportKey)
-            ? selectedMainSportKey
-            : null;
+        ? selectedMainSportKey
+        : null;
 
     return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: widget.onBack ?? () => Navigator.of(context).maybePop(),
+        ),
+        title: const Text('Perfil'),
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           child: Padding(
@@ -71,11 +91,11 @@ class _ProfilePageState extends State<ProfilePage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    const BackButton(),
                     _isEditing
-                        ? Row(
+                        ? Wrap(
+                            spacing: 8,
                             children: [
                               TextButton(
                                 onPressed: () =>
@@ -84,12 +104,26 @@ class _ProfilePageState extends State<ProfilePage> {
                               ),
                               ElevatedButton(
                                 onPressed: _saveProfile,
+                                style: ElevatedButton.styleFrom(
+                                  minimumSize: const Size(0, 40),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 8,
+                                  ),
+                                ),
                                 child: const Text('Guardar'),
                               ),
                             ],
                           )
                         : ElevatedButton.icon(
                             onPressed: () => setState(() => _isEditing = true),
+                            style: ElevatedButton.styleFrom(
+                              minimumSize: const Size(0, 40),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 8,
+                              ),
+                            ),
                             icon: const Icon(Icons.edit),
                             label: const Text('Editar'),
                           ),
@@ -105,12 +139,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         radius: 50,
                         backgroundColor: Colors.teal,
                         child: Text(
-                          widget.profile.fullName
-                              .split(' ')
-                              .take(2)
-                              .map((e) => e[0])
-                              .join()
-                              .toUpperCase(),
+                          _buildInitials(widget.profile.fullName),
                           style: const TextStyle(
                             fontSize: 32,
                             fontWeight: FontWeight.bold,
@@ -250,7 +279,10 @@ class _ProfilePageState extends State<ProfilePage> {
                   _ProfileInfoCard(
                     icon: Icons.sports_soccer,
                     title: 'Deporte Principal',
-                    value: AppSports.formatSportLabel(widget.profile.mainSport).isEmpty
+                    value:
+                        AppSports.formatSportLabel(
+                          widget.profile.mainSport,
+                        ).isEmpty
                         ? 'No especificado'
                         : AppSports.formatSportLabel(widget.profile.mainSport),
                   ),

@@ -45,5 +45,7 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Usamos la cámara para estimar la luz ambiental y activar el modo oscuro automáticamente.</string>
 </dict>
 </plist>
