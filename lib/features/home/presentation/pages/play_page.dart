@@ -1,10 +1,3 @@
-/// PlayPage — View en el patrón MVVM.
-///
-/// Esta clase SOLO se encarga de dibujar la UI. Toda la lógica de negocio,
-/// el estado y las llamadas al repositorio viven en [PlayViewModel].
-///
-/// Regla de oro: si un widget necesita "pensar", ese pensamiento va al ViewModel.
-/// La View solo pregunta "¿qué muestro?" y llama métodos del ViewModel.
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -25,7 +18,9 @@ class PlayPage extends StatelessWidget {
 
   const PlayPage({super.key, required this.profile, this.onGoHome});
 
-  // ─── Navegación (único rol de la View además de dibujar) ─────────────────
+  Future<void> _handleSearch(PlayViewModel vm) async {
+    await vm.search();
+  }
 
   Future<void> _handleJoinEvent(
     BuildContext context,
@@ -33,11 +28,11 @@ class PlayPage extends StatelessWidget {
     SportEvent event,
   ) async {
     final result = await vm.joinEvent(event);
-
     if (!context.mounted) return;
 
-    final success = result['success'] as bool;
-    final message = result['message'] as String;
+    final success = result['success'] as bool? ?? false;
+    final message =
+        result['message'] as String? ?? 'No se pudo completar la inscripcion';
 
     final goToStart = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
@@ -48,7 +43,6 @@ class PlayPage extends StatelessWidget {
 
     if (!context.mounted) return;
 
-    // Si el usuario pide volver al inicio, resetea búsqueda y navega a Home.
     if (goToStart == true) {
       vm.resetSearch();
       onGoHome?.call();
@@ -60,10 +54,8 @@ class PlayPage extends StatelessWidget {
 
     final goHome = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) => CreateCasualEventPage(
-          profile: vm.profile,
-          sport: vm.selectedSport!,
-        ),
+        builder: (_) =>
+            CreateCasualEventPage(profile: profile, sport: vm.selectedSport!),
       ),
     );
 
@@ -73,11 +65,8 @@ class PlayPage extends StatelessWidget {
     onGoHome?.call();
   }
 
-  // ─── Build ───────────────────────────────────────────────────────────────
-
   @override
   Widget build(BuildContext context) {
-    // context.watch: reconstruye el widget cada vez que el ViewModel notifica.
     final vm = context.watch<PlayViewModel>();
 
     return Scaffold(
@@ -93,7 +82,6 @@ class PlayPage extends StatelessWidget {
                   style: Theme.of(context).textTheme.headlineSmall,
                 ),
                 const SizedBox(height: 16),
-                // La View pasa callbacks que llaman métodos del ViewModel.
                 SportSelector(
                   selectedSport: vm.selectedSport,
                   onSportSelected: vm.selectSport,
@@ -107,18 +95,32 @@ class PlayPage extends StatelessWidget {
                 ActionButtonsSection(
                   canSearch: vm.canSearch,
                   canCreate: vm.canCreate,
-                  onSearchPressed: vm.search,
+                  onSearchPressed: () => _handleSearch(vm),
                   onCreatePressed: () => _openCreateForm(context, vm),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Eventos recomendados',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: AppTheme.navy,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Aun no hay recomendaciones disponibles',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 ),
                 const SizedBox(height: 32),
               ],
-              if (vm.hasSearched) ...[
+              if (vm.hasSearched)
                 _SearchResults(
                   vm: vm,
                   onBack: vm.resetSearch,
                   onJoin: (event) => _handleJoinEvent(context, vm, event),
                 ),
-              ],
             ],
           ),
         ),
@@ -126,11 +128,6 @@ class PlayPage extends StatelessWidget {
     );
   }
 }
-
-// ─── Widget privado: resultados de búsqueda ───────────────────────────────────
-//
-// Extraído para mantener el método build de PlayPage legible.
-// Sigue siendo parte de la View — solo dibuja lo que el ViewModel expone.
 
 class _SearchResults extends StatelessWidget {
   final PlayViewModel vm;
@@ -155,7 +152,7 @@ class _SearchResults extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         Text(
-          'RESULTADOS DE BÚSQUEDA',
+          'RESULTADOS DE BUSQUEDA',
           style: Theme.of(context).textTheme.labelSmall?.copyWith(
             color: AppTheme.teal,
             letterSpacing: 2,
@@ -163,8 +160,6 @@ class _SearchResults extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 16),
-
-        // Estados de carga, error y resultados.
         if (vm.isSearching)
           const Center(child: CircularProgressIndicator())
         else if (vm.searchError != null)
@@ -178,7 +173,6 @@ class _SearchResults extends StatelessWidget {
             formatSchedule: vm.formatSchedule,
             onJoin: onJoin,
           ),
-
         const SizedBox(height: 32),
       ],
     );
@@ -187,6 +181,7 @@ class _SearchResults extends StatelessWidget {
 
 class _ErrorBox extends StatelessWidget {
   final String error;
+
   const _ErrorBox({required this.error});
 
   @override
@@ -239,7 +234,7 @@ class _EmptyResults extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            'Intenta cambiar tu búsqueda o crea un evento',
+            'Intenta cambiar tu busqueda o crea un evento',
             style: Theme.of(context).textTheme.bodySmall,
             textAlign: TextAlign.center,
           ),
@@ -268,8 +263,7 @@ class _EventList extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          '${events.length} evento${events.length != 1 ? 's' : ''} '
-          'encontrado${events.length != 1 ? 's' : ''}',
+          '${events.length} evento${events.length != 1 ? 's' : ''} encontrado${events.length != 1 ? 's' : ''}',
           style: Theme.of(context).textTheme.bodySmall,
         ),
         const SizedBox(height: 16),
