@@ -19,14 +19,18 @@ import '../domain/models/sport_event.dart';
 /// Uso:  `final repo = EventsRepository.instance;`
 class EventsRepository {
   // Constructor privado: nadie fuera de esta clase puede hacer `EventsRepository()`.
-  EventsRepository._internal()
-      : _firestore = FirebaseFirestore.instance;
+  EventsRepository._internal() : _firestore = FirebaseFirestore.instance;
 
   /// Única instancia global de la clase (Singleton eager).
   static final EventsRepository instance = EventsRepository._internal();
 
   final FirebaseFirestore _firestore;
 
+  /// Puerta de acceso a Cloud Functions callable usadas por BQ3/BQ4.
+  ///
+  /// Se mantiene como dependencia interna para que la capa UI solo use
+  /// el repositorio y no conozca detalles de infraestructura.
+  final FirebaseFunctions _functions = FirebaseFunctions.instance;
 
   /// Buscar eventos por deporte, modalidad y estado
   Future<List<SportEvent>> searchEvents({
@@ -34,15 +38,13 @@ class EventsRepository {
     required EventModality modality,
     String status = 'active',
   }) async {
-
     // 1. Registrar la búsqueda en analitica y en backend (fire-and-forget)
     AnalyticsService.instance.logSearchSportEvent(sportCategory: sport);
 
     try {
-      FirebaseFunctions.instance
-          .httpsCallable('logSportSearch')
+      FirebaseFunctions.instance.httpsCallable('logSportSearch')
       // Usamos toLowerCase() por si el usuario escribe "Fútbol" en mayúscula
-          .call({'sport': AppSports.normalizeSportKey(sport)});
+      .call({'sport': AppSports.normalizeSportKey(sport)});
     } catch (e) {
       // Si la función falla (ej. problemas de red), no queremos que la app explote.
       // Solo imprimimos el error en consola, pero dejamos que la búsqueda continúe.
@@ -60,14 +62,19 @@ class EventsRepository {
           .limit(10)
           .get();
 
-      final events = snapshot.docs.map((doc) => SportEvent.fromFirestore(doc)).toList();
+      final events = snapshot.docs
+          .map((doc) => SportEvent.fromFirestore(doc))
+          .toList();
       return _pickVariedEvents(events, maxResults: 5);
     } catch (e) {
       throw Exception('Error buscando eventos: $e');
     }
   }
 
-  List<SportEvent> _pickVariedEvents(List<SportEvent> events, {required int maxResults}) {
+  List<SportEvent> _pickVariedEvents(
+    List<SportEvent> events, {
+    required int maxResults,
+  }) {
     if (events.length <= maxResults) return events;
 
     final selected = <SportEvent>[];
@@ -79,7 +86,10 @@ class EventsRepository {
     return selected;
   }
 
-  Future<List<SportEvent>> getRecommendedEvents(String userId, {int limit = 10}) async {
+  Future<List<SportEvent>> getRecommendedEvents(
+    String userId, {
+    int limit = 10,
+  }) async {
     try {
       final userDoc = await _firestore.collection('users').doc(userId).get();
       final userData = userDoc.data();
@@ -101,8 +111,12 @@ class EventsRepository {
         if (mainSport == null || mainSport.trim().isEmpty) return [];
         topSports = [AppSports.normalizeSportKey(mainSport)];
       } else {
-        final sorted = prefs.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
-        topSports = sorted.take(3).map((e) => AppSports.normalizeSportKey(e.key)).toList();
+        final sorted = prefs.entries.toList()
+          ..sort((a, b) => b.value.compareTo(a.value));
+        topSports = sorted
+            .take(3)
+            .map((e) => AppSports.normalizeSportKey(e.key))
+            .toList();
       }
 
       if (topSports.isEmpty) return [];
@@ -117,7 +131,11 @@ class EventsRepository {
       final events = snapshot.docs
           .map(SportEvent.fromFirestore)
           // No recomendar eventos del propio usuario ni eventos donde ya participa.
-          .where((event) => event.createdBy != userId && !event.participants.contains(userId))
+          .where(
+            (event) =>
+                event.createdBy != userId &&
+                !event.participants.contains(userId),
+          )
           .toList();
 
       events.sort((a, b) {
@@ -129,17 +147,21 @@ class EventsRepository {
       });
 
       // Mostrar solo 5 recomendaciones, priorizando variedad entre deportes.
-      return _pickVariedRecommendedEvents(events, topSports: topSports, maxResults: 5);
+      return _pickVariedRecommendedEvents(
+        events,
+        topSports: topSports,
+        maxResults: 5,
+      );
     } catch (e) {
       throw Exception('Error obteniendo recomendaciones: $e');
     }
   }
 
   List<SportEvent> _pickVariedRecommendedEvents(
-      List<SportEvent> events, {
-        required List<String> topSports,
-        required int maxResults,
-      }) {
+    List<SportEvent> events, {
+    required List<String> topSports,
+    required int maxResults,
+  }) {
     if (events.length <= maxResults) return events;
 
     final buckets = <String, List<SportEvent>>{
@@ -218,9 +240,7 @@ class EventsRepository {
       );
 
       final eventJson = event.toJson();
-      eventJson['metadata'] = {
-        'creatorSemester': creatorSemester,
-      };
+      eventJson['metadata'] = {'creatorSemester': creatorSemester};
 
       final docRef = await _firestore.collection('events').add(eventJson);
 
@@ -272,9 +292,7 @@ class EventsRepository {
           .orderBy('createdAt', descending: true)
           .get();
 
-      return snapshot.docs
-          .map((doc) => SportEvent.fromFirestore(doc))
-          .toList();
+      return snapshot.docs.map((doc) => SportEvent.fromFirestore(doc)).toList();
     } catch (e) {
       throw Exception('Error obteniendo eventos del usuario: $e');
     }
@@ -289,9 +307,7 @@ class EventsRepository {
           .orderBy('scheduledAt', descending: false)
           .get();
 
-      return snapshot.docs
-          .map((doc) => SportEvent.fromFirestore(doc))
-          .toList();
+      return snapshot.docs.map((doc) => SportEvent.fromFirestore(doc)).toList();
     } catch (e) {
       throw Exception('Error obteniendo eventos del usuario: $e');
     }
@@ -333,20 +349,42 @@ class EventsRepository {
   Future<Map<String, dynamic>> registerUserInEventWithMessage({
     required String eventId,
     required String userId,
+
+    /// Opcional: id de notificacion usada para atribuir conversion BQ4.
+    ///
+    /// Si viene informado y el evento es torneo, se registra interacción
+    /// tipo `clicked` en backend para completar trazabilidad del embudo.
+    String? notificationId,
   }) async {
     try {
-      debugPrint('[registerUserInEvent] Intentando registrar userId=$userId en eventId=$eventId');
+      debugPrint(
+        '[registerUserInEvent] Intentando registrar userId=$userId en eventId=$eventId',
+      );
 
-      final result = await _firestore.runTransaction<Map<String, dynamic>>((transaction) async {
+      final eventBeforeJoin = await _firestore
+          .collection('events')
+          .doc(eventId)
+          .get();
+      final beforeData = eventBeforeJoin.data();
+      final sportCategory = (beforeData?['sport'] as String?) ?? '';
+
+      if (sportCategory.isNotEmpty) {
+        // Intento de registro para medir embudo completo (inicia registro).
+        AnalyticsService.instance.logInitiateRegistration(
+          sportCategory: sportCategory,
+          eventId: eventId,
+        );
+      }
+
+      final result = await _firestore.runTransaction<Map<String, dynamic>>((
+        transaction,
+      ) async {
         final eventRef = _firestore.collection('events').doc(eventId);
         final snapshot = await transaction.get(eventRef);
 
         if (!snapshot.exists) {
           debugPrint('[registerUserInEvent] El evento $eventId no existe');
-          return {
-            'success': false,
-            'message': 'El evento no existe',
-          };
+          return {'success': false, 'message': 'El evento no existe'};
         }
 
         final data = snapshot.data() as Map<String, dynamic>;
@@ -354,10 +392,14 @@ class EventsRepository {
         final maxParticipants = (data['maxParticipants'] ?? 0) as int;
         final title = data['title'] ?? 'Evento desconocido';
 
-        debugPrint('[registerUserInEvent] Evento: $title | Participantes: ${participants.length}/$maxParticipants');
+        debugPrint(
+          '[registerUserInEvent] Evento: $title | Participantes: ${participants.length}/$maxParticipants',
+        );
 
         if (participants.contains(userId)) {
-          debugPrint('[registerUserInEvent] Usuario $userId ya estaba registrado');
+          debugPrint(
+            '[registerUserInEvent] Usuario $userId ya estaba registrado',
+          );
           return {
             'success': true,
             'message': 'Ya estabas registrado en este evento',
@@ -367,10 +409,7 @@ class EventsRepository {
 
         if (participants.length >= maxParticipants) {
           debugPrint('[registerUserInEvent] Evento $eventId está lleno');
-          return {
-            'success': false,
-            'message': 'El evento está lleno',
-          };
+          return {'success': false, 'message': 'El evento está lleno'};
         }
 
         debugPrint('[registerUserInEvent] Agregando $userId a participantes');
@@ -386,18 +425,50 @@ class EventsRepository {
         };
       });
 
-      if (result['success'] == true && result['message'] == 'Registrado exitosamente') {
+      if (result['success'] == true &&
+          result['message'] == 'Registrado exitosamente') {
         final sportCategory = (result['sportCategory'] as String?) ?? '';
         AnalyticsService.instance.logJoinSportEvent(
           sportCategory: sportCategory,
           eventId: eventId,
         );
+
+        final modality = ((beforeData?['modality'] as String?) ?? '')
+            .toLowerCase();
+        if (notificationId != null &&
+            notificationId.trim().isNotEmpty &&
+            modality == 'tournament') {
+          // Atribuye el registro a una notificación automatizada en backend (BQ4).
+          try {
+            await _functions
+                .httpsCallable('logAutomatedNotificationInteraction')
+                .call({
+                  'notificationId': notificationId.trim(),
+                  'interactionType': 'clicked',
+                });
+          } catch (e) {
+            debugPrint(
+              '[registerUserInEvent] No se pudo registrar interacción de notificación: $e',
+            );
+          }
+        }
+      } else {
+        final message = (result['message'] as String?) ?? 'unknown_error';
+        if (sportCategory.isNotEmpty) {
+          AnalyticsService.instance.logRegistrationFailure(
+            sportCategory: sportCategory,
+            eventId: eventId,
+            errorReason: message,
+          );
+        }
       }
 
       debugPrint('[registerUserInEvent] Resultado: $result');
       return result;
     } on FirebaseException catch (e) {
-      debugPrint('[registerUserInEvent] FirebaseException: ${e.code} - ${e.message}');
+      debugPrint(
+        '[registerUserInEvent] FirebaseException: ${e.code} - ${e.message}',
+      );
 
       String message;
       if (e.code == 'permission-denied') {
@@ -408,10 +479,7 @@ class EventsRepository {
         message = 'Error Firebase: ${e.message}';
       }
 
-      return {
-        'success': false,
-        'message': message,
-      };
+      return {'success': false, 'message': message};
     } catch (e) {
       debugPrint('[registerUserInEvent] Error inesperado: $e');
       return {
@@ -425,8 +493,82 @@ class EventsRepository {
   Future<bool> registerUserInEvent({
     required String eventId,
     required String userId,
+    String? notificationId,
   }) async {
-    final result = await registerUserInEventWithMessage(eventId: eventId, userId: userId);
+    final result = await registerUserInEventWithMessage(
+      eventId: eventId,
+      userId: userId,
+      notificationId: notificationId,
+    );
     return result['success'] as bool;
+  }
+
+  /// BQ3: Retorna el deporte mas agendado.
+  ///
+  /// [scope] soporta:
+  /// - `user` (default): usa el usuario autenticado.
+  /// - `global`: agrega todos los usuarios.
+  ///
+  /// Respuesta esperada (keys principales):
+  /// - `mostScheduledSport`
+  /// - `totalSchedules`
+  /// - `sourceBreakdown`
+  /// - `sports`
+  Future<Map<String, dynamic>> getBq3MostScheduledSport({
+    String scope = 'user',
+  }) async {
+    final callable = _functions.httpsCallable('getBq3MostScheduledSport');
+    final response = await callable.call({'scope': scope});
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  /// BQ4: Obtiene el KPI de conversion de notificaciones a registros de torneo.
+  ///
+  /// Formula usada en backend:
+  /// `conversionRate = (effectiveRegistrations / notificationsSent) * 100`
+  Future<Map<String, dynamic>> getBq4TournamentNotificationConversion() async {
+    final callable = _functions.httpsCallable(
+      'getBq4TournamentNotificationConversion',
+    );
+    final response = await callable.call();
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  /// BQ4: Registra envio de notificacion automatizada (top-of-funnel).
+  ///
+  /// Recomendado llamarlo justo despues de enviar la push/local notification.
+  /// Para contar en el KPI global, [modality] debe ser `tournament`.
+  Future<void> logAutomatedNotificationSent({
+    required String notificationId,
+    required String eventId,
+    required String userId,
+    required String modality,
+    String source = 'automated',
+  }) async {
+    final callable = _functions.httpsCallable('logAutomatedNotificationSent');
+    await callable.call({
+      'notificationId': notificationId,
+      'eventId': eventId,
+      'userId': userId,
+      'modality': modality,
+      'source': source,
+    });
+  }
+
+  /// BQ4: Registra interaccion de notificacion.
+  ///
+  /// [interactionType] permitido: `opened` o `clicked`.
+  /// Esto alimenta analitica de embudo y facilita la atribucion de conversion.
+  Future<void> logAutomatedNotificationInteraction({
+    required String notificationId,
+    required String interactionType,
+  }) async {
+    final callable = _functions.httpsCallable(
+      'logAutomatedNotificationInteraction',
+    );
+    await callable.call({
+      'notificationId': notificationId,
+      'interactionType': interactionType,
+    });
   }
 }
