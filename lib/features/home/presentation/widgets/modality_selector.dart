@@ -19,7 +19,7 @@ class ModalitySelector extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Escoge tu modalidad',
+          'Choose your modality',
           style: Theme.of(context).textTheme.titleMedium,
         ),
         const SizedBox(height: 12),
@@ -43,7 +43,7 @@ class ModalitySelector extends StatelessWidget {
             Expanded(
               child: _ModalityButton(
                 icon: Icons.emoji_events,
-                label: 'Torneo',
+                label: 'Tournament',
                 isSelected: selectedModality == EventModality.tournament,
                 onTap: () {
                   onModalitySelected(

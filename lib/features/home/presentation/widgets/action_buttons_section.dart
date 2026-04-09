@@ -26,7 +26,7 @@ class ActionButtonsSection extends StatelessWidget {
           child: ElevatedButton.icon(
             onPressed: canSearch ? onSearchPressed : null,
             icon: const Icon(Icons.search),
-            label: const Text('Buscar'),
+            label: const Text('Search'),
             style: ElevatedButton.styleFrom(
               backgroundColor: canSearch ? AppTheme.teal : Colors.grey[300],
               foregroundColor: canSearch ? Colors.white : Colors.grey[500],

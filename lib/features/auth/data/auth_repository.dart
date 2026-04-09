@@ -147,28 +147,28 @@ class AuthRepository {
     if (error is FirebaseAuthException) {
       switch (error.code) {
         case 'invalid-email':
-          return 'El correo no es válido.';
+          return 'The email is not valid.';
         case 'user-disabled':
-          return 'Esta cuenta está deshabilitada.';
+          return 'This account is disabled.';
         case 'user-not-found':
         case 'wrong-password':
         case 'invalid-credential':
-          return 'Correo o contraseña incorrectos.';
+          return 'Incorrect email or password.';
         case 'email-already-in-use':
-          return 'Este correo ya está registrado.';
+          return 'This email is already registered.';
         case 'weak-password':
-          return 'La contraseña es demasiado débil.';
+          return 'The password is too weak.';
         case 'network-request-failed':
-          return 'Error de red. Revisa tu conexión.';
+          return 'Network error. Check your connection.';
         default:
-          return error.message ?? 'Error de autenticación.';
+          return error.message ?? 'Authentication error.';
       }
     }
 
     if (error is FirebaseException) {
-      return error.message ?? 'Error de Firebase.';
+      return error.message ?? 'Firebase error.';
     }
 
-    return 'Ocurrió un error inesperado.';
+    return 'An unexpected error occurred.';
   }
 }

@@ -49,11 +49,7 @@ class _LoginPageState extends State<LoginPage> {
     if (!mounted || success) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          controller.errorMessage ?? 'No fue posible iniciar sesión',
-        ),
-      ),
+      SnackBar(content: Text(controller.errorMessage ?? 'Could not sign in')),
     );
   }
 
@@ -79,12 +75,12 @@ class _LoginPageState extends State<LoginPage> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Bienvenido 👋',
+                'Welcome 👋',
                 style: Theme.of(context).textTheme.headlineSmall,
               ),
               const SizedBox(height: 6),
               Text(
-                'Inicia sesión para encontrar partidos, retos y entrenadores.',
+                'Sign in to find matches, challenges, and coaches.',
                 style: Theme.of(context).textTheme.bodyLarge,
               ),
               const SizedBox(height: 30),
@@ -97,7 +93,7 @@ class _LoginPageState extends State<LoginPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Iniciar sesión',
+                          'Sign in',
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
                         const SizedBox(height: 16),
@@ -105,13 +101,13 @@ class _LoginPageState extends State<LoginPage> {
                           controller: _emailController,
                           keyboardType: TextInputType.emailAddress,
                           decoration: const InputDecoration(
-                            labelText: 'Correo institucional',
+                            labelText: 'Institutional email',
                             prefixIcon: Icon(Icons.mail_outline),
                           ),
                           validator: (value) {
                             final text = value?.trim() ?? '';
-                            if (text.isEmpty) return 'Ingresa tu correo';
-                            if (!text.contains('@')) return 'Correo inválido';
+                            if (text.isEmpty) return 'Enter your email';
+                            if (!text.contains('@')) return 'Invalid email';
                             return null;
                           },
                         ),
@@ -120,7 +116,7 @@ class _LoginPageState extends State<LoginPage> {
                           controller: _passwordController,
                           obscureText: _obscurePassword,
                           decoration: InputDecoration(
-                            labelText: 'Contraseña',
+                            labelText: 'Password',
                             prefixIcon: const Icon(Icons.lock_outline),
                             suffixIcon: IconButton(
                               onPressed: () => setState(() {
@@ -135,7 +131,7 @@ class _LoginPageState extends State<LoginPage> {
                           ),
                           validator: (value) {
                             if ((value ?? '').isEmpty) {
-                              return 'Ingresa tu contraseña';
+                              return 'Enter your password';
                             }
                             return null;
                           },
@@ -151,7 +147,7 @@ class _LoginPageState extends State<LoginPage> {
                                     strokeWidth: 2,
                                   ),
                                 )
-                              : const Text('Entrar'),
+                              : const Text('Sign in'),
                         ),
                         const SizedBox(height: 8),
                         Align(
@@ -167,7 +163,7 @@ class _LoginPageState extends State<LoginPage> {
                                       ),
                                     );
                                   },
-                            child: const Text('¿No tienes cuenta? Regístrate'),
+                            child: const Text("Don't have an account? Sign up"),
                           ),
                         ),
                       ],

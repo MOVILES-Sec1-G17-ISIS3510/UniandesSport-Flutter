@@ -43,32 +43,31 @@ class EventsRepository {
     AnalyticsService.instance.logSearchSportEvent(sportCategory: sport);
 
     try {
-      FirebaseFunctions.instance.httpsCallable('logSportSearch')
-      // Usamos toLowerCase() por si el usuario escribe "Fútbol" en mayúscula
-      .call({'sport': AppSports.normalizeSportKey(sport)});
+      FirebaseFunctions.instance
+          .httpsCallable('logSportSearch')
+          .call({'sport': AppSports.normalizeSportKey(sport)});
     } catch (e) {
-      // Si la función falla (ej. problemas de red), no queremos que la app explote.
-      // Solo imprimimos el error en consola, pero dejamos que la búsqueda continúe.
-      debugPrint('Advertencia: No se pudo registrar el +1 de busqueda: $e');
+      debugPrint('Warning: Could not log search increment: $e');
     }
 
-    // 2. Tu consulta original de búsqueda
+    // 2. Consulta simplificada para evitar problemas de índices compuestos.
     try {
+      final normalizedSport = AppSports.normalizeSportKey(sport);
       final snapshot = await _firestore
           .collection('events')
-          .where('sport', isEqualTo: sport)
-          .where('modality', isEqualTo: modality.code)
+          .where('sport', isEqualTo: normalizedSport)
           .where('status', isEqualTo: status)
-          .orderBy('scheduledAt', descending: false)
-          .limit(10)
           .get();
 
       final events = snapshot.docs
           .map((doc) => SportEvent.fromFirestore(doc))
-          .toList();
+          .where((event) => event.modality == modality && event.status == status)
+          .toList()
+        ..sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
+
       return _pickVariedEvents(events, maxResults: 5);
     } catch (e) {
-      throw Exception('Error buscando eventos: $e');
+      throw Exception('Error searching events: $e');
     }
   }
 
@@ -170,8 +169,7 @@ class EventsRepository {
 
       return finalEvents;
     } catch (e) {
-      debugPrint('[Recommendations] Error getRecommendedEvents: $e');
-      throw Exception('Error obteniendo recomendaciones: $e');
+      throw Exception('Error getting recommendations: $e');
     }
   }
 
@@ -329,7 +327,7 @@ class EventsRepository {
 
       return SportEvent.fromFirestore(doc);
     } catch (e) {
-      throw Exception('Error obteniendo evento: $e');
+      throw Exception('Error getting event: $e');
     }
   }
 
@@ -374,7 +372,7 @@ class EventsRepository {
 
       return docRef.id;
     } catch (e) {
-      throw Exception('Error creando evento: $e');
+      throw Exception('Error creating event: $e');
     }
   }
 
@@ -389,7 +387,7 @@ class EventsRepository {
         'updatedAt': Timestamp.now(),
       });
     } catch (e) {
-      throw Exception('Error uniéndose al evento: $e');
+      throw Exception('Error joining event: $e');
     }
   }
 
@@ -404,7 +402,7 @@ class EventsRepository {
         'updatedAt': Timestamp.now(),
       });
     } catch (e) {
-      throw Exception('Error abandonando el evento: $e');
+      throw Exception('Error leaving event: $e');
     }
   }
 
@@ -419,7 +417,7 @@ class EventsRepository {
 
       return snapshot.docs.map((doc) => SportEvent.fromFirestore(doc)).toList();
     } catch (e) {
-      throw Exception('Error obteniendo eventos del usuario: $e');
+      throw Exception('Error getting user events: $e');
     }
   }
 
@@ -429,12 +427,11 @@ class EventsRepository {
       final snapshot = await _firestore
           .collection('events')
           .where('participants', arrayContains: userId)
-          .orderBy('scheduledAt', descending: false)
           .get();
 
       return snapshot.docs.map((doc) => SportEvent.fromFirestore(doc)).toList();
     } catch (e) {
-      throw Exception('Error obteniendo eventos del usuario: $e');
+      throw Exception('Error getting participating events: $e');
     }
   }
 
@@ -449,7 +446,7 @@ class EventsRepository {
         'updatedAt': Timestamp.now(),
       });
     } catch (e) {
-      throw Exception('Error actualizando estado del evento: $e');
+      throw Exception('Error updating event status: $e');
     }
   }
 
@@ -458,7 +455,7 @@ class EventsRepository {
     try {
       await _firestore.collection('events').doc(eventId).delete();
     } catch (e) {
-      throw Exception('Error eliminando evento: $e');
+      throw Exception('Error deleting event: $e');
     }
   }
 
@@ -509,7 +506,10 @@ class EventsRepository {
 
         if (!snapshot.exists) {
           debugPrint('[registerUserInEvent] El evento $eventId no existe');
-          return {'success': false, 'message': 'El evento no existe'};
+          return {
+            'success': false,
+            'message': 'Event does not exist',
+          };
         }
 
         final data = snapshot.data() as Map<String, dynamic>;
@@ -527,14 +527,17 @@ class EventsRepository {
           );
           return {
             'success': true,
-            'message': 'Ya estabas registrado en este evento',
+            'message': 'You are already registered in this event',
             'sportCategory': data['sport'] ?? '',
           };
         }
 
         if (participants.length >= maxParticipants) {
           debugPrint('[registerUserInEvent] Evento $eventId está lleno');
-          return {'success': false, 'message': 'El evento está lleno'};
+          return {
+            'success': false,
+            'message': 'The event is full',
+          };
         }
 
         debugPrint('[registerUserInEvent] Agregando $userId a participantes');
@@ -545,13 +548,12 @@ class EventsRepository {
 
         return {
           'success': true,
-          'message': 'Registrado exitosamente',
+          'message': 'Registered successfully',
           'sportCategory': data['sport'] ?? '',
         };
       });
 
-      if (result['success'] == true &&
-          result['message'] == 'Registrado exitosamente') {
+      if (result['success'] == true && result['message'] == 'Registered successfully') {
         final sportCategory = (result['sportCategory'] as String?) ?? '';
         AnalyticsService.instance.logJoinSportEvent(
           sportCategory: sportCategory,
@@ -597,11 +599,11 @@ class EventsRepository {
 
       String message;
       if (e.code == 'permission-denied') {
-        message = 'Permiso denegado. Verifica las reglas de seguridad.';
+        message = 'Permission denied. Check your security rules.';
       } else if (e.code == 'not-found') {
-        message = 'El evento no existe';
+        message = 'Event does not exist';
       } else {
-        message = 'Error Firebase: ${e.message}';
+        message = 'Firebase error: ${e.message}';
       }
 
       return {'success': false, 'message': message};
@@ -609,7 +611,7 @@ class EventsRepository {
       debugPrint('[registerUserInEvent] Error inesperado: $e');
       return {
         'success': false,
-        'message': 'Error al registrar: ${e.toString()}',
+        'message': 'Error registering: ${e.toString()}',
       };
     }
   }

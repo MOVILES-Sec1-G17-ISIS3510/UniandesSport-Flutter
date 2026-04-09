@@ -10,12 +10,14 @@ class CoachCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[200]!),
+        border: Border.all(color: colorScheme.outlineVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -23,12 +25,13 @@ class CoachCard extends StatelessWidget {
           Row(
             children: [
               CircleAvatar(
-                backgroundColor: Colors.teal[100],
+                backgroundColor: colorScheme.secondaryContainer,
                 child: Text(
                   coach.initials,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
+                    color: colorScheme.onSecondaryContainer,
                   ),
                 ),
               ),
@@ -90,14 +93,22 @@ class CoachCard extends StatelessWidget {
           const SizedBox(height: 12),
           Row(
             children: [
-              const Icon(Icons.lightbulb_outline, size: 16, color: Colors.grey),
+              Icon(
+                Icons.lightbulb_outline,
+                size: 16,
+                color: colorScheme.onSurfaceVariant,
+              ),
               const SizedBox(width: 4),
               Text(
                 '${coach.experiencia}',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               const SizedBox(width: 16),
-              const Icon(Icons.emoji_events, size: 16, color: Colors.grey),
+              Icon(
+                Icons.emoji_events,
+                size: 16,
+                color: colorScheme.onSurfaceVariant,
+              ),
               const SizedBox(width: 4),
               Text(
                 '${coach.rating}',
@@ -108,9 +119,9 @@ class CoachCard extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             'Specialty: ${coach.especialidad}',
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
           ),
           const SizedBox(height: 12),
           Row(
@@ -124,7 +135,8 @@ class CoachCard extends StatelessWidget {
                     );
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue[900],
+                    backgroundColor: colorScheme.primary,
+                    foregroundColor: colorScheme.onPrimary,
                   ),
                   child: const Text('View Profile'),
                 ),
@@ -132,11 +144,14 @@ class CoachCard extends StatelessWidget {
               const SizedBox(width: 8),
               Container(
                 decoration: BoxDecoration(
-                  color: Colors.green[100],
+                  color: colorScheme.tertiaryContainer,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: IconButton(
-                  icon: const Icon(Icons.call, color: Colors.green),
+                  icon: Icon(
+                    Icons.call,
+                    color: colorScheme.onTertiaryContainer,
+                  ),
                   onPressed: () {
                     if (coach.whatsapp != null) {
                       callCoach(coach.whatsapp!);
@@ -158,6 +173,6 @@ Future<void> callCoach(String phone) async {
   if (await canLaunchUrl(url)) {
     await launchUrl(url);
   } else {
-    throw 'No se pudo realizar la llamada';
+    throw 'Could not place the call';
   }
 }

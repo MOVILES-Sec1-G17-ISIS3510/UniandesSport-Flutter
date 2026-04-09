@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'core/theme/app_theme.dart';
+import 'core/theme/theme_controller.dart';
 import 'features/auth/data/auth_repository.dart';
 import 'features/auth/domain/models/user_profile.dart';
 import 'features/auth/presentation/controllers/auth_controller.dart';
@@ -33,6 +34,8 @@ class _UniandesSportsAppState extends State<UniandesSportsApp> {
   ///
   /// Evita reinicializaciones de Firebase en cada rebuild.
   late final Future<void> _appInitFuture;
+  late final Future<FirebaseApp> _firebaseInitFuture;
+  late final ThemeController _themeController;
 
   @override
   void initState() {
@@ -61,12 +64,101 @@ class _UniandesSportsAppState extends State<UniandesSportsApp> {
             home: const _SplashLoadingPage(),
           );
         }
+    _firebaseInitFuture = Firebase.initializeApp();
+    _themeController = ThemeController();
+    _themeController.startMonitoring();
+  }
 
-        if (snapshot.hasError) {
-          return MaterialApp(
-            debugShowCheckedModeBanner: false,
-            theme: AppTheme.light,
-            home: _FirebaseErrorPage(error: snapshot.error.toString()),
+  @override
+  void dispose() {
+    _themeController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider.value(
+      value: _themeController,
+      child: Builder(
+        builder: (context) {
+          final themeController = context.watch<ThemeController>();
+
+          return FutureBuilder<FirebaseApp>(
+            future: _firebaseInitFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState != ConnectionState.done) {
+                return MaterialApp(
+                  debugShowCheckedModeBanner: false,
+                  theme: AppTheme.light,
+                  darkTheme: AppTheme.dark,
+                  themeMode: themeController.themeMode,
+                  home: const _SplashLoadingPage(),
+                );
+              }
+
+              if (snapshot.hasError) {
+                return MaterialApp(
+                  debugShowCheckedModeBanner: false,
+                  theme: AppTheme.light,
+                  darkTheme: AppTheme.dark,
+                  themeMode: themeController.themeMode,
+                  home: _FirebaseErrorPage(error: snapshot.error.toString()),
+                );
+              }
+
+              return MultiProvider(
+                providers: [
+                  // ── Capa de datos ─────────────────────────────────────────────
+                  // AuthRepository: instancia normal (1 por árbol, pero no Singleton
+                  // porque podría necesitar distintas instancias en tests).
+                  ChangeNotifierProvider(
+                    create: (_) => CoachesViewModel(
+                      CoachRepositoryImpl(
+                        firestore: FirebaseFirestore.instance,
+                      ),
+                    )..loadCoaches(),
+                  ),
+                  Provider<AuthRepository>(create: (_) => AuthRepository()),
+                  // EventsRepository: Singleton — se comparte la MISMA instancia
+                  // en toda la app (PlayPage, HomePage, etc.) sin recrearla.
+                  Provider<EventsRepository>(
+                    create: (_) => EventsRepository.instance,
+                  ),
+
+                  // ── ViewModels (MVVM) ─────────────────────────────────────────
+                  // AuthController depende de AuthRepository → ProxyProvider.
+                  ChangeNotifierProxyProvider<AuthRepository, AuthController>(
+                    create: (context) =>
+                        AuthController(context.read<AuthRepository>()),
+                    update: (context, repository, controller) =>
+                        controller ?? AuthController(repository),
+                  ),
+                  // PlayViewModel depende de EventsRepository y del perfil del usuario.
+                  // El perfil se inyecta más abajo desde AppShell cuando ya existe sesión.
+                  // Aquí se provisiona con un perfil vacío que AppShell sobreescribe.
+                  ChangeNotifierProxyProvider<EventsRepository, PlayViewModel>(
+                    create: (context) => PlayViewModel(
+                      repository: context.read<EventsRepository>(),
+                      profile: UserProfile.empty(),
+                    ),
+                    update: (context, repo, vm) =>
+                        vm ??
+                        PlayViewModel(
+                          repository: repo,
+                          profile: UserProfile.empty(),
+                        ),
+                  ),
+                ],
+                child: MaterialApp(
+                  debugShowCheckedModeBanner: false,
+                  title: 'Uniandes Sports',
+                  theme: AppTheme.light,
+                  darkTheme: AppTheme.dark,
+                  themeMode: themeController.themeMode,
+                  home: const AuthGate(),
+                ),
+              );
+            },
           );
         }
 
@@ -116,6 +208,8 @@ class _UniandesSportsAppState extends State<UniandesSportsApp> {
           ),
         );
       },
+        },
+      ),
     );
   }
 }

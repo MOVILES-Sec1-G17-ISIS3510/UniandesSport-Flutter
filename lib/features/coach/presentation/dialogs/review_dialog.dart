@@ -67,7 +67,7 @@ class _AddReviewDialogState extends State<AddReviewDialog> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error al enviar review: $e")),
+        SnackBar(content: Text("Error submitting review: $e")),
       );
     } finally {
       if (mounted) setState(() => isSubmitting = false);

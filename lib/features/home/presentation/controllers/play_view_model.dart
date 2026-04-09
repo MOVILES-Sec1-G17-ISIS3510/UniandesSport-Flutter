@@ -68,6 +68,18 @@ class PlayViewModel extends ChangeNotifier {
   String? _joiningEventId;
   String? get joiningEventId => _joiningEventId;
 
+  // ─── Estado de My Scheduled ───────────────────────────────────────────────
+
+  bool _showMyScheduled = false;
+  bool _isLoadingMyScheduled = false;
+  List<SportEvent> _myScheduledEvents = [];
+  String? _myScheduledError;
+
+  bool get showMyScheduled => _showMyScheduled;
+  bool get isLoadingMyScheduled => _isLoadingMyScheduled;
+  List<SportEvent> get myScheduledEvents => List.unmodifiable(_myScheduledEvents);
+  String? get myScheduledError => _myScheduledError;
+
   // ─── Getters derivados (lógica de negocio) ────────────────────────────────
 
   /// El usuario puede buscar solo si eligió deporte Y modalidad.
@@ -150,13 +162,53 @@ class PlayViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> toggleMyScheduled() async {
+    _showMyScheduled = !_showMyScheduled;
+    notifyListeners();
+
+    if (_showMyScheduled) {
+      await loadMyScheduled();
+    }
+  }
+
+  Future<void> loadMyScheduled({bool forceRefresh = false}) async {
+    if (_isLoadingMyScheduled) return;
+    if (!forceRefresh && _myScheduledEvents.isNotEmpty) return;
+
+    _isLoadingMyScheduled = true;
+    _myScheduledError = null;
+    notifyListeners();
+
+    try {
+      final events = await _repo.getUserParticipatingEvents(_profile.uid);
+      _myScheduledEvents = events.where((event) => event.status == 'active').toList();
+    } catch (_) {
+      _myScheduledError = 'Could not load your scheduled events';
+    } finally {
+      _isLoadingMyScheduled = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> leaveScheduledEvent(SportEvent event) async {
+    try {
+      await _repo.leaveEvent(eventId: event.id, userId: _profile.uid);
+      if (_showMyScheduled) {
+        await loadMyScheduled(forceRefresh: true);
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   // ─── Registro en evento ───────────────────────────────────────────────────
 
   /// Intenta registrar al usuario en [event].
   /// Devuelve el mapa con `success` (bool) y `message` (String) del repositorio.
   Future<Map<String, dynamic>> joinEvent(SportEvent event) async {
     if (_joiningEventId != null) {
-      return {'success': false, 'message': 'Operación en curso'};
+      return {'success': false, 'message': 'Operation in progress'};
     }
 
     _joiningEventId = event.id;
@@ -172,6 +224,9 @@ class PlayViewModel extends ChangeNotifier {
     // Si tuvo éxito, refresca el listado para mostrar el contador actualizado.
     if (success) {
       await search();
+      if (_showMyScheduled) {
+        await loadMyScheduled(forceRefresh: true);
+      }
     }
 
     _joiningEventId = null;
@@ -192,9 +247,9 @@ class PlayViewModel extends ChangeNotifier {
 
     String dayLabel;
     if (eventDate == today) {
-      dayLabel = 'Hoy';
+      dayLabel = 'Today';
     } else if (eventDate == tomorrow) {
-      dayLabel = 'Mañana';
+      dayLabel = 'Tomorrow';
     } else {
       dayLabel = '${eventDate.day}/${eventDate.month}';
     }
@@ -207,3 +262,4 @@ class PlayViewModel extends ChangeNotifier {
     return '$dayLabel $displayHour:$minute $period';
   }
 }
+
