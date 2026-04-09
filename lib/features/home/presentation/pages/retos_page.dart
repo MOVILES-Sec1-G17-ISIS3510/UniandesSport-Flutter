@@ -17,6 +17,7 @@ class RetosPage extends StatefulWidget {
 class _RetosPageState extends State<RetosPage>
     with AutomaticKeepAliveClientMixin {
   late final Stream<QuerySnapshot<Map<String, dynamic>>> _challengesStream;
+  bool _isCreatingChallenge = false;
 
   /// Keeps tab state alive to avoid refetching and losing scroll position.
   @override
@@ -160,7 +161,237 @@ class _RetosPageState extends State<RetosPage>
           ),
         ),
       ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _showCreateChallengeDialog,
+        tooltip: 'Create Challenge',
+        child: const Icon(Icons.add),
+      ),
     );
+  }
+
+  /// Shows dialog to create a new challenge.
+  ///
+  /// Displays form with fields: title, sport, description, goal, difficulty,
+  /// reward, and end date. Saves to Firestore when submitted.
+  Future<void> _showCreateChallengeDialog() async {
+    final titleController = TextEditingController();
+    final descriptionController = TextEditingController();
+    final goalController = TextEditingController();
+    final rewardController = TextEditingController();
+    String? selectedSport;
+    DateTime? selectedEndDate;
+    String? selectedDifficulty;
+    final formKey = GlobalKey<FormState>();
+
+    final sports = ['Running', 'Soccer', 'Calisthenics', 'Tennis'];
+    final difficulties = ['Easy', 'Medium', 'Hard'];
+
+    if (!mounted) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Create Challenge'),
+              content: Form(
+                key: formKey,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextFormField(
+                        controller: titleController,
+                        decoration: const InputDecoration(
+                          labelText: 'Challenge Title',
+                          hintText: '30-Day Challenge',
+                        ),
+                        validator: (v) =>
+                            v?.isEmpty ?? true ? 'Title required' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: selectedSport,
+                        decoration: const InputDecoration(labelText: 'Sport'),
+                        items: sports
+                            .map(
+                              (s) => DropdownMenuItem(value: s, child: Text(s)),
+                            )
+                            .toList(),
+                        onChanged: (v) =>
+                            setDialogState(() => selectedSport = v),
+                        validator: (v) => v == null ? 'Sport required' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: descriptionController,
+                        decoration: const InputDecoration(
+                          labelText: 'Description',
+                          hintText: 'Run 100K total...',
+                        ),
+                        maxLines: 2,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: goalController,
+                        decoration: const InputDecoration(
+                          labelText: 'Goal',
+                          hintText: 'Complete 100 km',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: selectedDifficulty,
+                        decoration: const InputDecoration(
+                          labelText: 'Difficulty',
+                        ),
+                        items: difficulties
+                            .map(
+                              (d) => DropdownMenuItem(value: d, child: Text(d)),
+                            )
+                            .toList(),
+                        onChanged: (v) =>
+                            setDialogState(() => selectedDifficulty = v),
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: rewardController,
+                        decoration: const InputDecoration(
+                          labelText: 'Reward',
+                          hintText: 'Free sports gear',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      ElevatedButton(
+                        onPressed: () async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate:
+                                selectedEndDate ??
+                                DateTime.now().add(const Duration(days: 30)),
+                            firstDate: DateTime.now(),
+                            lastDate: DateTime.now().add(
+                              const Duration(days: 365),
+                            ),
+                          );
+                          if (picked != null) {
+                            setDialogState(() => selectedEndDate = picked);
+                          }
+                        },
+                        child: Text(
+                          selectedEndDate != null
+                              ? 'End: ${selectedEndDate!.toLocal()}'.split(
+                                  ' ',
+                                )[0]
+                              : 'Pick End Date',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: _isCreatingChallenge
+                      ? null
+                      : () async {
+                          final dialogNavigator = Navigator.of(context);
+                          final rootMessenger = ScaffoldMessenger.of(
+                            this.context,
+                          );
+                          if (!formKey.currentState!.validate()) return;
+                          if (selectedEndDate == null) {
+                            rootMessenger.showSnackBar(
+                              const SnackBar(
+                                content: Text('Please pick an end date'),
+                              ),
+                            );
+                            return;
+                          }
+                          await _createChallenge(
+                            title: titleController.text,
+                            sport: selectedSport!,
+                            description: descriptionController.text,
+                            goal: goalController.text,
+                            difficulty: selectedDifficulty,
+                            reward: rewardController.text,
+                            endDate: selectedEndDate!,
+                          );
+                          if (mounted) dialogNavigator.pop();
+                        },
+                  child: _isCreatingChallenge
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Create'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  /// Creates a new challenge in Firestore.
+  ///
+  /// Initializes challenge with status='active', empty progressByUser map,
+  /// createdBy=current user, and participantsCount=0.
+  /// Shows success/error feedback via SnackBar.
+  Future<void> _createChallenge({
+    required String title,
+    required String sport,
+    required String description,
+    required String goal,
+    required String? difficulty,
+    required String reward,
+    required DateTime endDate,
+  }) async {
+    if (_isCreatingChallenge) return;
+
+    setState(() => _isCreatingChallenge = true);
+
+    try {
+      // Normalize sport name to match expected format
+      final sportKey = sport.toLowerCase();
+
+      await FirebaseFirestore.instance.collection('challenges').add({
+        'title': title,
+        'sport': sportKey,
+        'description': description.isNotEmpty ? description : null,
+        'goalLabel': goal.isNotEmpty ? goal : null,
+        'difficulty': difficulty?.isNotEmpty ?? false ? difficulty : null,
+        'reward': reward.isNotEmpty ? reward : null,
+        'endDate': Timestamp.fromDate(endDate),
+        'status': 'active',
+        'createdBy': widget.profile.uid,
+        'participantsCount': 0,
+        'progressByUser': {},
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Challenge created successfully!')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error creating challenge: $e')));
+    } finally {
+      if (mounted) {
+        setState(() => _isCreatingChallenge = false);
+      }
+    }
   }
 }
 
@@ -182,6 +413,7 @@ class _ChallengeCard extends StatefulWidget {
 
 class _ChallengeCardState extends State<_ChallengeCard> {
   bool _loading = false;
+  bool _progressUpdating = false;
 
   /// Returns sport accent color used in chip, icon, and progress highlights.
   Color _accentForSport(String sport) {
@@ -363,6 +595,54 @@ class _ChallengeCardState extends State<_ChallengeCard> {
         );
       },
     );
+  }
+
+  /// Updates user progress in the challenge with transactional guarantee.
+  ///
+  /// [delta] is the amount to add to current progress (e.g., 0.05 for +5%).
+  /// Progress is automatically clamped to [0, 1].
+  Future<void> _updateProgress(double delta) async {
+    if (_progressUpdating || !mounted) return;
+
+    setState(() => _progressUpdating = true);
+
+    try {
+      final challengeRef = FirebaseFirestore.instance
+          .collection('challenges')
+          .doc(widget.challengeDoc.id);
+
+      await FirebaseFirestore.instance.runTransaction((transaction) async {
+        final snapshot = await transaction.get(challengeRef);
+        if (!snapshot.exists) return;
+
+        final data = snapshot.data() as Map<String, dynamic>;
+        final progressByUser = Map<String, dynamic>.from(
+          data['progressByUser'] ?? const {},
+        );
+
+        // Calcula nuevo progreso basado en el delta proporcionado.
+        final currentProgress =
+            (progressByUser[widget.userId] as num?)?.toDouble() ?? 0.0;
+        final newProgress = (currentProgress + delta).clamp(0.0, 1.0);
+
+        // Actualiza solo el progreso del usuario en esta transaccion.
+        transaction.update(challengeRef, {
+          'progressByUser.${widget.userId}': newProgress,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      });
+
+      if (!mounted) return;
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not update progress.')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _progressUpdating = false);
+      }
+    }
   }
 
   /// Joins or leaves the challenge in a Firestore transaction.
@@ -570,15 +850,69 @@ class _ChallengeCardState extends State<_ChallengeCard> {
                 ],
               ),
               const SizedBox(height: 12),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(999),
-                child: LinearProgressIndicator(
-                  value: clampedProgress,
-                  minHeight: 10,
-                  backgroundColor: Colors.grey[200],
-                  valueColor: AlwaysStoppedAnimation(accent),
+              if (isJoined)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(999),
+                            child: LinearProgressIndicator(
+                              value: clampedProgress,
+                              minHeight: 12,
+                              backgroundColor: Colors.grey[200],
+                              valueColor: AlwaysStoppedAnimation(accent),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        FilledButton.tonalIcon(
+                          onPressed: _progressUpdating
+                              ? null
+                              : () => _updateProgress(-0.05),
+                          icon: const Icon(Icons.remove),
+                          label: const Text('-5%'),
+                        ),
+                        const SizedBox(width: 6),
+                        FilledButton.icon(
+                          onPressed: _progressUpdating
+                              ? null
+                              : () => _updateProgress(0.05),
+                          icon: const Icon(Icons.add),
+                          label: const Text('+5%'),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: accent,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Text(
+                        _progressUpdating
+                            ? 'Updating progress...'
+                            : 'Use - and + buttons to update progress',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: accent,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+              else
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(999),
+                  child: LinearProgressIndicator(
+                    value: clampedProgress,
+                    minHeight: 10,
+                    backgroundColor: Colors.grey[200],
+                    valueColor: AlwaysStoppedAnimation(accent),
+                  ),
                 ),
-              ),
               const SizedBox(height: 10),
               Row(
                 children: [
