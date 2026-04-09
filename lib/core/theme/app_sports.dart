@@ -4,12 +4,12 @@ import 'package:flutter/material.dart';
 class AppSports {
   static const Map<String, SportStyle> sports = {
     'futbol': SportStyle(
-      name: 'Fútbol',
+      name: 'Soccer',
       icon: Icons.sports_soccer,
       color: Color(0xFF4CAF50), // Verde
     ),
     'calistenia': SportStyle(
-      name: 'Calistenia',
+      name: 'Calisthenics',
       icon: Icons.fitness_center,
       color: Color(0xFFFF9800), // Naranja
     ),
@@ -29,7 +29,7 @@ class AppSports {
       color: Color(0xFFFFC107), // Amarillo
     ),
     'natacion': SportStyle(
-      name: 'Natación',
+      name: 'Swimming',
       icon: Icons.pool,
       color: Color(0xFF00BCD4), // Cyan
     ),

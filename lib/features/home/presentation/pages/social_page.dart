@@ -17,7 +17,7 @@ class SocialPage extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'TU RED DEPORTIVA',
+                  'YOUR SPORTS NETWORK',
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
                     color: Colors.teal,
                     letterSpacing: 2,
