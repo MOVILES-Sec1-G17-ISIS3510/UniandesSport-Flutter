@@ -1,145 +1,76 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../../../../core/theme/app_sports.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../auth/domain/models/user_profile.dart';
-import '../../data/events_repository.dart';
-import '../../domain/models/event_modality.dart';
 import '../../domain/models/sport_event.dart';
+import '../controllers/play_view_model.dart';
 import '../widgets/action_buttons_section.dart';
 import '../widgets/event_card.dart';
 import '../widgets/modality_selector.dart';
 import '../widgets/sport_selector.dart';
+import '../widgets/recommended_events_section.dart';
 import 'create_casual_event_page.dart';
 import 'event_registration_result_page.dart';
 
-class PlayPage extends StatefulWidget {
+class PlayPage extends StatelessWidget {
   final UserProfile profile;
   final VoidCallback? onGoHome;
 
   const PlayPage({super.key, required this.profile, this.onGoHome});
 
-  @override
-  State<PlayPage> createState() => _PlayPageState();
-}
-
-class _PlayPageState extends State<PlayPage> {
-  String? _selectedSport;
-  EventModality? _selectedModality;
-  bool _hasSearched = false;
-  final EventsRepository _eventsRepository = EventsRepository();
-  Future<List<SportEvent>>? _searchFuture;
-  String? _joiningEventId;
-
-  bool get _canSearch => _selectedSport != null && _selectedModality != null;
-  bool get _canCreate =>
-      _canSearch && _selectedModality == EventModality.casual;
-
-  /// Formatea la fecha/hora para mostrar "Hoy HH:MM PM", "Mañana HH:MM PM", etc.
-  String _formatSchedule(DateTime dateTime) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final tomorrow = today.add(const Duration(days: 1));
-    final eventDate = DateTime(dateTime.year, dateTime.month, dateTime.day);
-
-    String dayLabel;
-    if (eventDate == today) {
-      dayLabel = 'Hoy';
-    } else if (eventDate == tomorrow) {
-      dayLabel = 'Mañana';
-    } else {
-      dayLabel = '${eventDate.day}/${eventDate.month}';
-    }
-
-    final hour = dateTime.hour;
-    final minute = dateTime.minute.toString().padLeft(2, '0');
-    final period = hour >= 12 ? 'PM' : 'AM';
-    final displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
-
-    return '$dayLabel ${displayHour}:$minute $period';
+  Future<void> _handleSearch(PlayViewModel vm) async {
+    await vm.search();
   }
 
-  Future<void> _handleJoinEvent(SportEvent event) async {
-    if (_joiningEventId != null) return;
+  Future<void> _handleJoinEvent(
+    BuildContext context,
+    PlayViewModel vm,
+    SportEvent event,
+  ) async {
+    final result = await vm.joinEvent(event);
+    if (!context.mounted) return;
 
-    setState(() {
-      _joiningEventId = event.id;
-    });
-
-    final result = await _eventsRepository.registerUserInEventWithMessage(
-      eventId: event.id,
-      userId: widget.profile.uid,
-    );
-
-    final success = result['success'] as bool;
-    final message = result['message'] as String;
-
-    if (!mounted) return;
-
-    setState(() {
-      _joiningEventId = null;
-      if (success) {
-        // Refresca el listado para mostrar contador actualizado.
-        _searchFuture = _eventsRepository.searchEvents(
-          sport: _selectedSport!,
-          modality: _selectedModality!,
-        );
-      }
-    });
+    final success = result['success'] as bool? ?? false;
+    final message =
+        result['message'] as String? ?? 'Could not complete registration';
 
     final goToStart = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) => EventRegistrationResultPage(
-          isSuccess: success,
-          message: message,
-        ),
+        builder: (_) =>
+            EventRegistrationResultPage(isSuccess: success, message: message),
       ),
     );
 
-    if (!mounted) return;
+    if (!context.mounted) return;
 
     if (goToStart == true) {
-      setState(() {
-        _hasSearched = false;
-        _searchFuture = null;
-      });
-      return;
-    }
-
-    if (goToStart == false && _selectedSport != null && _selectedModality != null) {
-      setState(() {
-        // Al fallar, vuelve a resultados y recarga búsqueda.
-        _searchFuture = _eventsRepository.searchEvents(
-          sport: _selectedSport!,
-          modality: _selectedModality!,
-        );
-      });
+      vm.resetSearch();
+      onGoHome?.call();
     }
   }
 
-  Future<void> _openCreateCasualEventForm() async {
-    if (!_canCreate || _selectedSport == null) return;
+  Future<void> _openCreateForm(BuildContext context, PlayViewModel vm) async {
+    if (!vm.canCreate || vm.selectedSport == null) return;
 
     final goHome = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) => CreateCasualEventPage(
-          profile: widget.profile,
-          sport: _selectedSport!,
-        ),
+        builder: (_) =>
+            CreateCasualEventPage(profile: profile, sport: vm.selectedSport!),
       ),
     );
 
-    if (!mounted || goHome != true) return;
+    if (!context.mounted || goHome != true) return;
 
-    setState(() {
-      _hasSearched = false;
-      _searchFuture = null;
-    });
-
-    widget.onGoHome?.call();
+    vm.resetSearch();
+    onGoHome?.call();
   }
 
   @override
   Widget build(BuildContext context) {
+    final vm = context.watch<PlayViewModel>();
+
     return Scaffold(
       body: SafeArea(
         child: SingleChildScrollView(
@@ -147,212 +78,499 @@ class _PlayPageState extends State<PlayPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (!_hasSearched) ...[
+              if (!vm.hasSearched) ...[
                 Text(
-                  'Encuentra tu deporte',
+                  'Find your sport',
                   style: Theme.of(context).textTheme.headlineSmall,
                 ),
                 const SizedBox(height: 16),
                 SportSelector(
-                  selectedSport: _selectedSport,
-                  onSportSelected: (sport) {
-                    setState(() => _selectedSport = sport);
-                  },
+                  selectedSport: vm.selectedSport,
+                  onSportSelected: vm.selectSport,
                 ),
                 const SizedBox(height: 24),
                 ModalitySelector(
-                  selectedModality: _selectedModality,
-                  onModalitySelected: (modality) {
-                    setState(() => _selectedModality = modality);
-                  },
+                  selectedModality: vm.selectedModality,
+                  onModalitySelected: vm.selectModality,
                 ),
                 const SizedBox(height: 24),
                 ActionButtonsSection(
-                  canSearch: _canSearch,
-                  canCreate: _canCreate,
-                  onSearchPressed: () {
-                    if (!_canSearch) return;
-                    setState(() {
-                      _hasSearched = true;
-                      _searchFuture = _eventsRepository.searchEvents(
-                        sport: _selectedSport!,
-                        modality: _selectedModality!,
-                      );
-                    });
-                  },
-                  onCreatePressed: _openCreateCasualEventForm,
-                ),
-                const SizedBox(height: 32),
-                // Eventos recomendados debe ir debajo del buscador.
-                Text(
-                  'Eventos recomendados',
-                  style: Theme.of(context).textTheme.headlineSmall,
+                  canSearch: vm.canSearch,
+                  canCreate: vm.canCreate,
+                  onSearchPressed: () => _handleSearch(vm),
+                  onCreatePressed: () => _openCreateForm(context, vm),
                 ),
                 const SizedBox(height: 16),
-                Text(
-                  'Basados en tu perfil',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                const SizedBox(height: 16),
-                Container(
+                SizedBox(
                   width: double.infinity,
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: AppTheme.softTeal,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Column(
-                    children: [
-                      Icon(
-                        Icons.lightbulb_outline,
-                        color: AppTheme.teal,
-                        size: 40,
+                  child: OutlinedButton.icon(
+                    onPressed: vm.toggleMyScheduled,
+                    icon: Icon(
+                      vm.showMyScheduled ? Icons.event_available : Icons.calendar_month,
+                      color: AppTheme.navy,
+                    ),
+                    label: Text(
+                      'My Schedule',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        color: AppTheme.navy,
+                        fontWeight: FontWeight.w700,
                       ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Proximamente',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              color: AppTheme.teal,
-                            ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(
+                        color: vm.showMyScheduled ? AppTheme.navy : AppTheme.teal,
+                        width: 1.4,
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Aqui apareceran eventos recomendados para ti',
-                        style: Theme.of(context).textTheme.bodySmall,
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
                   ),
                 ),
+                if (vm.showMyScheduled) ...[
+                  const SizedBox(height: 12),
+                  _MyScheduledSection(vm: vm),
+                ],
                 const SizedBox(height: 32),
               ],
-              if (_hasSearched &&
-                  _selectedSport != null &&
-                  _selectedModality != null &&
-                  _searchFuture != null) ...[
-                TextButton.icon(
-                  onPressed: () {
-                    setState(() {
-                      _hasSearched = false;
-                      _searchFuture = null;
-                    });
-                  },
-                  icon: const Icon(Icons.arrow_back),
-                  label: const Text('Volver'),
+              if (vm.hasSearched)
+                _SearchResults(
+                  vm: vm,
+                  onBack: vm.resetSearch,
+                  onJoin: (event) => _handleJoinEvent(context, vm, event),
                 ),
-                const SizedBox(height: 12),
-                Text(
-                  'RESULTADOS DE BUSQUEDA',
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: AppTheme.teal,
-                        letterSpacing: 2,
-                        fontWeight: FontWeight.bold,
-                      ),
-                ),
-                const SizedBox(height: 16),
-                FutureBuilder<List<SportEvent>>(
-                  future: _searchFuture,
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-
-                    if (snapshot.hasError) {
-                      return Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.red.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.red),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Error al buscar eventos',
-                              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                    color: Colors.red,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              snapshot.error.toString(),
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                          ],
-                        ),
-                      );
-                    }
-
-                    final events = snapshot.data ?? [];
-                    if (events.isEmpty) {
-                      return Container(
-                        padding: const EdgeInsets.all(24),
-                        decoration: BoxDecoration(
-                          color: AppTheme.softTeal,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Column(
-                          children: [
-                            Icon(
-                              Icons.search_off,
-                              color: AppTheme.teal,
-                              size: 40,
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              'No hay eventos disponibles',
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    color: AppTheme.teal,
-                                  ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              'Intenta cambiar tu busqueda o crea un evento',
-                              style: Theme.of(context).textTheme.bodySmall,
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                        ),
-                      );
-                    }
-
-                    return Column(
-                      children: [
-                        Text(
-                          '${events.length} evento${events.length != 1 ? 's' : ''} encontrado${events.length != 1 ? 's' : ''}',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                        const SizedBox(height: 16),
-                        ...List.generate(events.length, (index) {
-                          final event = events[index];
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: EventCard(
-                              title: event.title,
-                              sport: event.sport,
-                              modality: event.modality.label,
-                              participants:
-                                  '${event.currentParticipants}/${event.maxParticipants}',
-                              schedule: _formatSchedule(event.scheduledAt),
-                              location: event.location,
-                              description: event.description,
-                              isJoining: _joiningEventId == event.id,
-                              onJoinPressed: () => _handleJoinEvent(event),
-                            ),
-                          );
-                        }),
-                      ],
-                    );
-                  },
-                ),
-                const SizedBox(height: 32),
-              ],
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+class _MyScheduledSection extends StatelessWidget {
+  final PlayViewModel vm;
+
+  const _MyScheduledSection({required this.vm});
+
+  Future<void> _openEventDetails(BuildContext context, SportEvent event) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) {
+        bool isLeaving = false;
+
+        Future<void> handleLeave(StateSetter setSheetState) async {
+          final confirm = await showDialog<bool>(
+            context: sheetContext,
+            builder: (dialogContext) => AlertDialog(
+              title: const Text('Leave event?'),
+              content: const Text(
+                'Are you sure you want to leave this event? You will be removed from the participant list.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  child: const Text('Leave'),
+                ),
+              ],
+            ),
+          );
+
+          if (confirm != true) return;
+
+          setSheetState(() => isLeaving = true);
+          final success = await context.read<PlayViewModel>().leaveScheduledEvent(event);
+          if (!sheetContext.mounted) return;
+
+          Navigator.of(sheetContext).pop();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                success ? 'You left the event successfully' : 'Could not leave the event',
+              ),
+            ),
+          );
+        }
+
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          event.title,
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: AppTheme.softTeal,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          'Registered',
+                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: AppTheme.navy,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '${AppSports.formatSportLabel(event.sport)} • ${event.modality.label}',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 12),
+                  _DetailRow(icon: Icons.people, label: 'Participants', value: '${event.currentParticipants}/${event.maxParticipants}'),
+                  const SizedBox(height: 8),
+                  _DetailRow(icon: Icons.schedule, label: 'Schedule', value: vm.formatSchedule(event.scheduledAt)),
+                  const SizedBox(height: 8),
+                  _DetailRow(icon: Icons.location_on, label: 'Location', value: event.location),
+                  if (event.description.trim().isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      'Description',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(event.description, style: Theme.of(context).textTheme.bodyMedium),
+                  ],
+                  const SizedBox(height: 18),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.of(sheetContext).pop(),
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: AppTheme.navy),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                          child: const Text('Close'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: isLeaving
+                              ? null
+                              : () => handleLeave(setSheetState),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                          child: isLeaving
+                              ? const SizedBox(
+                                  height: 18,
+                                  width: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Text('Leave event'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (vm.isLoadingMyScheduled) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (vm.myScheduledError != null) {
+      return _ErrorBox(error: vm.myScheduledError!);
+    }
+
+    if (vm.myScheduledEvents.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppTheme.softTeal,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(
+          'You do not have active scheduled events yet',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '${vm.myScheduledEvents.length} active event${vm.myScheduledEvents.length == 1 ? '' : 's'}',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: 10),
+        ...vm.myScheduledEvents.map(
+          (event) => Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () => _openEventDetails(context, event),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFE6EBF2)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      event.title,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${event.modality.label} • ${event.currentParticipants}/${event.maxParticipants}',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppTheme.teal,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      vm.formatSchedule(event.scheduledAt),
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      event.location,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DetailRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+
+  const _DetailRow({required this.icon, required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 18, color: AppTheme.navy),
+        const SizedBox(width: 8),
+        Expanded(
+          child: RichText(
+            text: TextSpan(
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.onSurface),
+              children: [
+                TextSpan(
+                  text: '$label: ',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                TextSpan(text: value),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SearchResults extends StatelessWidget {
+  final PlayViewModel vm;
+  final VoidCallback onBack;
+  final Future<void> Function(SportEvent) onJoin;
+
+  const _SearchResults({
+    required this.vm,
+    required this.onBack,
+    required this.onJoin,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextButton.icon(
+          onPressed: onBack,
+          icon: const Icon(Icons.arrow_back),
+          label: const Text('Back'),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'SEARCH RESULTS',
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+            color: AppTheme.teal,
+            letterSpacing: 2,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 16),
+        if (vm.isSearching)
+          const Center(child: CircularProgressIndicator())
+        else if (vm.searchError != null)
+          _ErrorBox(error: vm.searchError!)
+        else if (vm.searchResults.isEmpty)
+          const _EmptyResults()
+        else
+          _EventList(
+            events: vm.searchResults,
+            joiningEventId: vm.joiningEventId,
+            formatSchedule: vm.formatSchedule,
+            onJoin: onJoin,
+          ),
+        const SizedBox(height: 32),
+      ],
+    );
+  }
+}
+
+class _ErrorBox extends StatelessWidget {
+  final String error;
+
+  const _ErrorBox({required this.error});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.red.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.red),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Error searching events',
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              color: Colors.red,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(error, style: Theme.of(context).textTheme.bodySmall),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyResults extends StatelessWidget {
+  const _EmptyResults();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: AppTheme.softTeal,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        children: [
+          Icon(Icons.search_off, color: AppTheme.teal, size: 40),
+          const SizedBox(height: 12),
+          Text(
+            'No events available',
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(color: AppTheme.teal),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Try changing your search or create a new event',
+            style: Theme.of(context).textTheme.bodySmall,
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EventList extends StatelessWidget {
+  final List<SportEvent> events;
+  final String? joiningEventId;
+  final String Function(DateTime) formatSchedule;
+  final Future<void> Function(SportEvent) onJoin;
+
+  const _EventList({
+    required this.events,
+    required this.joiningEventId,
+    required this.formatSchedule,
+    required this.onJoin,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '${events.length} event${events.length != 1 ? 's' : ''} found',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: 16),
+        ...events.map(
+          (event) => Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: EventCard(
+              title: event.title,
+              sport: event.sport,
+              modality: event.modality.label,
+              participants:
+                  '${event.currentParticipants}/${event.maxParticipants}',
+              schedule: formatSchedule(event.scheduledAt),
+              location: event.location,
+              description: event.description,
+              isJoining: joiningEventId == event.id,
+              onJoinPressed: () => onJoin(event),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

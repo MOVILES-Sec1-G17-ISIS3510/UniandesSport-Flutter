@@ -1,275 +1,508 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:uniandessport_flutter/features/coach/presentation/dialogs/request_coach_dialog.dart';
+import 'package:uniandessport_flutter/features/coach/presentation/viewmodels/coaches_view_model.dart';
+import 'package:uniandessport_flutter/features/coach/presentation/widgets/coach_card.dart';
+import 'package:uniandessport_flutter/features/coach/presentation/widgets/search_delegate.dart';
 
-class ProfesPage extends StatelessWidget {
+class ProfesPage extends StatefulWidget {
   const ProfesPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'APRENDE CON EXPERTOS',
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: Colors.teal,
-                    letterSpacing: 2,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'Profesores',
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                const SizedBox(height: 24),
-
-                // Filter tabs
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      FilterChip(
-                        label: const Text('All Coaches'),
-                        selected: true,
-                        onSelected: (selected) {
-                          // TODO: Implementar filtro de entrenadores
-                        },
-                      ),
-                      const SizedBox(width: 8),
-                      FilterChip(
-                        label: const Text('Soccer'),
-                        selected: false,
-                        onSelected: (selected) {
-                          // TODO: Implementar filtro por deporte
-                        },
-                      ),
-                      const SizedBox(width: 8),
-                      FilterChip(
-                        label: const Text('Tennis'),
-                        selected: false,
-                        onSelected: (selected) {
-                          // TODO: Implementar filtro por deporte
-                        },
-                      ),
-                      const SizedBox(width: 8),
-                      FilterChip(
-                        label: const Text('Basketball'),
-                        selected: false,
-                        onSelected: (selected) {
-                          // TODO: Implementar filtro por deporte
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                // Coach cards
-                _CoachCard(
-                  initials: 'CM',
-                  name: 'Carlos Mendez',
-                  sport: 'Soccer',
-                  price: '\$30/hour',
-                  rating: 4.8,
-                  reviews: 24,
-                  experience: '8 years exp.',
-                  ranking: '#1 in Soccer',
-                  specialty: 'Technical skills & tactics',
-                  verified: true,
-                ),
-                const SizedBox(height: 16),
-                _CoachCard(
-                  initials: 'AR',
-                  name: 'Ana Rodriguez',
-                  sport: 'Tennis',
-                  price: '\$35/hour',
-                  rating: 4.9,
-                  reviews: 18,
-                  experience: '10 years exp.',
-                  ranking: '#1 in Tennis',
-                  specialty: 'Professional coaching',
-                  verified: true,
-                ),
-                const SizedBox(height: 16),
-                _CoachCard(
-                  initials: 'JG',
-                  name: 'Juan García',
-                  sport: 'Running',
-                  price: '\$25/hour',
-                  rating: 4.6,
-                  reviews: 15,
-                  experience: '6 years exp.',
-                  ranking: '#3 in Running',
-                  specialty: 'Marathon preparation',
-                  verified: false,
-                ),
-                const SizedBox(height: 32),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  State<ProfesPage> createState() => _ProfesPageState();
 }
 
-class _CoachCard extends StatelessWidget {
-  final String initials;
-  final String name;
-  final String sport;
-  final String price;
-  final double rating;
-  final int reviews;
-  final String experience;
-  final String ranking;
-  final String specialty;
-  final bool verified;
+class _ProfesPageState extends State<ProfesPage> {
+  final List<String> sports = ["All Coaches", "Soccer", "Tennis", "Basketball"];
 
-  const _CoachCard({
-    required this.initials,
-    required this.name,
-    required this.sport,
-    required this.price,
-    required this.rating,
-    required this.reviews,
-    required this.experience,
-    required this.ranking,
-    required this.specialty,
-    required this.verified,
-  });
+  void _showFiltersSheet(BuildContext context, CoachesViewModel vm) {
+    double tempMinRating = vm.minRating;
+    double tempMaxPrice = vm.maxPrice;
+    bool tempOnlyVerified = vm.onlyVerified;
 
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[200]!),
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              CircleAvatar(
-                backgroundColor: Colors.teal[100],
-                child: Text(
-                  initials,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return SingleChildScrollView(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(
+                    24, 20, 24, MediaQuery.of(context).viewInsets.bottom + 32),
                 child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          name,
-                          style: Theme.of(context).textTheme.titleSmall
-                              ?.copyWith(fontWeight: FontWeight.bold),
+                        const Text(
+                          'Filters',
+                          style: TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.bold),
                         ),
-                        if (verified)
-                          const Padding(
-                            padding: EdgeInsets.only(left: 4),
-                            child: Icon(
-                              Icons.verified,
-                              size: 16,
-                              color: Colors.blue,
-                            ),
-                          ),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.pop(context),
+                        ),
                       ],
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '$sport • $price',
-                      style: Theme.of(context).textTheme.bodySmall,
+                    const Divider(),
+                    const SizedBox(height: 8),
+
+                    // Minimum Rating
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Minimum Rating',
+                            style: TextStyle(fontWeight: FontWeight.w600)),
+                        Row(
+                          children: List.generate(
+                            5,
+                            (i) => Icon(
+                              Icons.star,
+                              size: 18,
+                              color: i < tempMinRating.round()
+                                  ? Colors.amber
+                                  : Colors.grey.shade300,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    Slider(
+                      value: tempMinRating,
+                      min: 1,
+                      max: 5,
+                      divisions: 4,
+                      activeColor: Colors.teal,
+                      label: tempMinRating.toStringAsFixed(0),
+                      onChanged: (val) =>
+                          setSheetState(() => tempMinRating = val),
+                    ),
+
+                    const SizedBox(height: 8),
+
+                    // Max Price
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Max Price',
+                            style: TextStyle(fontWeight: FontWeight.w600)),
+                        Text(
+                          '\$${tempMaxPrice.toInt()}/hr',
+                          style: const TextStyle(
+                              color: Colors.teal, fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                    Slider(
+                      value: tempMaxPrice,
+                      min: 0,
+                      max: 50,
+                      divisions: 10,
+                      activeColor: Colors.teal,
+                      label: '\$${tempMaxPrice.toInt()}',
+                      onChanged: (val) =>
+                          setSheetState(() => tempMaxPrice = val),
+                    ),
+
+                    const SizedBox(height: 8),
+
+                    // Only Verified
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.verified, color: Colors.blue, size: 18),
+                            SizedBox(width: 6),
+                            Text('Only verified coaches',
+                                style: TextStyle(fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                        Switch(
+                          value: tempOnlyVerified,
+                          activeColor: Colors.teal,
+                          onChanged: (val) =>
+                              setSheetState(() => tempOnlyVerified = val),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () {
+                              vm.resetAdvancedFilters();
+                              Navigator.pop(context);
+                            },
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.teal,
+                              side: const BorderSide(color: Colors.teal),
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: const Text('Reset'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () {
+                              vm.applyAdvancedFilters(
+                                minRating: tempMinRating,
+                                maxPrice: tempMaxPrice,
+                                onlyVerified: tempOnlyVerified,
+                              );
+                              Navigator.pop(context);
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.teal,
+                              foregroundColor: Colors.white,
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: const Text('Apply'),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
               ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Row(
+            );
+          },
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Scaffold(
+      floatingActionButton: Container(
+        height: 60,
+        width: 60,
+        decoration: BoxDecoration(
+          color: colorScheme.secondary,
+          shape: BoxShape.circle,
+          boxShadow: const [
+            BoxShadow(
+              color: Colors.black26,
+              blurRadius: 10,
+              offset: Offset(0, 4),
+            ),
+          ],
+        ),
+        child: IconButton(
+          icon: const Icon(Icons.add, color: Colors.white, size: 30),
+          onPressed: () {
+            showDialog(
+              context: context,
+              builder: (_) => const RequestCoachDialog(),
+            );
+          },
+        ),
+      ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            // Banner offline
+            Consumer<CoachesViewModel>(
+              builder: (context, vm, _) {
+                if (!vm.isOffline) return const SizedBox.shrink();
+                return Container(
+                  width: double.infinity,
+                  color: Colors.red.shade700,
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                  child: Row(
                     children: [
-                      const Icon(Icons.star, size: 16, color: Colors.orange),
-                      const SizedBox(width: 4),
-                      Text(
-                        rating.toString(),
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          fontWeight: FontWeight.bold,
+                      const Icon(Icons.wifi_off, color: Colors.white, size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          vm.pendingReviewsCount > 0
+                              ? "You're offline · ${vm.pendingReviewsCount} review(s) pending sync"
+                              : "You're offline · Showing cached data",
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 13),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '$reviews reviews',
-                    style: Theme.of(context).textTheme.labelSmall,
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              const Icon(Icons.lightbulb_outline, size: 16, color: Colors.grey),
-              const SizedBox(width: 4),
-              Text(experience, style: Theme.of(context).textTheme.bodySmall),
-              const SizedBox(width: 16),
-              const Icon(Icons.emoji_events, size: 16, color: Colors.grey),
-              const SizedBox(width: 4),
-              Text(ranking, style: Theme.of(context).textTheme.bodySmall),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Specialty: $specialty',
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: () {
-                    // TODO: Navegar al perfil del entrenador
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue[900],
-                  ),
-                  child: const Text('View Profile'),
+                );
+              },
+            ),
+
+            // Contenido principal
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'APRENDE CON EXPERTOS',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: Colors.teal,
+                            letterSpacing: 2,
+                          ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Titulo + iconos
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Profesores',
+                          style: Theme.of(context).textTheme.headlineSmall,
+                        ),
+                        Row(
+                          children: [
+                            Container(
+                              decoration: BoxDecoration(
+                                color: colorScheme.surfaceContainerHighest,
+                                shape: BoxShape.circle,
+                              ),
+                              child: IconButton(
+                                icon: Icon(
+                                  Icons.search,
+                                  color: colorScheme.onSurfaceVariant,
+                                ),
+                                onPressed: () {
+                                  showSearch(
+                                    context: context,
+                                    delegate: CoachSearchDelegate(),
+                                  );
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Consumer<CoachesViewModel>(
+                              builder: (context, vm, _) {
+                                return Stack(
+                                  children: [
+                                    Container(
+                                      decoration: BoxDecoration(
+                                        color: vm.hasActiveFilters
+                                            ? Colors.teal.shade100
+                                            : colorScheme
+                                                .surfaceContainerHighest,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: IconButton(
+                                        icon: Icon(
+                                          Icons.tune,
+                                          color: vm.hasActiveFilters
+                                              ? Colors.teal
+                                              : colorScheme.onSurfaceVariant,
+                                        ),
+                                        onPressed: () =>
+                                            _showFiltersSheet(context, vm),
+                                      ),
+                                    ),
+                                    if (vm.hasActiveFilters)
+                                      Positioned(
+                                        right: 4,
+                                        top: 4,
+                                        child: Container(
+                                          width: 10,
+                                          height: 10,
+                                          decoration: const BoxDecoration(
+                                            color: Colors.teal,
+                                            shape: BoxShape.circle,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    // Chips de deporte
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Consumer<CoachesViewModel>(
+                        builder: (context, vm, _) {
+                          return Row(
+                            children: sports.map((sport) {
+                              final bool isSelected = vm.selectedSport == sport;
+                              return Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: FilterChip(
+                                  label: Text(sport),
+                                  selected: isSelected,
+                                  showCheckmark: true,
+                                  selectedColor: colorScheme.secondaryContainer,
+                                  checkmarkColor:
+                                      colorScheme.onSecondaryContainer,
+                                  backgroundColor:
+                                      colorScheme.surfaceContainerHighest,
+                                  labelStyle: TextStyle(
+                                    color: isSelected
+                                        ? colorScheme.onSecondaryContainer
+                                        : colorScheme.onSurfaceVariant,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  onSelected: (value) {
+                                    vm.filterBySport(
+                                        value ? sport : "All Coaches");
+                                  },
+                                ),
+                              );
+                            }).toList(),
+                          );
+                        },
+                      ),
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    // Lista de coaches
+                    Expanded(
+                      child: Consumer<CoachesViewModel>(
+                        builder: (context, vm, _) {
+                          if (vm.isLoading) {
+                            return const Center(
+                                child: CircularProgressIndicator());
+                          }
+
+                          if (vm.error != null) {
+                            return Center(child: Text(vm.error!));
+                          }
+
+                          if (vm.coaches.isEmpty) {
+                            return Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.sports_handball_outlined,
+                                    size: 80,
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    "Oops! No hay profes para este deporte.",
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                      color: colorScheme.onSurface,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    "Intenta con otro deporte o restablece el filtro.",
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }
+
+                          final coachOfTheMonth = vm.coachOfTheMonth;
+
+                          return ListView.builder(
+                            itemCount: vm.coaches.length +
+                                (coachOfTheMonth != null ? 1 : 0),
+                            itemBuilder: (context, index) {
+                              if (index == 0 && coachOfTheMonth != null) {
+                                return Padding(
+                                  padding:
+                                      const EdgeInsets.only(bottom: 16),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 6,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          gradient: const LinearGradient(
+                                            colors: [
+                                              Color(0xFFFFD700),
+                                              Color(0xFFFFA500)
+                                            ],
+                                          ),
+                                          borderRadius:
+                                              BorderRadius.circular(20),
+                                        ),
+                                        child: const Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.emoji_events,
+                                                color: Colors.white,
+                                                size: 16),
+                                            SizedBox(width: 4),
+                                            Text(
+                                              "Coach of the Month",
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      CoachCard(coach: coachOfTheMonth),
+                                      const SizedBox(height: 8),
+                                      const Divider(),
+                                      const SizedBox(height: 4),
+                                    ],
+                                  ),
+                                );
+                              }
+
+                              final coachIndex =
+                                  coachOfTheMonth != null ? index - 1 : index;
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 16),
+                                child: CoachCard(coach: vm.coaches[coachIndex]),
+                              );
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(width: 8),
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.green[100],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: IconButton(
-                  icon: const Icon(Icons.call, color: Colors.green),
-                  onPressed: () {
-                    // TODO: Implementar llamada al entrenador
-                  },
-                ),
-              ),
-            ],
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }

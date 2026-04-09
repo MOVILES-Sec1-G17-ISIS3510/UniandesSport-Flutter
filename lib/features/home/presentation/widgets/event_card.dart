@@ -36,7 +36,14 @@ class _EventCardState extends State<EventCard> {
 
   @override
   Widget build(BuildContext context) {
-    final sportStyle = AppSports.getSport(widget.sport);
+    // Manejar deportes personalizados con color gris e ícono de add
+    final sportStyle = AppSports.sportKeys.contains(widget.sport)
+        ? AppSports.getSport(widget.sport)
+        : SportStyle(
+            name: widget.sport.substring(0, 1).toUpperCase() + widget.sport.substring(1),
+            color: Colors.grey[600]!,
+            icon: Icons.add_circle_outline,
+          );
 
     return InkWell(
       onTap: () => setState(() => _isExpanded = !_isExpanded),
@@ -149,7 +156,7 @@ class _EventCardState extends State<EventCard> {
               const Divider(),
               const SizedBox(height: 12),
               Text(
-                'Descripción',
+                'Description',
                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
@@ -158,7 +165,7 @@ class _EventCardState extends State<EventCard> {
               Text(
                 widget.description?.isNotEmpty == true
                     ? widget.description!
-                    : 'Sin descripción disponible',
+                    : 'No description available',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: widget.description?.isNotEmpty == true
                       ? null
@@ -190,7 +197,7 @@ class _EventCardState extends State<EventCard> {
                             color: Colors.white,
                           ),
                         )
-                      : const Text('Unirse'),
+                      : const Text('Join'),
                 ),
               ),
             ],

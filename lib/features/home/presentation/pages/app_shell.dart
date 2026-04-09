@@ -10,7 +10,9 @@ import '../../presentation/pages/play_page.dart';
 import '../../presentation/pages/social_page.dart';
 import '../../presentation/pages/profes_page.dart';
 import '../../presentation/pages/profile_page.dart';
+import '../controllers/play_view_model.dart';
 import '../widgets/play_nav_item.dart';
+import '../widgets/recommended_events_section.dart';
 
 class AppShell extends StatefulWidget {
   final UserProfile profile;
@@ -35,7 +37,6 @@ class _AppShellState extends State<AppShell> {
     Icons.sports_tennis,
     Icons.pool,
     Icons.sports,
-    Icons.pool,
     Icons.sports_golf,
   ];
 
@@ -45,6 +46,11 @@ class _AppShellState extends State<AppShell> {
     _profile = widget.profile;
     _setupProfileListener();
     _startPlayIconRotation();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<PlayViewModel>().updateProfile(_profile);
+    });
   }
 
   @override
@@ -73,10 +79,50 @@ class _AppShellState extends State<AppShell> {
     });
   }
 
+  void _openProfilePage() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => ProfilePage(profile: _profile)));
+  }
+
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Scaffold(
-      body: _buildPage(_selectedIndex),
+      body: Stack(
+        children: [
+          _buildPage(_selectedIndex),
+          if (_selectedIndex != 4)
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 6,
+              right: 14,
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: _openProfilePage,
+                  borderRadius: BorderRadius.circular(24),
+                  child: Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: colorScheme.surfaceContainerHighest.withValues(
+                        alpha: 0.92,
+                      ),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: colorScheme.outlineVariant),
+                    ),
+                    child: Icon(
+                      Icons.account_circle_outlined,
+                      size: 28,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: (index) {
@@ -89,7 +135,7 @@ class _AppShellState extends State<AppShell> {
           const BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
           const BottomNavigationBarItem(
             icon: Icon(Icons.emoji_events),
-            label: 'Retos',
+            label: 'Challenges',
           ),
           BottomNavigationBarItem(
             icon: PlayNavItem(
@@ -102,10 +148,13 @@ class _AppShellState extends State<AppShell> {
             ),
             label: '',
           ),
-          const BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Social'),
+          const BottomNavigationBarItem(
+            icon: Icon(Icons.people),
+            label: 'Social',
+          ),
           const BottomNavigationBarItem(
             icon: Icon(Icons.person_outline),
-            label: 'Profes',
+            label: 'Coaches',
           ),
         ],
       ),
@@ -175,7 +224,6 @@ class _HomePageWrapper extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Header badge
                 Text(
                   'UNIANDES SPORTS',
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
@@ -184,8 +232,6 @@ class _HomePageWrapper extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 12),
-
-                // Greeting
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -234,8 +280,6 @@ class _HomePageWrapper extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 24),
-
-                // Stats row
                 Row(
                   children: [
                     Expanded(
@@ -258,41 +302,51 @@ class _HomePageWrapper extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 24),
-
-                // Quick filters
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
                     children: [
                       _QuickFilterChip(
                         icon: '⛅',
-                        label: "24° Cloudy",
+                        label: '24° Cloudy',
                         onTap: () {},
                       ),
                       const SizedBox(width: 8),
                       _QuickFilterChip(
                         icon: '📊',
-                        label: "Strava",
+                        label: 'Strava',
                         onTap: () {},
                       ),
                       const SizedBox(width: 8),
                       _QuickFilterChip(
                         icon: '🕐',
-                        label: "History",
+                        label: 'History',
                         onTap: () {},
                       ),
                       const SizedBox(width: 8),
                       _QuickFilterChip(
                         icon: '🏆',
-                        label: "Trophies",
+                        label: 'Trophies',
                         onTap: () {},
                       ),
                     ],
                   ),
                 ),
+                const SizedBox(height: 28),
+                Text(
+                  'RECOMMENDED EVENTS',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Discover options based on your preferences',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 16),
+                RecommendedEventsSection(userId: profile.uid),
                 const SizedBox(height: 32),
-
-                // Quick Activity section
                 Text(
                   'QUICK ACTIVITY',
                   style: Theme.of(
@@ -304,8 +358,6 @@ class _HomePageWrapper extends StatelessWidget {
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: 16),
-
-                // Activity cards
                 _ActivityCard(
                   icon: '🏃',
                   title: '30-min Interval Run',
@@ -342,9 +394,9 @@ class _HomePageWrapper extends StatelessWidget {
   }
 
   String _getGreeting(int hour) {
-    if (hour < 12) return 'Buenos días';
-    if (hour < 18) return 'Buenas tardes';
-    return 'Buenas noches';
+    if (hour < 12) return 'Good morning';
+    if (hour < 18) return 'Good afternoon';
+    return 'Good evening';
   }
 }
 
@@ -363,10 +415,17 @@ class _StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: backgroundColor,
+        color: isDark
+            ? Color.alphaBlend(
+                Colors.black.withValues(alpha: 0.35),
+                backgroundColor,
+              )
+            : backgroundColor,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -376,9 +435,9 @@ class _StatCard extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             label,
-            style: Theme.of(
-              context,
-            ).textTheme.labelSmall?.copyWith(color: Colors.grey[600]),
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
           const SizedBox(height: 4),
           Text(
@@ -406,9 +465,11 @@ class _QuickFilterChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return ChipTheme(
       data: ChipThemeData(
-        backgroundColor: const Color(0xFFE8F6F5),
+        backgroundColor: colorScheme.surfaceContainerHighest,
         labelStyle: Theme.of(context).textTheme.bodySmall,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),
@@ -436,12 +497,14 @@ class _ActivityCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[200]!),
+        border: Border.all(color: colorScheme.outlineVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -452,7 +515,7 @@ class _ActivityCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFE8F6F5),
+                  color: colorScheme.surfaceContainerHighest,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(icon, style: const TextStyle(fontSize: 24)),
@@ -481,9 +544,9 @@ class _ActivityCard extends StatelessWidget {
                 children: [
                   Text(
                     duration,
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(

@@ -8,6 +8,11 @@ import '../../domain/models/user_profile.dart';
 import '../../domain/models/user_role.dart';
 import 'login_page.dart';
 
+/// Puerta de entrada de autenticacion.
+///
+/// Decide la pantalla inicial segun dos fuentes de Firebase:
+/// 1) FirebaseAuth.authStateChanges() para saber si hay sesion activa
+/// 2) Firestore /users/{uid} para cargar el perfil de dominio
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
 
@@ -29,6 +34,9 @@ class AuthGate extends StatelessWidget {
           return const LoginPage();
         }
 
+        // Si hay sesion, resolvemos perfil de Firestore.
+        // En caso de perfil ausente, se construye un fallback minimo
+        // para no bloquear navegacion y mantener continuidad de UX.
         return FutureBuilder<UserProfile?>(
           future: repository.getUserProfile(firebaseUser.uid),
           builder: (context, profileSnapshot) {

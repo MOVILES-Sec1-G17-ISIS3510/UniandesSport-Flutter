@@ -45,5 +45,13 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Usamos la cámara para estimar la luz ambiental y activar el modo oscuro automáticamente.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Usamos el micrófono para convertir tu opinión en texto al escribir reviews de coaches.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Usamos la galería para adjuntar fotos en tus reviews de coaches.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Usamos la fototeca para guardar imágenes asociadas a reviews cuando sea necesario.</string>
 </dict>
 </plist>

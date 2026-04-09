@@ -2,9 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/theme/app_sports.dart';
 import '../../domain/models/user_role.dart';
 import '../controllers/auth_controller.dart';
 
+/// Pantalla de registro de cuenta.
+///
+/// Flujo funcional:
+/// 1) Captura datos basicos del usuario y preferencias iniciales.
+/// 2) Construye correo institucional con dominio Uniandes.
+/// 3) Ejecuta AuthController.signUp(...).
+/// 4) Si el registro es exitoso, vuelve al login.
+///
+/// Persistencia asociada:
+/// - Firebase Auth crea la credencial email/password.
+/// - Firestore crea /users/{uid} con el perfil deportivo.
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
 
@@ -37,14 +49,23 @@ class _RegisterPageState extends State<RegisterPage> {
     super.dispose();
   }
 
+  String _buildUniandesEmail(String username) {
+    final normalized = username.trim().toLowerCase();
+    return '$normalized@uniandes.edu.co';
+  }
+
+  /// Ejecuta registro de cuenta y muestra feedback al usuario.
+  ///
+  /// Los campos enviados se reflejan en UserProfile en Firestore.
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final semester = int.tryParse(_semesterController.text.trim());
+    final semester = int.parse(_semesterController.text.trim());
     final controller = context.read<AuthController>();
+    final institutionalEmail = _buildUniandesEmail(_emailController.text);
 
     final success = await controller.signUp(
-      email: _emailController.text,
+      email: institutionalEmail,
       password: _passwordController.text,
       fullName: _nameController.text,
       role: _selectedRole,
@@ -58,13 +79,13 @@ class _RegisterPageState extends State<RegisterPage> {
     if (success) {
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cuenta creada exitosamente.')),
+        const SnackBar(content: Text('Account created successfully.')),
       );
       return;
     }
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(controller.errorMessage ?? 'No fue posible crear la cuenta')),
+      SnackBar(content: Text(controller.errorMessage ?? 'Could not create the account')),
     );
   }
 
@@ -75,7 +96,7 @@ class _RegisterPageState extends State<RegisterPage> {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.transparent,
-        title: const Text('Registro'),
+        title: const Text('Sign up'),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -86,12 +107,12 @@ class _RegisterPageState extends State<RegisterPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Crea tu perfil deportivo',
+                  'Create your sports profile',
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Completa tu perfil para acceder a retos, partidos y entrenamientos personalizados.',
+                  'Complete your profile to access challenges, matches, and personalized training.',
                   style: Theme.of(context).textTheme.bodyLarge,
                 ),
                 const SizedBox(height: 20),
@@ -103,12 +124,12 @@ class _RegisterPageState extends State<RegisterPage> {
                         TextFormField(
                           controller: _nameController,
                           decoration: const InputDecoration(
-                            labelText: 'Nombre completo',
+                            labelText: 'Full name',
                             prefixIcon: Icon(Icons.person_outline),
                           ),
                           validator: (value) {
                             if ((value ?? '').trim().isEmpty) {
-                              return 'Ingresa tu nombre';
+                              return 'Enter your name';
                             }
                             return null;
                           },
@@ -116,15 +137,24 @@ class _RegisterPageState extends State<RegisterPage> {
                         const SizedBox(height: 12),
                         TextFormField(
                           controller: _emailController,
-                          keyboardType: TextInputType.emailAddress,
+                          keyboardType: TextInputType.text,
                           decoration: const InputDecoration(
-                            labelText: 'Correo',
-                            prefixIcon: Icon(Icons.mail_outline),
+                            labelText: 'Uniandes username',
+                            hintText: 'Ex: jperez',
+                            prefixIcon: Icon(Icons.person_outline),
                           ),
                           validator: (value) {
                             final text = value?.trim() ?? '';
-                            if (text.isEmpty) return 'Ingresa tu correo';
-                            if (!text.contains('@')) return 'Correo inválido';
+                            if (text.isEmpty) return 'Enter your Uniandes username';
+                            if (text.contains('@')) {
+                              return 'Only enter the username, without @domain';
+                            }
+                            final isValid = RegExp(
+                              r'^[a-zA-Z0-9._-]+$',
+                            ).hasMatch(text);
+                            if (!isValid) {
+                              return 'Invalid username';
+                            }
                             return null;
                           },
                         ),
@@ -132,7 +162,7 @@ class _RegisterPageState extends State<RegisterPage> {
                         DropdownButtonFormField<UserRole>(
                           initialValue: _selectedRole,
                           decoration: const InputDecoration(
-                            labelText: 'Tipo de usuario',
+                            labelText: 'User type',
                             prefixIcon: Icon(Icons.badge_outlined),
                           ),
                           items: UserRole.values
@@ -154,11 +184,13 @@ class _RegisterPageState extends State<RegisterPage> {
                           controller: _passwordController,
                           obscureText: _obscurePassword,
                           decoration: InputDecoration(
-                            labelText: 'Contraseña',
+                            labelText: 'Password',
                             prefixIcon: const Icon(Icons.lock_outline),
                             suffixIcon: IconButton(
                               onPressed: () {
-                                setState(() => _obscurePassword = !_obscurePassword);
+                                setState(
+                                  () => _obscurePassword = !_obscurePassword,
+                                );
                               },
                               icon: Icon(
                                 _obscurePassword
@@ -169,7 +201,7 @@ class _RegisterPageState extends State<RegisterPage> {
                           ),
                           validator: (value) {
                             if ((value ?? '').length < 6) {
-                              return 'Mínimo 6 caracteres';
+                              return 'Minimum 6 characters';
                             }
                             return null;
                           },
@@ -179,12 +211,13 @@ class _RegisterPageState extends State<RegisterPage> {
                           controller: _confirmPasswordController,
                           obscureText: _obscureConfirmPassword,
                           decoration: InputDecoration(
-                            labelText: 'Confirmar contraseña',
+                            labelText: 'Confirm password',
                             prefixIcon: const Icon(Icons.lock_outline),
                             suffixIcon: IconButton(
                               onPressed: () {
                                 setState(
-                                  () => _obscureConfirmPassword = !_obscureConfirmPassword,
+                                  () => _obscureConfirmPassword =
+                                      !_obscureConfirmPassword,
                                 );
                               },
                               icon: Icon(
@@ -196,7 +229,7 @@ class _RegisterPageState extends State<RegisterPage> {
                           ),
                           validator: (value) {
                             if (value != _passwordController.text) {
-                              return 'Las contraseñas no coinciden';
+                              return 'Passwords do not match';
                             }
                             return null;
                           },
@@ -205,7 +238,7 @@ class _RegisterPageState extends State<RegisterPage> {
                         TextFormField(
                           controller: _programController,
                           decoration: const InputDecoration(
-                            labelText: 'Programa académico (opcional)',
+                            labelText: 'Academic program (optional)',
                             prefixIcon: Icon(Icons.menu_book_outlined),
                           ),
                         ),
@@ -214,38 +247,59 @@ class _RegisterPageState extends State<RegisterPage> {
                           controller: _semesterController,
                           keyboardType: TextInputType.number,
                           decoration: const InputDecoration(
-                            labelText: 'Semestre (opcional)',
+                            labelText: 'Semester',
                             prefixIcon: Icon(Icons.calendar_today_outlined),
                           ),
+                          validator: (value) {
+                            final text = value?.trim() ?? '';
+                            if (text.isEmpty)
+                              return 'El semestre es obligatorio';
+                            if (text.isEmpty) return 'Semester is required';
+                            final parsed = int.tryParse(text);
+                            if (parsed == null || parsed <= 0) {
+                              return 'Enter a valid semester';
+                            }
+                            return null;
+                          },
                         ),
                         const SizedBox(height: 12),
                         DropdownButtonFormField<String>(
                           initialValue: _selectedSport,
                           decoration: const InputDecoration(
-                            labelText: 'Deporte principal (opcional)',
+                            labelText: 'Favorite sport (optional)',
                             prefixIcon: Icon(Icons.sports_soccer_outlined),
                           ),
-                          items: const [
-                            DropdownMenuItem(value: 'Futbol', child: Text('Futbol')),
-                            DropdownMenuItem(value: 'Tenis', child: Text('Tenis')),
-                            DropdownMenuItem(value: 'Running', child: Text('Running')),
-                            DropdownMenuItem(value: 'Calistenia', child: Text('Calistenia')),
-                          ],
+                          items: AppSports.sportKeys
+                              .map(
+                                (key) => DropdownMenuItem(
+                                  value: key,
+                                  child: Text(AppSports.getSport(key).name),
+                                ),
+                              )
+                              .toList(),
                           onChanged: (value) {
-                            setState(() => _selectedSport = value);
+                            setState(() {
+                              _selectedSport = value == null
+                                  ? null
+                                  : AppSports.normalizeSportKey(value);
+                            });
                           },
                         ),
                         const SizedBox(height: 20),
                         ElevatedButton(
                           onPressed: controller.isLoading ? null : _submit,
-                          style: ElevatedButton.styleFrom(backgroundColor: AppTheme.teal),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.teal,
+                          ),
                           child: controller.isLoading
                               ? const SizedBox(
                                   width: 20,
                                   height: 20,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
                                 )
-                              : const Text('Crear cuenta'),
+                              : const Text('Create account'),
                         ),
                       ],
                     ),

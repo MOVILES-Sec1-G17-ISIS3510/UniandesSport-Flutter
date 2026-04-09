@@ -4,12 +4,12 @@ import 'package:flutter/material.dart';
 class AppSports {
   static const Map<String, SportStyle> sports = {
     'futbol': SportStyle(
-      name: 'Fútbol',
+      name: 'Soccer',
       icon: Icons.sports_soccer,
       color: Color(0xFF4CAF50), // Verde
     ),
     'calistenia': SportStyle(
-      name: 'Calistenia',
+      name: 'Calisthenics',
       icon: Icons.fitness_center,
       color: Color(0xFFFF9800), // Naranja
     ),
@@ -29,7 +29,7 @@ class AppSports {
       color: Color(0xFFFFC107), // Amarillo
     ),
     'natacion': SportStyle(
-      name: 'Natación',
+      name: 'Swimming',
       icon: Icons.pool,
       color: Color(0xFF00BCD4), // Cyan
     ),
@@ -50,6 +50,44 @@ class AppSports {
   static SportStyle getSport(String key) {
     return sports[key] ?? sports['futbol']!;
   }
+
+  /// Normaliza el valor para almacenamiento en DB: minusculas y sin espacios.
+  static String normalizeSportKey(String value) {
+    return value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), '');
+  }
+
+  /// Etiqueta legible para UI.
+  /// Si existe en el catalogo oficial, usa su nombre (ej: Ping Pong).
+  /// Si no existe, intenta capitalizar de forma simple.
+  static String formatSportLabel(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return '';
+    }
+
+    final key = normalizeSportKey(value);
+    final style = sports[key];
+    if (style != null) {
+      return style.name;
+    }
+
+    final compact = key.replaceAll('_', ' ');
+    return compact
+        .split(' ')
+        .where((part) => part.isNotEmpty)
+        .map((part) => part[0].toUpperCase() + part.substring(1))
+        .join(' ');
+  }
+
+  static Map<String, double> buildInitialInferredPreferences({
+    String? favoriteSport,
+  }) {
+    if (favoriteSport == null || favoriteSport.trim().isEmpty) {
+      return <String, double>{};
+    }
+
+    final normalizedFavorite = normalizeSportKey(favoriteSport);
+    return <String, double>{normalizedFavorite: 10.0};
+  }
 }
 
 class SportStyle {
@@ -63,4 +101,3 @@ class SportStyle {
     required this.color,
   });
 }
-

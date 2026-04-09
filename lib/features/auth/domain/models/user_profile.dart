@@ -2,6 +2,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'user_role.dart';
 
+/// Modelo de dominio para el perfil del usuario autenticado.
+///
+/// Este modelo representa exactamente el documento Firestore /users/{uid}.
 class UserProfile {
   const UserProfile({
     required this.uid,
@@ -12,6 +15,7 @@ class UserProfile {
     this.program,
     this.semester,
     this.mainSport,
+    this.inferredPreferences,
     this.photoUrl,
     this.createdAt,
   });
@@ -24,9 +28,15 @@ class UserProfile {
   final String? program;
   final int? semester;
   final String? mainSport;
+  final Map<String, double>? inferredPreferences;
   final String? photoUrl;
   final DateTime? createdAt;
 
+  /// Serializa el perfil para persistirlo en Firestore.
+  ///
+  /// createdAt:
+  /// - si viene en memoria, se serializa a Timestamp
+  /// - si no viene, usa serverTimestamp para asegurar reloj del servidor
   Map<String, dynamic> toJson() {
     return {
       'uid': uid,
@@ -37,15 +47,18 @@ class UserProfile {
       'program': program,
       'semester': semester,
       'mainSport': mainSport,
+      'inferredPreferences': inferredPreferences,
       'photoUrl': photoUrl,
-      'createdAt': createdAt != null
-          ? Timestamp.fromDate(createdAt!)
-          : FieldValue.serverTimestamp(),
+      'createdAt': createdAt == null
+          ? FieldValue.serverTimestamp()
+          : Timestamp.fromDate(createdAt!),
     };
   }
 
+  /// Deserializa un documento Firestore a UserProfile.
   factory UserProfile.fromJson(Map<String, dynamic> json) {
     final createdAtValue = json['createdAt'];
+    final rawPreferences = json['inferredPreferences'] as Map<String, dynamic>?;
 
     return UserProfile(
       uid: (json['uid'] as String?) ?? '',
@@ -56,8 +69,21 @@ class UserProfile {
       program: json['program'] as String?,
       semester: (json['semester'] as num?)?.toInt(),
       mainSport: json['mainSport'] as String?,
+      inferredPreferences: rawPreferences?.map(
+        (key, value) => MapEntry(key, (value as num).toDouble()),
+      ),
       photoUrl: json['photoUrl'] as String?,
       createdAt: createdAtValue is Timestamp ? createdAtValue.toDate() : null,
     );
   }
+
+  /// Perfil vacío utilizado como valor inicial seguro antes de que el usuario
+  /// inicie sesión. Permite registrar [PlayViewModel] en el árbol de Provider
+  /// desde [app.dart] sin requerir un perfil real todavía.
+  factory UserProfile.empty() => const UserProfile(
+    uid: '',
+    email: '',
+    fullName: '',
+    role: UserRole.athlete,
+  );
 }
