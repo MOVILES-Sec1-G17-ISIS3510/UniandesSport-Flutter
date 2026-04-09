@@ -5,6 +5,17 @@ import '../../../core/theme/app_sports.dart';
 import '../domain/models/user_profile.dart';
 import '../domain/models/user_role.dart';
 
+/// Repositorio de autenticacion y perfil de usuario.
+///
+/// Conexion con Firebase:
+/// - Auth: FirebaseAuth (login, registro, logout, stream de sesion)
+/// - Perfil: Cloud Firestore /users/{uid}
+///
+/// Convencion de datos en /users/{uid}:
+/// - uid, email, fullName, role
+/// - university, program, semester
+/// - mainSport, inferredPreferences
+/// - createdAt, updatedAt
 class AuthRepository {
   AuthRepository({FirebaseAuth? firebaseAuth, FirebaseFirestore? firestore})
     : _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance,
@@ -13,8 +24,12 @@ class AuthRepository {
   final FirebaseAuth _firebaseAuth;
   final FirebaseFirestore _firestore;
 
+  /// Emite cambios de sesion en tiempo real.
+  ///
+  /// AuthGate usa este stream para decidir si mostrar LoginPage o AppShell.
   Stream<User?> authStateChanges() => _firebaseAuth.authStateChanges();
 
+  /// Inicia sesion con email/password en Firebase Auth.
   Future<void> signIn({required String email, required String password}) async {
     await _firebaseAuth.signInWithEmailAndPassword(
       email: email.trim(),
@@ -22,10 +37,17 @@ class AuthRepository {
     );
   }
 
+  /// Cierra sesion del usuario actual.
   Future<void> signOut() async {
     await _firebaseAuth.signOut();
   }
 
+  /// Registra usuario en Firebase Auth y crea su perfil en Firestore.
+  ///
+  /// Flujo:
+  /// 1) createUserWithEmailAndPassword() -> obtiene uid
+  /// 2) construye UserProfile con datos base y preferencias iniciales
+  /// 3) persiste /users/{uid}
   Future<void> signUp({
     required String email,
     required String password,
@@ -63,9 +85,11 @@ class AuthRepository {
       createdAt: DateTime.now(),
     );
 
+    // Se escribe el perfil completo al crear la cuenta.
     await _firestore.collection('users').doc(uid).set(profile.toJson());
   }
 
+  /// Obtiene el perfil del usuario desde Firestore.
   Future<UserProfile?> getUserProfile(String uid) async {
     final snapshot = await _firestore.collection('users').doc(uid).get();
     if (!snapshot.exists || snapshot.data() == null) {
@@ -75,6 +99,7 @@ class AuthRepository {
     return UserProfile.fromJson(snapshot.data()!);
   }
 
+  /// Stream reactivo de cambios de perfil para UI en tiempo real.
   Stream<UserProfile?> userProfileChanges(String uid) {
     return _firestore.collection('users').doc(uid).snapshots().map((snapshot) {
       if (!snapshot.exists || snapshot.data() == null) {
@@ -84,6 +109,11 @@ class AuthRepository {
     });
   }
 
+  /// Actualiza parcialmente campos del perfil (merge).
+  ///
+  /// Nota:
+  /// - No sobreescribe el documento completo.
+  /// - updatedAt se mantiene con serverTimestamp para trazabilidad.
   Future<void> updateUserProfile({
     required String uid,
     String? fullName,
@@ -112,6 +142,7 @@ class AuthRepository {
         .set(updates, SetOptions(merge: true));
   }
 
+  /// Traduce errores tecnicos de Firebase a mensajes legibles para UI.
   String getReadableError(Object error) {
     if (error is FirebaseAuthException) {
       switch (error.code) {
