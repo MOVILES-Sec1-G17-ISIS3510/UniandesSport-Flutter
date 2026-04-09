@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:uniandessport_flutter/core/services/analytics_service.dart';
+import 'package:uniandessport_flutter/core/services/coach_cache_service.dart';
 import 'package:uniandessport_flutter/core/services/pending_reviews_service.dart';
 import 'package:uniandessport_flutter/features/coach/domain/models/coach_model.dart';
 import 'package:uniandessport_flutter/features/home/data/coach_repository.dart';
@@ -21,6 +22,7 @@ class CoachesViewModel extends ChangeNotifier {
   bool _isOffline = false;
   int _pendingReviewsCount = 0;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
+  final CoachCacheService _cacheService = CoachCacheService.instance;
 
   // Filtros avanzados
   double _minRating = 1;
@@ -36,7 +38,8 @@ class CoachesViewModel extends ChangeNotifier {
   double get minRating => _minRating;
   double get maxPrice => _maxPrice;
   bool get onlyVerified => _onlyVerified;
-  bool get hasActiveFilters => _minRating > 1 || _maxPrice < 50 || _onlyVerified;
+  bool get hasActiveFilters =>
+      _minRating > 1 || _maxPrice < 50 || _onlyVerified;
   int get pendingReviewsCount => _pendingReviewsCount;
 
   CoachesViewModel(this._repository) {
@@ -44,9 +47,9 @@ class CoachesViewModel extends ChangeNotifier {
   }
 
   void _initConnectivity() {
-    _connectivitySubscription = Connectivity()
-        .onConnectivityChanged
-        .listen((List<ConnectivityResult> results) async {
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
+      List<ConnectivityResult> results,
+    ) async {
       final wasOffline = _isOffline;
       final newIsOffline = results.every((r) => r == ConnectivityResult.none);
 
@@ -91,9 +94,17 @@ class CoachesViewModel extends ChangeNotifier {
     try {
       _allCoaches = await _repository.getCoaches();
       _applyFilters();
-      await loadCoachOfTheMonth();
+      try {
+        await loadCoachOfTheMonth();
+      } catch (_) {
+        // If ranking queries fail, keep the coach list and fall back later.
+      }
+      await _cacheCurrentState();
     } catch (e) {
-      _error = e.toString();
+      await _restoreCachedStateIfAvailable();
+      if (_allCoaches.isEmpty) {
+        _error = e.toString();
+      }
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -105,8 +116,14 @@ class CoachesViewModel extends ChangeNotifier {
 
     final now = DateTime.now();
     final firstDayOfCurrentMonth = DateTime(now.year, now.month, 1);
-    final lastDayOfCurrentMonth =
-        DateTime(now.year, now.month + 1, 0, 23, 59, 59);
+    final lastDayOfCurrentMonth = DateTime(
+      now.year,
+      now.month + 1,
+      0,
+      23,
+      59,
+      59,
+    );
 
     final validCoaches = _allCoaches.where((c) => c.id != null).toList();
 
@@ -116,11 +133,14 @@ class CoachesViewModel extends ChangeNotifier {
           .collection('profesores')
           .doc(coach.id)
           .collection('reviews')
-          .where('createdAt',
-              isGreaterThanOrEqualTo:
-                  Timestamp.fromDate(firstDayOfCurrentMonth))
-          .where('createdAt',
-              isLessThanOrEqualTo: Timestamp.fromDate(lastDayOfCurrentMonth))
+          .where(
+            'createdAt',
+            isGreaterThanOrEqualTo: Timestamp.fromDate(firstDayOfCurrentMonth),
+          )
+          .where(
+            'createdAt',
+            isLessThanOrEqualTo: Timestamp.fromDate(lastDayOfCurrentMonth),
+          )
           .get();
     }).toList();
 
@@ -138,8 +158,8 @@ class CoachesViewModel extends ChangeNotifier {
       if (reviews.isNotEmpty) {
         final totalRating = reviews.fold<double>(
           0,
-          (sum, doc) =>
-              sum + ((doc.data()['rating'] as num?)?.toDouble() ?? 0),
+          (accumulator, doc) =>
+              accumulator + ((doc.data()['rating'] as num?)?.toDouble() ?? 0),
         );
         avgRating = totalRating / reviews.length;
       }
@@ -147,7 +167,10 @@ class CoachesViewModel extends ChangeNotifier {
       final overallRating = (coach.rating ?? 0).toDouble();
       final verified = (coach.verified == true) ? 3.0 : 0.0;
       final score =
-          (avgRating * 2) + (reviewCount * 0.5) + (overallRating * 1) + verified;
+          (avgRating * 2) +
+          (reviewCount * 0.5) +
+          (overallRating * 1) +
+          verified;
 
       if (score > bestScore) {
         bestScore = score;
@@ -156,6 +179,28 @@ class CoachesViewModel extends ChangeNotifier {
     }
 
     _coachOfTheMonth = best;
+  }
+
+  /// Stores the latest successful coach snapshot for offline fallback.
+  Future<void> _cacheCurrentState() async {
+    await _cacheService.saveState(
+      coaches: _allCoaches,
+      coachOfTheMonth: _coachOfTheMonth,
+    );
+  }
+
+  /// Restores the last successful coach snapshot when the network is absent.
+  Future<void> _restoreCachedStateIfAvailable() async {
+    final cachedCoaches = await _cacheService.loadCachedCoaches();
+    if (cachedCoaches.isEmpty) {
+      return;
+    }
+
+    _allCoaches = cachedCoaches;
+    _filteredCoaches = List.from(cachedCoaches);
+    _coachOfTheMonth = await _cacheService.loadCachedCoachOfTheMonth();
+    _applyFilters();
+    _error = null;
   }
 
   void applyAdvancedFilters({
@@ -193,17 +238,20 @@ class CoachesViewModel extends ChangeNotifier {
     List<Coach> filtered = List.from(_allCoaches);
 
     if (_selectedSport != "All Coaches") {
-      filtered =
-          filtered.where((coach) => coach.deporte == _selectedSport).toList();
+      filtered = filtered
+          .where((coach) => coach.deporte == _selectedSport)
+          .toList();
     }
 
     if (_searchQuery.isNotEmpty) {
       filtered = filtered
-          .where((coach) =>
-              coach.nombre
-                  ?.toLowerCase()
-                  .contains(_searchQuery.toLowerCase()) ??
-              false)
+          .where(
+            (coach) =>
+                coach.nombre?.toLowerCase().contains(
+                  _searchQuery.toLowerCase(),
+                ) ??
+                false,
+          )
           .toList();
     }
 
@@ -215,10 +263,8 @@ class CoachesViewModel extends ChangeNotifier {
     // Filtro por precio máximo
     filtered = filtered.where((coach) {
       final priceStr = coach.precio ?? '';
-      final numericPrice = double.tryParse(
-            priceStr.replaceAll(RegExp(r'[^\d.]'), ''),
-          ) ??
-          0;
+      final numericPrice =
+          double.tryParse(priceStr.replaceAll(RegExp(r'[^\d.]'), '')) ?? 0;
       return numericPrice <= _maxPrice;
     }).toList();
 

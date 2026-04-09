@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -32,6 +34,7 @@ class _AddReviewDialogState extends State<AddReviewDialog> {
 
   // Sensor: imagen
   File? _selectedImage;
+  Uint8List? _selectedImageBytes;
   final ImagePicker _picker = ImagePicker();
 
   // Sensor: micrófono → texto
@@ -46,14 +49,30 @@ class _AddReviewDialogState extends State<AddReviewDialog> {
   }
 
   Future<void> _initSpeech() async {
-    _speechAvailable = await _speech.initialize();
-    setState(() {});
+    try {
+      _speechAvailable = await _speech.initialize();
+    } catch (_) {
+      _speechAvailable = false;
+    }
+
+    if (mounted) {
+      setState(() {});
+    }
   }
 
+  /// Picks an image and keeps both the file path and the raw bytes.
+  ///
+  /// The file is used for preview, while the bytes are stored in the offline
+  /// queue so the image can be uploaded later if the device loses connection.
   Future<void> _pickImage(ImageSource source) async {
     final picked = await _picker.pickImage(source: source, imageQuality: 70);
     if (picked != null) {
-      setState(() => _selectedImage = File(picked.path));
+      final bytes = await picked.readAsBytes();
+      if (!mounted) return;
+      setState(() {
+        _selectedImage = File(picked.path);
+        _selectedImageBytes = bytes;
+      });
     }
   }
 
@@ -92,43 +111,53 @@ class _AddReviewDialogState extends State<AddReviewDialog> {
       setState(() => _isListening = false);
     } else {
       setState(() => _isListening = true);
-      await _speech.listen(
-        onResult: (result) {
-          setState(() {
-            commentController.text = result.recognizedWords;
-            commentController.selection = TextSelection.fromPosition(
-              TextPosition(offset: commentController.text.length),
-            );
-          });
-        },
-        localeId: 'en_US',
-        listenOptions: SpeechListenOptions(
-          partialResults: true,
-          cancelOnError: false,
-          listenMode: ListenMode.dictation,
-        ),
-      );
+      try {
+        await _speech.listen(
+          onResult: (result) {
+            setState(() {
+              commentController.text = result.recognizedWords;
+              commentController.selection = TextSelection.fromPosition(
+                TextPosition(offset: commentController.text.length),
+              );
+            });
+          },
+          localeId: 'en_US',
+          listenOptions: SpeechListenOptions(
+            partialResults: true,
+            cancelOnError: false,
+            listenMode: ListenMode.dictation,
+          ),
+        );
+      } catch (_) {
+        if (mounted) {
+          setState(() => _isListening = false);
+        }
+      }
     }
   }
 
   Future<String?> _uploadImage(String coachId) async {
     if (_selectedImage == null) return null;
-    final ref = FirebaseStorage.instance
-        .ref()
-        .child('reviews/$coachId/${DateTime.now().millisecondsSinceEpoch}.jpg');
+    final ref = FirebaseStorage.instance.ref().child(
+      'reviews/$coachId/${DateTime.now().millisecondsSinceEpoch}.jpg',
+    );
     await ref.putFile(_selectedImage!);
     return await ref.getDownloadURL();
   }
 
   Future<void> submitReview() async {
     if (rating == 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please select a rating")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Please select a rating")));
       return;
     }
 
     setState(() => isSubmitting = true);
+
+    final vm = context.read<CoachesViewModel>();
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
 
     try {
       final user = FirebaseAuth.instance.currentUser;
@@ -141,17 +170,16 @@ class _AddReviewDialogState extends State<AddReviewDialog> {
         if (userDoc.exists) {
           userName =
               (userDoc.data()?['fullName'] as String?)?.trim().isNotEmpty ==
-                      true
-                  ? userDoc.data()!['fullName'] as String
-                  : user.email ?? 'Anonymous';
+                  true
+              ? userDoc.data()!['fullName'] as String
+              : user.email ?? 'Anonymous';
         }
       }
 
-      final vm = context.read<CoachesViewModel>();
       final isOffline = await vm.checkIsOffline();
 
       if (isOffline) {
-        // Sin internet: guardar en cola local (sin imagen)
+        // Sin internet: guardar en cola local con texto, voz convertida y foto si existe.
         await PendingReviewsService.instance.addPendingReview(
           PendingReview(
             coachId: widget.coachId,
@@ -161,25 +189,32 @@ class _AddReviewDialogState extends State<AddReviewDialog> {
             userId: user?.uid,
             userName: userName,
             createdAt: DateTime.now(),
+            imageBytesBase64: _selectedImageBytes == null
+                ? null
+                : base64Encode(_selectedImageBytes!),
+            imageFileName: _selectedImage != null
+                ? '${DateTime.now().millisecondsSinceEpoch}.jpg'
+                : null,
           ),
         );
 
         vm.incrementPendingReviews();
 
         if (!mounted) return;
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
+        navigator.pop();
+        messenger.showSnackBar(
           const SnackBar(
             backgroundColor: Colors.orange,
             content: Text(
-                "You're offline. Review saved and will sync when reconnected."),
+              "You're offline. Review saved and will sync when reconnected.",
+            ),
             duration: Duration(seconds: 4),
           ),
         );
         return;
       }
 
-      // Con internet: subir imagen si hay una seleccionada
+      // Con internet: subir imagen si hay una seleccionada.
       final imageUrl = await _uploadImage(widget.coachId);
 
       final coachRef = FirebaseFirestore.instance
@@ -193,8 +228,7 @@ class _AddReviewDialogState extends State<AddReviewDialog> {
         final currentTotal =
             (coachDoc.data()?['totalReviews'] as num?)?.toInt() ?? 0;
         final newTotal = currentTotal + 1;
-        final newRating =
-            ((currentRating * currentTotal) + rating) / newTotal;
+        final newRating = ((currentRating * currentTotal) + rating) / newTotal;
 
         final reviewRef = coachRef.collection('reviews').doc();
         transaction.set(reviewRef, {
@@ -212,16 +246,16 @@ class _AddReviewDialogState extends State<AddReviewDialog> {
       });
 
       if (!mounted) return;
-      Navigator.pop(context);
+      navigator.pop();
 
-      context.read<CoachesViewModel>().loadCoaches();
+      await vm.loadCoaches();
 
       AnalyticsService.instance.logInitiateRegistration(
         sportCategory: widget.coachSport,
         eventId: widget.coachId,
       );
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         const SnackBar(
           backgroundColor: Colors.teal,
           content: Text("Review submitted successfully ⭐"),
@@ -229,7 +263,7 @@ class _AddReviewDialogState extends State<AddReviewDialog> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(content: Text("Error al enviar review: $e")),
       );
     } finally {
@@ -271,7 +305,10 @@ class _AddReviewDialogState extends State<AddReviewDialog> {
               ),
 
               const SizedBox(height: 10),
-              const Text("Rating", style: TextStyle(fontWeight: FontWeight.w600)),
+              const Text(
+                "Rating",
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
               const SizedBox(height: 10),
 
               // Estrellas
@@ -290,7 +327,9 @@ class _AddReviewDialogState extends State<AddReviewDialog> {
                         ),
                         child: Icon(
                           Icons.star,
-                          color: rating >= starIndex ? Colors.amber : Colors.grey,
+                          color: rating >= starIndex
+                              ? Colors.amber
+                              : Colors.grey,
                         ),
                       ),
                     ),
@@ -300,7 +339,7 @@ class _AddReviewDialogState extends State<AddReviewDialog> {
 
               const SizedBox(height: 20),
 
-              // Comment + botón micrófono
+              // Comment + voice-to-text button.
               Row(
                 children: [
                   const Text(
@@ -313,7 +352,9 @@ class _AddReviewDialogState extends State<AddReviewDialog> {
                       onTap: _toggleListening,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 4),
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: _isListening
                               ? Colors.red.shade100
@@ -356,8 +397,9 @@ class _AddReviewDialogState extends State<AddReviewDialog> {
                       ? "Listening..."
                       : "Share your experience...",
                   filled: true,
-                  fillColor:
-                      _isListening ? Colors.red.shade50 : Colors.grey.shade100,
+                  fillColor: _isListening
+                      ? Colors.red.shade50
+                      : Colors.grey.shade100,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: _isListening
@@ -375,7 +417,7 @@ class _AddReviewDialogState extends State<AddReviewDialog> {
 
               const SizedBox(height: 12),
 
-              // Botón de imagen + preview
+              // Photo picker + preview.
               Row(
                 children: [
                   OutlinedButton.icon(
@@ -389,7 +431,9 @@ class _AddReviewDialogState extends State<AddReviewDialog> {
                       foregroundColor: Colors.teal,
                       side: const BorderSide(color: Colors.teal),
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                     ),
                   ),
                   if (_selectedImage != null) ...[
@@ -409,14 +453,20 @@ class _AddReviewDialogState extends State<AddReviewDialog> {
                           top: -4,
                           right: -4,
                           child: GestureDetector(
-                            onTap: () => setState(() => _selectedImage = null),
+                            onTap: () => setState(() {
+                              _selectedImage = null;
+                              _selectedImageBytes = null;
+                            }),
                             child: Container(
                               decoration: const BoxDecoration(
                                 color: Colors.red,
                                 shape: BoxShape.circle,
                               ),
-                              child: const Icon(Icons.close,
-                                  size: 16, color: Colors.white),
+                              child: const Icon(
+                                Icons.close,
+                                size: 16,
+                                color: Colors.white,
+                              ),
                             ),
                           ),
                         ),
@@ -428,7 +478,7 @@ class _AddReviewDialogState extends State<AddReviewDialog> {
 
               const SizedBox(height: 20),
 
-              // Botones Cancel / Submit
+              // Cancel / Submit actions.
               Row(
                 children: [
                   Expanded(
