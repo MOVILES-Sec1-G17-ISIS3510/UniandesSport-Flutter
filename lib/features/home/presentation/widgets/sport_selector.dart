@@ -38,17 +38,17 @@ class _SportSelectorState extends State<SportSelector> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Agregar deporte'),
+          title: const Text('Add sport'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Ingresa el nombre del deporte:'),
+              const Text('Enter the sport name:'),
               const SizedBox(height: 12),
               TextField(
                 controller: controller,
                 decoration: InputDecoration(
-                  hintText: 'Ej: Voleibol',
+                  hintText: 'Ex: Volleyball',
                   errorText: errorText,
                   border: const OutlineInputBorder(),
                 ),
@@ -69,7 +69,7 @@ class _SportSelectorState extends State<SportSelector> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Solo letras y espacios. No se permiten números ni caracteres especiales.',
+                'Only letters and spaces are allowed. Numbers and special characters are not allowed.',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: Colors.grey[600],
                     ),
@@ -79,17 +79,17 @@ class _SportSelectorState extends State<SportSelector> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancelar'),
+              child: const Text('Cancel'),
             ),
             ElevatedButton(
               onPressed: () {
                 final text = controller.text.trim();
                 if (text.isEmpty) {
-                  setDialogState(() => errorText = 'Ingresa un deporte');
+                  setDialogState(() => errorText = 'Enter a sport');
                   return;
                 }
                 if (text.length < 3) {
-                  setDialogState(() => errorText = 'Debe tener al menos 3 letras');
+                  setDialogState(() => errorText = 'It must contain at least 3 letters');
                   return;
                 }
                 Navigator.of(context).pop(text);
@@ -97,7 +97,7 @@ class _SportSelectorState extends State<SportSelector> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.teal,
               ),
-              child: const Text('Agregar'),
+              child: const Text('Add'),
             ),
           ],
         ),
@@ -123,7 +123,7 @@ class _SportSelectorState extends State<SportSelector> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Escoge tu deporte',
+          'Choose your sport',
           style: Theme.of(context).textTheme.titleMedium,
         ),
         const SizedBox(height: 12),
@@ -177,7 +177,7 @@ class _SportSelectorState extends State<SportSelector> {
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  'Deporte seleccionado',
+                  'Sport selected',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: AppTheme.navy,
                         fontWeight: FontWeight.w600,
@@ -187,7 +187,7 @@ class _SportSelectorState extends State<SportSelector> {
                 TextButton(
                   onPressed: () => setState(() => _isExpanded = true),
                   child: Text(
-                    'Cambiar',
+                    'Change',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: AppTheme.teal,
                           fontWeight: FontWeight.w600,
@@ -233,7 +233,7 @@ class _ExpandButton extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             Text(
-              'Ver más',
+              'See more',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: Colors.grey[600],
                     fontWeight: FontWeight.w600,
@@ -277,7 +277,7 @@ class _AddSportButton extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             Text(
-              'Agregar',
+              'Add',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: Colors.grey[600],
                     fontWeight: FontWeight.w600,

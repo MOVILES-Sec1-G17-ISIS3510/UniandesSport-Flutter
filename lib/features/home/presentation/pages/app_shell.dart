@@ -139,7 +139,7 @@ class _AppShellState extends State<AppShell> {
           const BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
           const BottomNavigationBarItem(
             icon: Icon(Icons.emoji_events),
-            label: 'Retos',
+            label: 'Challenges',
           ),
           BottomNavigationBarItem(
             icon: PlayNavItem(
@@ -158,7 +158,7 @@ class _AppShellState extends State<AppShell> {
           ),
           const BottomNavigationBarItem(
             icon: Icon(Icons.person_outline),
-            label: 'Profes',
+            label: 'Coaches',
           ),
         ],
       ),
@@ -346,14 +346,14 @@ class _HomePageWrapper extends StatelessWidget {
                 const SizedBox(height: 28),
 
                 Text(
-                  'EVENTOS RECOMENDADOS',
+                  'RECOMMENDED EVENTS',
                   style: Theme.of(
                     context,
                   ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Descubre opciones segun tus preferencias',
+                  'Discover options based on your preferences',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: 16),
@@ -410,9 +410,9 @@ class _HomePageWrapper extends StatelessWidget {
   }
 
   String _getGreeting(int hour) {
-    if (hour < 12) return 'Buenos días';
-    if (hour < 18) return 'Buenas tardes';
-    return 'Buenas noches';
+    if (hour < 12) return 'Good morning';
+    if (hour < 18) return 'Good afternoon';
+    return 'Good evening';
   }
 }
 

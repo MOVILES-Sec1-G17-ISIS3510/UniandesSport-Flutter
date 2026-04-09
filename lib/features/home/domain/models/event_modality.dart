@@ -3,7 +3,7 @@ enum EventModality {
   casual,
   tournament;
 
-  String get label => this == casual ? 'Casual' : 'Torneo';
+  String get label => this == casual ? 'Casual' : 'Tournament';
   String get code => this == casual ? 'casual' : 'tournament';
 
   static EventModality fromCode(String value) {
@@ -13,4 +13,3 @@ enum EventModality {
     );
   }
 }
-
