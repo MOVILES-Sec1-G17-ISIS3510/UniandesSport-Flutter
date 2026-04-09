@@ -8,6 +8,7 @@ const db = admin.firestore();
 const BQ_COLLECTION = 'business_metrics';
 const BQ3_USER_COLLECTION = 'bq3_user_sport_counts';
 const BQ4_NOTIFICATION_COLLECTION = 'bq4_automated_notifications';
+const USER_SPORT_NOTIFICATION_COLLECTION = 'user_sport_notifications';
 const BQ4_CONVERSION_COLLECTION = 'bq4_notification_conversions';
 const BQ4_SNAPSHOT_COLLECTION = 'bq4_conversion_snapshots';
 const BQ5_READINESS_LOG_COLLECTION = 'bq5_readiness_time_logs';
@@ -523,6 +524,169 @@ function buildBq6IntentSummaryForSport({sport, inferredPreferences, bq3Sports}) 
     };
 }
 
+/**
+ * Construye lista de tokens FCM de forma resiliente a distintos esquemas.
+ *
+ * Campos soportados en users/{uid}:
+ * - fcmToken (string)
+ * - notificationToken (string)
+ * - pushToken (string)
+ * - fcmTokens (array<string>)
+ * - notificationTokens (array<string>)
+ */
+function collectUserNotificationTokens(userData) {
+    if (!userData || typeof userData !== 'object') {
+        return [];
+    }
+
+    const tokens = new Set();
+
+    const singleKeys = ['fcmToken', 'notificationToken', 'pushToken'];
+    singleKeys.forEach((key) => {
+        const value = userData[key];
+        if (typeof value === 'string' && value.trim().length > 0) {
+            tokens.add(value.trim());
+        }
+    });
+
+    const listKeys = ['fcmTokens', 'notificationTokens'];
+    listKeys.forEach((key) => {
+        const value = userData[key];
+        if (Array.isArray(value)) {
+            value.forEach((token) => {
+                if (typeof token === 'string' && token.trim().length > 0) {
+                    tokens.add(token.trim());
+                }
+            });
+        }
+    });
+
+    return Array.from(tokens);
+}
+
+/**
+ * Envia (o encola) notificaciones automaticas por coincidencia de deporte BQ3.
+ *
+ * Reglas:
+ * - Usuario debe tener `mainSport` no nulo en users/{uid}
+ * - `bq3_user_sport_counts/{uid}.mostScheduledSport` debe coincidir con el deporte del evento
+ * - Si hay tokens FCM, se intenta envio push; si no, se deja registro en cola
+ */
+async function notifyUsersByBq3MainSportOnEventCreated({eventId, eventData, creatorId}) {
+    const eventSport = normalizeSport(eventData && eventData.sport);
+    if (!eventId || !eventSport) {
+        return {targetedUsers: 0, sentUsers: 0, queuedUsers: 0};
+    }
+
+    const eventTitle = String((eventData && eventData.title) || 'New event').trim() || 'New event';
+    const eventModality = normalizeModality(eventData && eventData.modality);
+
+    const bq3CandidatesSnap = await db.collection(BQ3_USER_COLLECTION)
+        .where('mostScheduledSport', '==', eventSport)
+        .limit(300)
+        .get();
+
+    if (bq3CandidatesSnap.empty) {
+        return {targetedUsers: 0, sentUsers: 0, queuedUsers: 0};
+    }
+
+    let targetedUsers = 0;
+    let sentUsers = 0;
+    let queuedUsers = 0;
+
+    for (const bq3Doc of bq3CandidatesSnap.docs) {
+        const userId = bq3Doc.id;
+        if (!userId || userId === creatorId) {
+            continue;
+        }
+
+        const userSnap = await db.collection('users').doc(userId).get();
+        if (!userSnap.exists) {
+            continue;
+        }
+
+        const userData = userSnap.data() || {};
+        const userMainSport = normalizeSport(userData.mainSport);
+
+        // Requisito del producto: solo notificar si mainSport existe.
+        if (!userMainSport) {
+            continue;
+        }
+
+        // Requisito del producto: notificar cuando el evento coincide con su deporte principal.
+        if (userMainSport !== eventSport) {
+            continue;
+        }
+
+        targetedUsers += 1;
+
+        const notificationDocId = `${eventId}_${userId}`;
+        const notificationRef = db.collection(USER_SPORT_NOTIFICATION_COLLECTION).doc(notificationDocId);
+        const notificationBase = {
+            notificationId: notificationDocId,
+            userId,
+            eventId,
+            eventTitle,
+            sport: eventSport,
+            modality: eventModality,
+            reason: 'bq3_main_sport_match',
+            status: 'queued',
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            source: 'onEventCreated',
+        };
+
+        const tokens = collectUserNotificationTokens(userData);
+
+        if (!tokens.length) {
+            queuedUsers += 1;
+            await notificationRef.set(notificationBase, {merge: true});
+            continue;
+        }
+
+        try {
+            const response = await admin.messaging().sendMulticast({
+                tokens,
+                notification: {
+                    title: 'New event in your main sport',
+                    body: `${eventTitle} was created in ${eventSport}.`,
+                },
+                data: {
+                    eventId,
+                    sport: eventSport,
+                    source: 'bq3_main_sport_match',
+                },
+            });
+
+            const hasAnySuccess = Number(response.successCount || 0) > 0;
+            if (hasAnySuccess) {
+                sentUsers += 1;
+            } else {
+                queuedUsers += 1;
+            }
+
+            await notificationRef.set({
+                ...notificationBase,
+                status: hasAnySuccess ? 'sent' : 'failed',
+                fcmSuccessCount: Number(response.successCount || 0),
+                fcmFailureCount: Number(response.failureCount || 0),
+                attemptedTokenCount: tokens.length,
+                sentAt: hasAnySuccess ? admin.firestore.FieldValue.serverTimestamp() : null,
+            }, {merge: true});
+        } catch (error) {
+            queuedUsers += 1;
+            await notificationRef.set({
+                ...notificationBase,
+                status: 'failed',
+                attemptedTokenCount: tokens.length,
+                errorMessage: String((error && error.message) || error || 'unknown_error'),
+            }, {merge: true});
+        }
+    }
+
+    return {targetedUsers, sentUsers, queuedUsers};
+}
+
 // ============================================================================
 // REGLA 1: CREAR UNA PARTIDA (+8)
 // ============================================================================
@@ -547,6 +711,16 @@ exports.onEventCreated = functions.firestore
                 amount: 1
             })
         ]);
+
+        try {
+            await notifyUsersByBq3MainSportOnEventCreated({
+                eventId: context.params.eventId,
+                eventData,
+                creatorId,
+            });
+        } catch (error) {
+            console.error('[onEventCreated] Error sending BQ3 sport notifications:', error);
+        }
 
         return null;
     });
