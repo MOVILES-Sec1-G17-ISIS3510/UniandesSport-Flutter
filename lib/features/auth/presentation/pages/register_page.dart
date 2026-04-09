@@ -6,6 +6,17 @@ import '../../../../core/theme/app_sports.dart';
 import '../../domain/models/user_role.dart';
 import '../controllers/auth_controller.dart';
 
+/// Pantalla de registro de cuenta.
+///
+/// Flujo funcional:
+/// 1) Captura datos basicos del usuario y preferencias iniciales.
+/// 2) Construye correo institucional con dominio Uniandes.
+/// 3) Ejecuta AuthController.signUp(...).
+/// 4) Si el registro es exitoso, vuelve al login.
+///
+/// Persistencia asociada:
+/// - Firebase Auth crea la credencial email/password.
+/// - Firestore crea /users/{uid} con el perfil deportivo.
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
 
@@ -43,6 +54,9 @@ class _RegisterPageState extends State<RegisterPage> {
     return '$normalized@uniandes.edu.co';
   }
 
+  /// Ejecuta registro de cuenta y muestra feedback al usuario.
+  ///
+  /// Los campos enviados se reflejan en UserProfile en Firestore.
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -135,7 +149,9 @@ class _RegisterPageState extends State<RegisterPage> {
                             if (text.contains('@')) {
                               return 'Only enter the username, without @domain';
                             }
-                            final isValid = RegExp(r'^[a-zA-Z0-9._-]+$').hasMatch(text);
+                            final isValid = RegExp(
+                              r'^[a-zA-Z0-9._-]+$',
+                            ).hasMatch(text);
                             if (!isValid) {
                               return 'Invalid username';
                             }
@@ -172,7 +188,9 @@ class _RegisterPageState extends State<RegisterPage> {
                             prefixIcon: const Icon(Icons.lock_outline),
                             suffixIcon: IconButton(
                               onPressed: () {
-                                setState(() => _obscurePassword = !_obscurePassword);
+                                setState(
+                                  () => _obscurePassword = !_obscurePassword,
+                                );
                               },
                               icon: Icon(
                                 _obscurePassword
@@ -198,7 +216,8 @@ class _RegisterPageState extends State<RegisterPage> {
                             suffixIcon: IconButton(
                               onPressed: () {
                                 setState(
-                                  () => _obscureConfirmPassword = !_obscureConfirmPassword,
+                                  () => _obscureConfirmPassword =
+                                      !_obscureConfirmPassword,
                                 );
                               },
                               icon: Icon(
@@ -233,6 +252,8 @@ class _RegisterPageState extends State<RegisterPage> {
                           ),
                           validator: (value) {
                             final text = value?.trim() ?? '';
+                            if (text.isEmpty)
+                              return 'El semestre es obligatorio';
                             if (text.isEmpty) return 'Semester is required';
                             final parsed = int.tryParse(text);
                             if (parsed == null || parsed <= 0) {
@@ -258,20 +279,25 @@ class _RegisterPageState extends State<RegisterPage> {
                               .toList(),
                           onChanged: (value) {
                             setState(() {
-                              _selectedSport =
-                                  value == null ? null : AppSports.normalizeSportKey(value);
+                              _selectedSport = value == null
+                                  ? null
+                                  : AppSports.normalizeSportKey(value);
                             });
                           },
                         ),
                         const SizedBox(height: 20),
                         ElevatedButton(
                           onPressed: controller.isLoading ? null : _submit,
-                          style: ElevatedButton.styleFrom(backgroundColor: AppTheme.teal),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.teal,
+                          ),
                           child: controller.isLoading
                               ? const SizedBox(
                                   width: 20,
                                   height: 20,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
                                 )
                               : const Text('Create account'),
                         ),

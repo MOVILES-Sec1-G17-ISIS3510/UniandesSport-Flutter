@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_sports.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/services/notification_service.dart';
 import '../../../auth/domain/models/user_profile.dart';
 import '../../data/events_repository.dart';
 import '../../domain/models/event_modality.dart';
@@ -38,7 +39,8 @@ class _CreateCasualEventPageState extends State<CreateCasualEventPage> {
       return AppSports.getSport(widget.sport).name;
     }
     // Capitalizar la primera letra para deportes personalizados
-    return widget.sport.substring(0, 1).toUpperCase() + widget.sport.substring(1);
+    return widget.sport.substring(0, 1).toUpperCase() +
+        widget.sport.substring(1);
   }
 
   @override
@@ -101,7 +103,7 @@ class _CreateCasualEventPageState extends State<CreateCasualEventPage> {
     setState(() => _isSubmitting = true);
 
     try {
-      await _repository.createEvent(
+      final eventId = await _repository.createEvent(
         createdBy: widget.profile.uid,
         creatorSemester: widget.profile.semester!,
         title: _titleController.text.trim(),
@@ -112,6 +114,23 @@ class _CreateCasualEventPageState extends State<CreateCasualEventPage> {
         scheduledAt: _scheduledAt!,
         maxParticipants: int.parse(_maxParticipantsController.text.trim()),
       );
+
+      // Disparamos una notificacion local para confirmar visualmente la creacion.
+      // El tap queda trazado en backend mediante NotificationService.
+      try {
+        await NotificationService.instance.showEventCreatedNotification(
+          notificationId: eventId,
+          eventId: eventId,
+          title: _titleController.text.trim(),
+          sport: widget.sport,
+          modality: EventModality.casual.code,
+          userId: widget.profile.uid,
+        );
+      } catch (e) {
+        debugPrint(
+          '[CreateCasualEventPage] Error mostrando notificacion local: $e',
+        );
+      }
 
       if (!mounted) return;
       final goHome = await Navigator.of(context).push<bool>(
@@ -134,10 +153,8 @@ class _CreateCasualEventPageState extends State<CreateCasualEventPage> {
 
       await Navigator.of(context).push<bool>(
         MaterialPageRoute(
-          builder: (_) => EventCreationResultPage(
-            isSuccess: false,
-            message: message,
-          ),
+          builder: (_) =>
+              EventCreationResultPage(isSuccess: false, message: message),
         ),
       );
       // En fallo vuelve al formulario automaticamente para reintentar.
@@ -251,7 +268,9 @@ class _CreateCasualEventPageState extends State<CreateCasualEventPage> {
                   width: double.infinity,
                   child: ElevatedButton(
                     onPressed: _isSubmitting ? null : _submit,
-                    style: ElevatedButton.styleFrom(backgroundColor: AppTheme.teal),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.teal,
+                    ),
                     child: _isSubmitting
                         ? const SizedBox(
                             width: 20,
@@ -272,4 +291,3 @@ class _CreateCasualEventPageState extends State<CreateCasualEventPage> {
     );
   }
 }
-

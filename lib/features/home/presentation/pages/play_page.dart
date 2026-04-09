@@ -10,6 +10,7 @@ import '../widgets/action_buttons_section.dart';
 import '../widgets/event_card.dart';
 import '../widgets/modality_selector.dart';
 import '../widgets/sport_selector.dart';
+import '../widgets/recommended_events_section.dart';
 import 'create_casual_event_page.dart';
 import 'event_registration_result_page.dart';
 
