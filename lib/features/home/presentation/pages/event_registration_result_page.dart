@@ -14,8 +14,8 @@ class EventRegistrationResultPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final title = message ?? (isSuccess ? 'Registro exitoso' : 'Registro no exitoso');
-    final actionLabel = isSuccess ? 'Volver al inicio' : 'Volver a buscar';
+    final title = message ?? (isSuccess ? 'Successful registration' : 'Registration failed');
+    final actionLabel = isSuccess ? 'Back to home' : 'Back to search';
 
     return Scaffold(
       appBar: AppBar(
@@ -23,7 +23,7 @@ class EventRegistrationResultPage extends StatelessWidget {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.of(context).pop(isSuccess),
         ),
-        title: const Text('Resultado de registro'),
+        title: const Text('Registration result'),
       ),
       body: SafeArea(
         child: Center(

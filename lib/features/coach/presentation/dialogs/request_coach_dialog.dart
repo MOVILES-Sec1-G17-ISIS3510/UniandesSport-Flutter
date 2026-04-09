@@ -39,13 +39,13 @@ class _RequestCoachDialogState extends State<RequestCoachDialog> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           backgroundColor: Colors.teal,
-          content: Text("Solicitud enviada correctamente"),
+          content: Text("Request sent successfully"),
         ),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error al enviar solicitud: $e")),
+        SnackBar(content: Text("Error sending request: $e")),
       );
     } finally {
       if (mounted) setState(() => isSubmitting = false);
@@ -92,7 +92,7 @@ class _RequestCoachDialogState extends State<RequestCoachDialog> {
             ),
             const SizedBox(height: 5),
             DropdownButtonFormField<String>(
-              value: sport,
+              initialValue: sport,
               decoration: _inputDecoration(),
               items: ["Soccer", "Tennis", "Basketball"]
                   .map((e) => DropdownMenuItem(value: e, child: Text(e)))
@@ -109,7 +109,7 @@ class _RequestCoachDialogState extends State<RequestCoachDialog> {
             ),
             const SizedBox(height: 5),
             DropdownButtonFormField<String>(
-              value: skillLevel,
+              initialValue: skillLevel,
               decoration: _inputDecoration(),
               items: ["Beginner", "Intermediate", "Advanced"]
                   .map((e) => DropdownMenuItem(value: e, child: Text(e)))

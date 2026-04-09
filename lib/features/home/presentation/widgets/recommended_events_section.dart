@@ -75,12 +75,12 @@ class _RecommendedEventsSectionState extends State<RecommendedEventsSection> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Fecha: ${_formatDate(event.scheduledAt)}',
+                    'Date: ${_formatDate(event.scheduledAt)}',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Cupos disponibles: ${event.availableSpots}',
+                    'Available spots: ${event.availableSpots}',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: AppTheme.teal,
                       fontWeight: FontWeight.w700,
@@ -132,7 +132,7 @@ class _RecommendedEventsSectionState extends State<RecommendedEventsSection> {
                                 color: Colors.white,
                               ),
                             )
-                          : const Text('Unirme'),
+                          : const Text('Join'),
                     ),
                   ),
                 ],
@@ -146,20 +146,20 @@ class _RecommendedEventsSectionState extends State<RecommendedEventsSection> {
 
   String _formatDate(DateTime date) {
     const months = [
-      'ene',
+      'jan',
       'feb',
       'mar',
-      'abr',
+      'apr',
       'may',
       'jun',
       'jul',
-      'ago',
+      'aug',
       'sep',
       'oct',
       'nov',
-      'dic',
+      'dec',
     ];
-    const weekdays = ['lun', 'mar', 'mie', 'jue', 'vie', 'sab', 'dom'];
+    const weekdays = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
     final weekday = weekdays[date.weekday - 1];
     final month = months[date.month - 1];
     return '$weekday, $month ${date.day}';
@@ -175,17 +175,73 @@ class _RecommendedEventsSectionState extends State<RecommendedEventsSection> {
         }
 
         if (snapshot.hasError) {
-          return Text(
-            'No se pudieron cargar las recomendaciones',
-            style: Theme.of(context).textTheme.bodySmall,
+          return Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.red.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.red.withValues(alpha: 0.35)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'No se pudieron cargar los eventos recomendados',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Colors.red[800],
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Revisa conectividad o reglas de Firestore e intenta nuevamente.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 10),
+                OutlinedButton.icon(
+                  onPressed: _refreshRecommendations,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Reintentar'),
+                ),
+              ],
+            ),
           );
         }
 
         final events = snapshot.data ?? [];
         if (events.isEmpty) {
-          return Text(
-            'Aun no hay recomendaciones para ti',
-            style: Theme.of(context).textTheme.bodySmall,
+          return Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppTheme.softTeal,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFD7E8E8)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Aun no hay recomendaciones para ti',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppTheme.navy,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'No encontramos eventos activos en Firestore con status "active".',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 10),
+                OutlinedButton.icon(
+                  onPressed: _refreshRecommendations,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Reintentar'),
+                ),
+              ],
+            ),
           );
         }
 
@@ -300,7 +356,7 @@ class _RecommendedEventsSectionState extends State<RecommendedEventsSection> {
                             ),
                             const SizedBox(width: 8),
                             Text(
-                              '${event.availableSpots} cupos',
+                              '${event.availableSpots} spots',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: Theme.of(context).textTheme.bodySmall

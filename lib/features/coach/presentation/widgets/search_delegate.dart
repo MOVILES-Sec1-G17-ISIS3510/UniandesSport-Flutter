@@ -38,7 +38,7 @@ class CoachSearchDelegate extends SearchDelegate {
         }
 
         if (vm.coaches.isEmpty) {
-          return const Center(child: Text("No se encontraron profesores"));
+          return const Center(child: Text("No coaches found"));
         }
 
         return ListView.builder(
@@ -62,7 +62,7 @@ class CoachSearchDelegate extends SearchDelegate {
     return Consumer<CoachesViewModel>(
       builder: (context, vm, _) {
         if (vm.coaches.isEmpty) {
-          return const Center(child: Text("Busca por nombre o deporte"));
+          return const Center(child: Text("Search by name or sport"));
         }
 
         return ListView.builder(

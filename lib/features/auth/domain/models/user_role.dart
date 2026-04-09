@@ -15,11 +15,11 @@ extension UserRoleX on UserRole {
   String get label {
     switch (this) {
       case UserRole.athlete:
-        return 'Deportista';
+        return 'Athlete';
       case UserRole.tutor:
         return 'Tutor / Instructor';
       case UserRole.organizer:
-        return 'Organizador';
+        return 'Organizer';
     }
   }
 

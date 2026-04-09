@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/app_sports.dart';
 import '../../data/events_repository.dart';
 import '../../domain/models/event_modality.dart';
 import '../../domain/models/sport_event.dart';
@@ -19,8 +20,18 @@ class PlayViewModel extends ChangeNotifier {
   PlayViewModel({
     required EventsRepository repository,
     required UserProfile profile,
-  })  : _repo = repository,
-        _profile = profile;
+  }) : _repo = repository,
+       _profile = profile {
+    final normalizedMainSport = AppSports.normalizeSportKey(
+      profile.mainSport ?? '',
+    );
+
+    // Estado inicial para evitar CTA deshabilitados al abrir Play.
+    _selectedSport = normalizedMainSport.isNotEmpty
+        ? normalizedMainSport
+        : AppSports.sportKeys.first;
+    _selectedModality = EventModality.casual;
+  }
 
   // ─── Dependencias ────────────────────────────────────────────────────────
 
@@ -57,14 +68,28 @@ class PlayViewModel extends ChangeNotifier {
   String? _joiningEventId;
   String? get joiningEventId => _joiningEventId;
 
+  // ─── Estado de My Scheduled ───────────────────────────────────────────────
+
+  bool _showMyScheduled = false;
+  bool _isLoadingMyScheduled = false;
+  List<SportEvent> _myScheduledEvents = [];
+  String? _myScheduledError;
+
+  bool get showMyScheduled => _showMyScheduled;
+  bool get isLoadingMyScheduled => _isLoadingMyScheduled;
+  List<SportEvent> get myScheduledEvents => List.unmodifiable(_myScheduledEvents);
+  String? get myScheduledError => _myScheduledError;
+
   // ─── Getters derivados (lógica de negocio) ────────────────────────────────
 
   /// El usuario puede buscar solo si eligió deporte Y modalidad.
   bool get canSearch => _selectedSport != null && _selectedModality != null;
 
-  /// El usuario puede crear un evento solo si eligió casual
-  /// (los torneos solo los crea la coordinación estudiantil).
-  bool get canCreate => canSearch && _selectedModality == EventModality.casual;
+  /// El usuario puede crear un evento casual cuando ya eligio un deporte.
+  ///
+  /// Nota: el formulario de creacion siempre persiste modalidad `casual`,
+  /// asi evitamos bloquear UX por no elegir modalidad antes de crear.
+  bool get canCreate => _selectedSport != null;
 
   // ─── Acceso al perfil ────────────────────────────────────────────────────
 
@@ -74,6 +99,18 @@ class PlayViewModel extends ChangeNotifier {
   /// el usuario ya tiene sesión activa y el perfil real está disponible.
   void updateProfile(UserProfile profile) {
     _profile = profile;
+
+    // Si por alguna razon no hay deporte seleccionado, intenta usar el del perfil.
+    if (_selectedSport == null || _selectedSport!.trim().isEmpty) {
+      final normalizedMainSport = AppSports.normalizeSportKey(
+        profile.mainSport ?? '',
+      );
+      if (normalizedMainSport.isNotEmpty) {
+        _selectedSport = normalizedMainSport;
+      }
+    }
+
+    _selectedModality ??= EventModality.casual;
     notifyListeners();
   }
 
@@ -125,13 +162,53 @@ class PlayViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> toggleMyScheduled() async {
+    _showMyScheduled = !_showMyScheduled;
+    notifyListeners();
+
+    if (_showMyScheduled) {
+      await loadMyScheduled();
+    }
+  }
+
+  Future<void> loadMyScheduled({bool forceRefresh = false}) async {
+    if (_isLoadingMyScheduled) return;
+    if (!forceRefresh && _myScheduledEvents.isNotEmpty) return;
+
+    _isLoadingMyScheduled = true;
+    _myScheduledError = null;
+    notifyListeners();
+
+    try {
+      final events = await _repo.getUserParticipatingEvents(_profile.uid);
+      _myScheduledEvents = events.where((event) => event.status == 'active').toList();
+    } catch (_) {
+      _myScheduledError = 'Could not load your scheduled events';
+    } finally {
+      _isLoadingMyScheduled = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> leaveScheduledEvent(SportEvent event) async {
+    try {
+      await _repo.leaveEvent(eventId: event.id, userId: _profile.uid);
+      if (_showMyScheduled) {
+        await loadMyScheduled(forceRefresh: true);
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   // ─── Registro en evento ───────────────────────────────────────────────────
 
   /// Intenta registrar al usuario en [event].
   /// Devuelve el mapa con `success` (bool) y `message` (String) del repositorio.
   Future<Map<String, dynamic>> joinEvent(SportEvent event) async {
     if (_joiningEventId != null) {
-      return {'success': false, 'message': 'Operación en curso'};
+      return {'success': false, 'message': 'Operation in progress'};
     }
 
     _joiningEventId = event.id;
@@ -147,6 +224,9 @@ class PlayViewModel extends ChangeNotifier {
     // Si tuvo éxito, refresca el listado para mostrar el contador actualizado.
     if (success) {
       await search();
+      if (_showMyScheduled) {
+        await loadMyScheduled(forceRefresh: true);
+      }
     }
 
     _joiningEventId = null;
@@ -163,14 +243,13 @@ class PlayViewModel extends ChangeNotifier {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final tomorrow = today.add(const Duration(days: 1));
-    final eventDate =
-        DateTime(dateTime.year, dateTime.month, dateTime.day);
+    final eventDate = DateTime(dateTime.year, dateTime.month, dateTime.day);
 
     String dayLabel;
     if (eventDate == today) {
-      dayLabel = 'Hoy';
+      dayLabel = 'Today';
     } else if (eventDate == tomorrow) {
-      dayLabel = 'Mañana';
+      dayLabel = 'Tomorrow';
     } else {
       dayLabel = '${eventDate.day}/${eventDate.month}';
     }
@@ -183,6 +262,4 @@ class PlayViewModel extends ChangeNotifier {
     return '$dayLabel $displayHour:$minute $period';
   }
 }
-
-
 

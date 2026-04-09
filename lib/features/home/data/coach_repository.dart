@@ -25,7 +25,7 @@ class CoachRepositoryImpl implements CoachRepository {
           .toList();
 
     } catch (e) {
-      throw Exception('Error buscando profes: $e');
+      throw Exception('Error loading coaches: $e');
     }
   }
 }

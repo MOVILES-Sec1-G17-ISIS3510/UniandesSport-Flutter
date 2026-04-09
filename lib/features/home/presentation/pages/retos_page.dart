@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_sports.dart';
 import '../../../auth/domain/models/user_profile.dart';
 
+/// Challenges page that renders active retos, recommendation, and participation UI.
 class RetosPage extends StatefulWidget {
   final UserProfile profile;
 
@@ -16,10 +17,13 @@ class RetosPage extends StatefulWidget {
 class _RetosPageState extends State<RetosPage>
     with AutomaticKeepAliveClientMixin {
   late final Stream<QuerySnapshot<Map<String, dynamic>>> _challengesStream;
+  bool _isCreatingChallenge = false;
 
+  /// Keeps tab state alive to avoid refetching and losing scroll position.
   @override
   bool get wantKeepAlive => true;
 
+  /// Subscribes to active challenges stream from Firestore.
   @override
   void initState() {
     super.initState();
@@ -29,6 +33,7 @@ class _RetosPageState extends State<RetosPage>
         .snapshots();
   }
 
+  /// Builds the complete retos experience: header, recommendation, and cards.
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -156,10 +161,241 @@ class _RetosPageState extends State<RetosPage>
           ),
         ),
       ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _showCreateChallengeDialog,
+        tooltip: 'Create Challenge',
+        child: const Icon(Icons.add),
+      ),
     );
+  }
+
+  /// Shows dialog to create a new challenge.
+  ///
+  /// Displays form with fields: title, sport, description, goal, difficulty,
+  /// reward, and end date. Saves to Firestore when submitted.
+  Future<void> _showCreateChallengeDialog() async {
+    final titleController = TextEditingController();
+    final descriptionController = TextEditingController();
+    final goalController = TextEditingController();
+    final rewardController = TextEditingController();
+    String? selectedSport;
+    DateTime? selectedEndDate;
+    String? selectedDifficulty;
+    final formKey = GlobalKey<FormState>();
+
+    final sports = ['Running', 'Soccer', 'Calisthenics', 'Tennis'];
+    final difficulties = ['Easy', 'Medium', 'Hard'];
+
+    if (!mounted) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Create Challenge'),
+              content: Form(
+                key: formKey,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextFormField(
+                        controller: titleController,
+                        decoration: const InputDecoration(
+                          labelText: 'Challenge Title',
+                          hintText: '30-Day Challenge',
+                        ),
+                        validator: (v) =>
+                            v?.isEmpty ?? true ? 'Title required' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: selectedSport,
+                        decoration: const InputDecoration(labelText: 'Sport'),
+                        items: sports
+                            .map(
+                              (s) => DropdownMenuItem(value: s, child: Text(s)),
+                            )
+                            .toList(),
+                        onChanged: (v) =>
+                            setDialogState(() => selectedSport = v),
+                        validator: (v) => v == null ? 'Sport required' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: descriptionController,
+                        decoration: const InputDecoration(
+                          labelText: 'Description',
+                          hintText: 'Run 100K total...',
+                        ),
+                        maxLines: 2,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: goalController,
+                        decoration: const InputDecoration(
+                          labelText: 'Goal',
+                          hintText: 'Complete 100 km',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: selectedDifficulty,
+                        decoration: const InputDecoration(
+                          labelText: 'Difficulty',
+                        ),
+                        items: difficulties
+                            .map(
+                              (d) => DropdownMenuItem(value: d, child: Text(d)),
+                            )
+                            .toList(),
+                        onChanged: (v) =>
+                            setDialogState(() => selectedDifficulty = v),
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: rewardController,
+                        decoration: const InputDecoration(
+                          labelText: 'Reward',
+                          hintText: 'Free sports gear',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      ElevatedButton(
+                        onPressed: () async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate:
+                                selectedEndDate ??
+                                DateTime.now().add(const Duration(days: 30)),
+                            firstDate: DateTime.now(),
+                            lastDate: DateTime.now().add(
+                              const Duration(days: 365),
+                            ),
+                          );
+                          if (picked != null) {
+                            setDialogState(() => selectedEndDate = picked);
+                          }
+                        },
+                        child: Text(
+                          selectedEndDate != null
+                              ? 'End: ${selectedEndDate!.toLocal()}'.split(
+                                  ' ',
+                                )[0]
+                              : 'Pick End Date',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: _isCreatingChallenge
+                      ? null
+                      : () async {
+                          final dialogNavigator = Navigator.of(context);
+                          final rootMessenger = ScaffoldMessenger.of(
+                            this.context,
+                          );
+                          if (!formKey.currentState!.validate()) return;
+                          if (selectedEndDate == null) {
+                            rootMessenger.showSnackBar(
+                              const SnackBar(
+                                content: Text('Please pick an end date'),
+                              ),
+                            );
+                            return;
+                          }
+                          await _createChallenge(
+                            title: titleController.text,
+                            sport: selectedSport!,
+                            description: descriptionController.text,
+                            goal: goalController.text,
+                            difficulty: selectedDifficulty,
+                            reward: rewardController.text,
+                            endDate: selectedEndDate!,
+                          );
+                          if (mounted) dialogNavigator.pop();
+                        },
+                  child: _isCreatingChallenge
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Create'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  /// Creates a new challenge in Firestore.
+  ///
+  /// Initializes challenge with status='active', empty progressByUser map,
+  /// createdBy=current user, and participantsCount=0.
+  /// Shows success/error feedback via SnackBar.
+  Future<void> _createChallenge({
+    required String title,
+    required String sport,
+    required String description,
+    required String goal,
+    required String? difficulty,
+    required String reward,
+    required DateTime endDate,
+  }) async {
+    if (_isCreatingChallenge) return;
+
+    setState(() => _isCreatingChallenge = true);
+
+    try {
+      // Normalize sport name to match expected format
+      final sportKey = sport.toLowerCase();
+
+      await FirebaseFirestore.instance.collection('challenges').add({
+        'title': title,
+        'sport': sportKey,
+        'description': description.isNotEmpty ? description : null,
+        'goalLabel': goal.isNotEmpty ? goal : null,
+        'difficulty': difficulty?.isNotEmpty ?? false ? difficulty : null,
+        'reward': reward.isNotEmpty ? reward : null,
+        'endDate': Timestamp.fromDate(endDate),
+        'status': 'active',
+        'createdBy': widget.profile.uid,
+        'participantsCount': 0,
+        'progressByUser': {},
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Challenge created successfully!')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error creating challenge: $e')));
+    } finally {
+      if (mounted) {
+        setState(() => _isCreatingChallenge = false);
+      }
+    }
   }
 }
 
+/// Card with challenge information, details modal, and join/leave action.
 class _ChallengeCard extends StatefulWidget {
   const _ChallengeCard({
     required this.challengeDoc,
@@ -177,7 +413,9 @@ class _ChallengeCard extends StatefulWidget {
 
 class _ChallengeCardState extends State<_ChallengeCard> {
   bool _loading = false;
+  bool _progressUpdating = false;
 
+  /// Returns sport accent color used in chip, icon, and progress highlights.
   Color _accentForSport(String sport) {
     switch (sport.toLowerCase()) {
       case 'running':
@@ -196,6 +434,7 @@ class _ChallengeCardState extends State<_ChallengeCard> {
     }
   }
 
+  /// Maps raw sport key to a user-facing English label.
   String _sportLabel(String sport) {
     switch (sport.toLowerCase()) {
       case 'futbol':
@@ -214,6 +453,7 @@ class _ChallengeCardState extends State<_ChallengeCard> {
     }
   }
 
+  /// Selects icon by sport to make each challenge visually distinguishable.
   IconData _iconForSport(String sport) {
     switch (sport.toLowerCase()) {
       case 'running':
@@ -232,6 +472,7 @@ class _ChallengeCardState extends State<_ChallengeCard> {
     }
   }
 
+  /// Computes remaining time label from challenge end date.
   String _daysLeft(DateTime? endDate) {
     if (endDate == null) return 'No end date';
 
@@ -243,6 +484,7 @@ class _ChallengeCardState extends State<_ChallengeCard> {
     return '$left days left';
   }
 
+  /// Opens a bottom sheet with extended challenge details and metadata.
   Future<void> _openChallengeDetails(Map<String, dynamic> data) async {
     final title = (data['title'] as String?)?.trim().isNotEmpty == true
         ? data['title'] as String
@@ -355,6 +597,57 @@ class _ChallengeCardState extends State<_ChallengeCard> {
     );
   }
 
+  /// Updates user progress in the challenge with transactional guarantee.
+  ///
+  /// [delta] is the amount to add to current progress (e.g., 0.05 for +5%).
+  /// Progress is automatically clamped to [0, 1].
+  Future<void> _updateProgress(double delta) async {
+    if (_progressUpdating || !mounted) return;
+
+    setState(() => _progressUpdating = true);
+
+    try {
+      final challengeRef = FirebaseFirestore.instance
+          .collection('challenges')
+          .doc(widget.challengeDoc.id);
+
+      await FirebaseFirestore.instance.runTransaction((transaction) async {
+        final snapshot = await transaction.get(challengeRef);
+        if (!snapshot.exists) return;
+
+        final data = snapshot.data() as Map<String, dynamic>;
+        final progressByUser = Map<String, dynamic>.from(
+          data['progressByUser'] ?? const {},
+        );
+
+        // Calcula nuevo progreso basado en el delta proporcionado.
+        final currentProgress =
+            (progressByUser[widget.userId] as num?)?.toDouble() ?? 0.0;
+        final newProgress = (currentProgress + delta).clamp(0.0, 1.0);
+
+        // Actualiza solo el progreso del usuario en esta transaccion.
+        transaction.update(challengeRef, {
+          'progressByUser.${widget.userId}': newProgress,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      });
+
+      if (!mounted) return;
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not update progress.')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _progressUpdating = false);
+      }
+    }
+  }
+
+  /// Joins or leaves the challenge in a Firestore transaction.
+  ///
+  /// Transaction guarantees participant counters and per-user progress stay in sync.
   Future<void> _toggleParticipation() async {
     if (_loading) return;
 
@@ -407,6 +700,7 @@ class _ChallengeCardState extends State<_ChallengeCard> {
     }
   }
 
+  /// Renders challenge card with progress, participants, and CTA state.
   @override
   Widget build(BuildContext context) {
     final data = widget.challengeDoc.data();
@@ -556,15 +850,69 @@ class _ChallengeCardState extends State<_ChallengeCard> {
                 ],
               ),
               const SizedBox(height: 12),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(999),
-                child: LinearProgressIndicator(
-                  value: clampedProgress,
-                  minHeight: 10,
-                  backgroundColor: Colors.grey[200],
-                  valueColor: AlwaysStoppedAnimation(accent),
+              if (isJoined)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(999),
+                            child: LinearProgressIndicator(
+                              value: clampedProgress,
+                              minHeight: 12,
+                              backgroundColor: Colors.grey[200],
+                              valueColor: AlwaysStoppedAnimation(accent),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        FilledButton.tonalIcon(
+                          onPressed: _progressUpdating
+                              ? null
+                              : () => _updateProgress(-0.05),
+                          icon: const Icon(Icons.remove),
+                          label: const Text('-5%'),
+                        ),
+                        const SizedBox(width: 6),
+                        FilledButton.icon(
+                          onPressed: _progressUpdating
+                              ? null
+                              : () => _updateProgress(0.05),
+                          icon: const Icon(Icons.add),
+                          label: const Text('+5%'),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: accent,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Text(
+                        _progressUpdating
+                            ? 'Updating progress...'
+                            : 'Use - and + buttons to update progress',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: accent,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+              else
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(999),
+                  child: LinearProgressIndicator(
+                    value: clampedProgress,
+                    minHeight: 10,
+                    backgroundColor: Colors.grey[200],
+                    valueColor: AlwaysStoppedAnimation(accent),
+                  ),
                 ),
-              ),
               const SizedBox(height: 10),
               Row(
                 children: [
@@ -620,11 +968,13 @@ class _ChallengeCardState extends State<_ChallengeCard> {
   }
 }
 
+/// Neutral informational box shown on loading-error-empty states.
 class _InfoBox extends StatelessWidget {
   const _InfoBox({required this.text});
 
   final String text;
 
+  /// Renders one message container with subtle background emphasis.
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -639,6 +989,7 @@ class _InfoBox extends StatelessWidget {
   }
 }
 
+/// DTO for recommendation content consumed by the recommendation banner.
 class _ChallengeRecommendation {
   final String challengeId;
   final String title;
@@ -653,7 +1004,9 @@ class _ChallengeRecommendation {
   });
 }
 
+/// Smart recommendation engine for ordering and selecting best next challenge.
 class _SmartChallengeRecommender {
+  /// Sorts challenges by computed score and then by nearest end date as tie-breaker.
   static List<QueryDocumentSnapshot<Map<String, dynamic>>> rankChallenges({
     required List<QueryDocumentSnapshot<Map<String, dynamic>>> challenges,
     required UserProfile profile,
@@ -685,6 +1038,7 @@ class _SmartChallengeRecommender {
     return ranked;
   }
 
+  /// Produces a single recommendation with human-readable reason text.
   static _ChallengeRecommendation? buildRecommendation({
     required List<QueryDocumentSnapshot<Map<String, dynamic>>> challenges,
     required UserProfile profile,
@@ -722,6 +1076,10 @@ class _SmartChallengeRecommender {
     );
   }
 
+  /// Computes multi-factor score for one challenge.
+  ///
+  /// Factors: user preference, ease, date urgency, progress continuity, and
+  /// match with main sport.
   static _ScoredChallenge? _scoreChallenge({
     required QueryDocumentSnapshot<Map<String, dynamic>> doc,
     required UserProfile profile,
@@ -741,7 +1099,7 @@ class _SmartChallengeRecommender {
     final participants = List<String>.from(data['participants'] ?? const []);
     final isJoined = participants.contains(profile.uid);
 
-    // Si ya va avanzado en uno, prioriza sugerir continuar ese mismo.
+    // If user already joined and progressed, prioritize continuity.
     final progressByUser = Map<String, dynamic>.from(
       data['progressByUser'] ?? const {},
     );
@@ -808,6 +1166,7 @@ class _SmartChallengeRecommender {
   }
 }
 
+/// Internal score container used by ranking and recommendation methods.
 class _ScoredChallenge {
   final String id;
   final String title;
@@ -830,11 +1189,13 @@ class _ScoredChallenge {
   });
 }
 
+/// Banner widget that displays the smart recommendation result.
 class _ChallengeRecommendationBox extends StatelessWidget {
   final _ChallengeRecommendation recommendation;
 
   const _ChallengeRecommendationBox({required this.recommendation});
 
+  /// Renders recommendation title and explanation.
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
