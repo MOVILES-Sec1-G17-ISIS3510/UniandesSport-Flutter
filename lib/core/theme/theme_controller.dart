@@ -5,7 +5,14 @@ import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+/// Controls dynamic app theming based on ambient light and battery level.
+///
+/// Decision rules:
+/// - Low battery forces dark mode to reduce energy usage on many displays.
+/// - Ambient light from camera samples toggles between dark/light modes.
+/// - Smoothing and confidence counters avoid flickering caused by noisy frames.
 class ThemeController extends ChangeNotifier with WidgetsBindingObserver {
+  /// Registers lifecycle observer so theme monitoring can pause/resume with app state.
   ThemeController() {
     WidgetsBinding.instance.addObserver(this);
   }
@@ -26,6 +33,7 @@ class ThemeController extends ChangeNotifier with WidgetsBindingObserver {
   Timer? _batteryTimer;
   CameraController? _cameraController;
   bool _monitoringStarted = false;
+  bool _isCameraInitializing = false;
   bool _isDisposed = false;
   int? _batteryLevel;
   double? _ambientLight;
@@ -34,8 +42,12 @@ class ThemeController extends ChangeNotifier with WidgetsBindingObserver {
   int _lightConfidence = 0;
   DateTime _lastCameraSample = DateTime.fromMillisecondsSinceEpoch(0);
 
+  /// Current mode consumed by MaterialApp.themeMode.
   ThemeMode get themeMode => _themeMode;
 
+  /// Starts battery polling and camera sampling, then applies theme rules.
+  ///
+  /// Safe to call multiple times; monitoring starts only once per dependency.
   Future<void> startMonitoring() async {
     if (_isDisposed) {
       return;
@@ -57,6 +69,7 @@ class ThemeController extends ChangeNotifier with WidgetsBindingObserver {
     _applyThemePreference();
   }
 
+  /// Refreshes battery percentage used by the low-battery dark-mode rule.
   Future<void> _refreshBatteryLevel() async {
     try {
       _batteryLevel = await _battery.batteryLevel;
@@ -66,21 +79,31 @@ class ThemeController extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
+  /// Initializes rear camera and starts image streaming for light estimation.
+  ///
+  /// Includes defensive checks for unsupported targets and concurrent starts.
   Future<void> _startCameraMonitoring() async {
-    if (_isDisposed || kIsWeb) {
+    if (_isDisposed ||
+        kIsWeb ||
+        _cameraController != null ||
+        _isCameraInitializing) {
       return;
     }
+
+    _isCameraInitializing = true;
 
     final isMobileTarget =
         defaultTargetPlatform == TargetPlatform.android ||
         defaultTargetPlatform == TargetPlatform.iOS;
     if (!isMobileTarget) {
+      _isCameraInitializing = false;
       return;
     }
 
     try {
       final cameras = await availableCameras();
       if (cameras.isEmpty) {
+        _isCameraInitializing = false;
         return;
       }
 
@@ -106,9 +129,12 @@ class ThemeController extends ChangeNotifier with WidgetsBindingObserver {
       await controller.startImageStream(_handleCameraImage);
     } catch (_) {
       _cameraController = null;
+    } finally {
+      _isCameraInitializing = false;
     }
   }
 
+  /// Processes camera frames at a controlled cadence and updates smoothed light.
   void _handleCameraImage(CameraImage image) {
     final now = DateTime.now();
     if (now.difference(_lastCameraSample) < _cameraSampleInterval) {
@@ -123,12 +149,14 @@ class ThemeController extends ChangeNotifier with WidgetsBindingObserver {
       _smoothedAmbientLight = _ambientLight;
     } else {
       _smoothedAmbientLight =
-          (previousSmoothed * (1 - _smoothingFactor)) + (_ambientLight! * _smoothingFactor);
+          (previousSmoothed * (1 - _smoothingFactor)) +
+          (_ambientLight! * _smoothingFactor);
     }
 
     _applyThemePreference();
   }
 
+  /// Approximates brightness from camera planes and normalizes to [0, 1].
   double _estimateBrightness(CameraImage image) {
     if (image.planes.isEmpty) {
       return 1;
@@ -176,6 +204,7 @@ class ThemeController extends ChangeNotifier with WidgetsBindingObserver {
     return (total / (sampleCount * 255)).clamp(0.0, 1.0);
   }
 
+  /// Applies theme decision logic using battery-first then ambient-light rules.
   void _applyThemePreference() {
     final batteryLow = (_batteryLevel ?? 100) <= _lowBatteryThreshold;
     final ambientLight = _smoothedAmbientLight ?? _ambientLight;
@@ -213,6 +242,7 @@ class ThemeController extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
+  /// Pauses/restarts camera monitoring based on app lifecycle transitions.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
@@ -223,6 +253,7 @@ class ThemeController extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
+  /// Stops image stream and disposes the active camera controller safely.
   Future<void> _pauseAndDisposeCamera() async {
     final controller = _cameraController;
     if (controller == null) {
@@ -246,6 +277,7 @@ class ThemeController extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
+  /// Releases timers, lifecycle observer, and camera resources.
   @override
   void dispose() {
     _isDisposed = true;

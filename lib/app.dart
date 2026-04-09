@@ -10,11 +10,18 @@ import 'features/auth/presentation/controllers/auth_controller.dart';
 import 'features/auth/presentation/pages/auth_gate.dart';
 import 'features/home/data/events_repository.dart';
 import 'features/home/presentation/controllers/play_view_model.dart';
+import 'core/services/notification_service.dart';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:uniandessport_flutter/features/coach/presentation/viewmodels/coaches_view_model.dart';
 import 'package:uniandessport_flutter/features/home/data/coach_repository.dart';
 
+/// Root widget de la aplicacion.
+///
+/// Responsabilidades principales:
+/// 1) Inicializar Firebase una sola vez.
+/// 2) Inicializar servicios que dependen de Firebase (p.ej. notificaciones).
+/// 3) Construir el arbol de providers (repositorios + controladores).
 class UniandesSportsApp extends StatefulWidget {
   const UniandesSportsApp({super.key});
 
@@ -23,15 +30,19 @@ class UniandesSportsApp extends StatefulWidget {
 }
 
 class _UniandesSportsAppState extends State<UniandesSportsApp> {
-  late final Future<FirebaseApp> _firebaseInitFuture;
+  late final Future<void> _appInitFuture;
   late final ThemeController _themeController;
 
   @override
   void initState() {
     super.initState();
-    _firebaseInitFuture = Firebase.initializeApp();
+
     _themeController = ThemeController();
     _themeController.startMonitoring();
+
+    _appInitFuture = Firebase.initializeApp().then((_) {
+      return NotificationService.instance.initialize();
+    });
   }
 
   @override
@@ -48,8 +59,8 @@ class _UniandesSportsAppState extends State<UniandesSportsApp> {
         builder: (context) {
           final themeController = context.watch<ThemeController>();
 
-          return FutureBuilder<FirebaseApp>(
-            future: _firebaseInitFuture,
+          return FutureBuilder<void>(
+            future: _appInitFuture,
             builder: (context, snapshot) {
               if (snapshot.connectionState != ConnectionState.done) {
                 return MaterialApp(

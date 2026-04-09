@@ -20,13 +20,13 @@ class ActionButtonsSection extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        // Botón buscar (3/4 del espacio)
+        // Botón buscar
         Expanded(
-          flex: 3,
+          flex: 2,
           child: ElevatedButton.icon(
             onPressed: canSearch ? onSearchPressed : null,
             icon: const Icon(Icons.search),
-            label: const Text('Buscar'),
+            label: const Text('Search'),
             style: ElevatedButton.styleFrom(
               backgroundColor: canSearch ? AppTheme.teal : Colors.grey[300],
               foregroundColor: canSearch ? Colors.white : Colors.grey[500],
@@ -38,11 +38,13 @@ class ActionButtonsSection extends StatelessWidget {
         ),
         const SizedBox(width: 12),
 
-        // Botón crear (1/4 del espacio)
+        // Botón crear evento casual
         Expanded(
-          flex: 1,
-          child: ElevatedButton(
+          flex: 2,
+          child: ElevatedButton.icon(
             onPressed: canCreate ? onCreatePressed : null,
+            icon: const Icon(Icons.add),
+            label: const Text('Crear evento'),
             style: ElevatedButton.styleFrom(
               backgroundColor: canCreate ? AppTheme.teal : Colors.grey[300],
               foregroundColor: canCreate ? Colors.white : Colors.grey[500],
@@ -50,11 +52,9 @@ class ActionButtonsSection extends StatelessWidget {
               disabledForegroundColor: Colors.grey[500],
               padding: const EdgeInsets.symmetric(vertical: 16),
             ),
-            child: const Icon(Icons.add),
           ),
         ),
       ],
     );
   }
 }
-
