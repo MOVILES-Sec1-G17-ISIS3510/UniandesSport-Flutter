@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:uniandessport_flutter/core/services/analytics_service.dart';
 import 'package:uniandessport_flutter/features/coach/domain/models/coach_model.dart';
 import 'package:uniandessport_flutter/features/coach/presentation/dialogs/coach_dialog.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -74,7 +75,7 @@ class CoachCard extends StatelessWidget {
                       const Icon(Icons.star, size: 16, color: Colors.orange),
                       const SizedBox(width: 4),
                       Text(
-                        coach.rating.toString(),
+                        (coach.rating ?? 0).toStringAsFixed(1),
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
@@ -111,7 +112,7 @@ class CoachCard extends StatelessWidget {
               ),
               const SizedBox(width: 4),
               Text(
-                '${coach.rating}',
+                (coach.rating ?? 0).toStringAsFixed(1),
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
@@ -129,6 +130,10 @@ class CoachCard extends StatelessWidget {
               Expanded(
                 child: ElevatedButton(
                   onPressed: () {
+                    AnalyticsService.instance.logViewEventDetails(
+                      sportCategory: coach.deporte ?? '',
+                      eventId: coach.id ?? '',
+                    );
                     showDialog(
                       context: context,
                       builder: (_) => CoachProfileDialog(coach: coach),

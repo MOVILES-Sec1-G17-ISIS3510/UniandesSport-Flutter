@@ -58,7 +58,8 @@ class _RequestCoachDialogState extends State<RequestCoachDialog> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(20),
       ),
-      child: Padding(
+      child: SingleChildScrollView(
+        child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -191,6 +192,7 @@ class _RequestCoachDialogState extends State<RequestCoachDialog> {
           ],
         ),
       ),
+        ),
     );
   }
 

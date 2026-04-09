@@ -184,7 +184,10 @@ class CoachProfileDialog extends StatelessWidget {
                         showDialog(
                           context: context,
                           builder: (_) =>
-                              AddReviewDialog(coachId: coach.id ?? ''),
+                              AddReviewDialog(
+                                coachId: coach.id ?? '',
+                                coachSport: coach.deporte ?? '',
+                              ),
                         );
                       },
                       icon: const Icon(Icons.rate_review_outlined),
@@ -236,6 +239,7 @@ class CoachProfileDialog extends StatelessWidget {
                             ? data['userName'] as String
                             : 'Anonymous';
                         final comment = data['comment'] as String? ?? '';
+                        final imageUrl = data['imageUrl'] as String?;
                         final createdAt = data['createdAt'];
                         String dateStr = '';
                         if (createdAt is Timestamp) {
@@ -251,6 +255,7 @@ class CoachProfileDialog extends StatelessWidget {
                             dateStr,
                             comment,
                             reviewRating,
+                            imageUrl: imageUrl,
                           ),
                         );
                       }).toList(),
@@ -401,7 +406,8 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-Widget _reviewCard(String name, String date, String review, int rating) {
+Widget _reviewCard(String name, String date, String review, int rating,
+    {String? imageUrl}) {
   return Container(
     padding: const EdgeInsets.all(14),
     decoration: BoxDecoration(
@@ -432,6 +438,31 @@ Widget _reviewCard(String name, String date, String review, int rating) {
           Text(date, style: const TextStyle(fontSize: 12, color: Colors.grey)),
         ],
         if (review.isNotEmpty) ...[const SizedBox(height: 6), Text(review)],
+        if (imageUrl != null) ...[
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Image.network(
+              imageUrl,
+              width: double.infinity,
+              height: 160,
+              fit: BoxFit.cover,
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) return child;
+                return const SizedBox(
+                  height: 160,
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              },
+              errorBuilder: (context, error, stackTrace) => const SizedBox(
+                height: 60,
+                child: Center(
+                  child: Icon(Icons.broken_image, color: Colors.grey),
+                ),
+              ),
+            ),
+          ),
+        ],
       ],
     ),
   );

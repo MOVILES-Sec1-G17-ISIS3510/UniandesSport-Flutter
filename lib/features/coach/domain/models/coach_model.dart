@@ -35,7 +35,6 @@ class Coach {
     this.whatsapp,
   });
 
-
   String get initials {
     if (nombre == null || nombre!.trim().isEmpty) return "";
 
@@ -48,6 +47,23 @@ class Coach {
     return (parts.first[0] + parts.last[0]).toUpperCase();
   }
 
+  static double? _asDouble(dynamic value) {
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '');
+  }
+
+  static int? _asInt(dynamic value) {
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '');
+  }
+
+  static bool? _asBool(dynamic value) {
+    if (value is bool) return value;
+    if (value is String) {
+      return value.toLowerCase() == 'true';
+    }
+    return null;
+  }
 
   factory Coach.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>?;
@@ -60,17 +76,16 @@ class Coach {
       experiencia: data?['experiencia'] as String?,
       nombre: data?['nombre'] as String?,
       precio: data?['precio'] as String?,
-      rankInSport: data?['rankInSport'] as int?,
-      rating: data?['rating'] as double?,
-      sessionsDelivered: data?['sessionsDelivered'] as int?,
-      totalCoachesInSport: data?['totalCoachesInSport'] as int?,
-      totalReviews: data?['totalReviews'] as int?,
-      tournamentWins: data?['tournamentWins'] as int?,
-      verified: data?['verified'] as bool?,
+      rankInSport: _asInt(data?['rankInSport']),
+      rating: _asDouble(data?['rating']),
+      sessionsDelivered: _asInt(data?['sessionsDelivered']),
+      totalCoachesInSport: _asInt(data?['totalCoachesInSport']),
+      totalReviews: _asInt(data?['totalReviews']),
+      tournamentWins: _asInt(data?['tournamentWins']),
+      verified: _asBool(data?['verified']),
       whatsapp: data?['whatsapp'] as String?,
     );
   }
-
 
   factory Coach.fromJson(Map<String, dynamic>? json) {
     if (json == null) return const Coach();
@@ -83,17 +98,16 @@ class Coach {
       id: json['id'] as String?,
       nombre: json['nombre'] as String?,
       precio: json['precio'] as String?,
-      rankInSport: json['rankInSport'] as int?,
-      rating: json['rating'] as double?,
-      sessionsDelivered: json['sessionsDelivered'] as int?,
-      totalCoachesInSport: json['totalCoachesInSport'] as int?,
-      totalReviews: json['totalReviews'] as int?,
-      tournamentWins: json['tournamentWins'] as int?,
-      verified: json['verified'] as bool?,
+      rankInSport: _asInt(json['rankInSport']),
+      rating: _asDouble(json['rating']),
+      sessionsDelivered: _asInt(json['sessionsDelivered']),
+      totalCoachesInSport: _asInt(json['totalCoachesInSport']),
+      totalReviews: _asInt(json['totalReviews']),
+      tournamentWins: _asInt(json['tournamentWins']),
+      verified: _asBool(json['verified']),
       whatsapp: json['whatsapp'] as String?,
     );
   }
-
 
   Map<String, dynamic> toFirestore() {
     return {
@@ -113,7 +127,6 @@ class Coach {
       'whatsapp': whatsapp,
     };
   }
-
 
   Map<String, dynamic> toJson() => toFirestore();
 }
