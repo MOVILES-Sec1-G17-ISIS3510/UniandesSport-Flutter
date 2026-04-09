@@ -30,43 +30,19 @@ class UniandesSportsApp extends StatefulWidget {
 }
 
 class _UniandesSportsAppState extends State<UniandesSportsApp> {
-  /// Future unico para toda la vida del State.
-  ///
-  /// Evita reinicializaciones de Firebase en cada rebuild.
   late final Future<void> _appInitFuture;
-  late final Future<FirebaseApp> _firebaseInitFuture;
   late final ThemeController _themeController;
 
   @override
   void initState() {
     super.initState();
 
-    // Orden recomendado:
-    // 1) Firebase.initializeApp()
-    // 2) Servicios dependientes de Firebase
-    // Si Firebase falla, _appInitFuture termina en error y se muestra
-    // _FirebaseErrorPage con detalle util para diagnostico.
-    _appInitFuture = Firebase.initializeApp().then((_) {
-      // Las notificaciones se inicializan una vez que Firebase ya esta listo.
-      return NotificationService.instance.initialize();
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<void>(
-      future: _appInitFuture,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return MaterialApp(
-            debugShowCheckedModeBanner: false,
-            theme: AppTheme.light,
-            home: const _SplashLoadingPage(),
-          );
-        }
-    _firebaseInitFuture = Firebase.initializeApp();
     _themeController = ThemeController();
     _themeController.startMonitoring();
+
+    _appInitFuture = Firebase.initializeApp().then((_) {
+      return NotificationService.instance.initialize();
+    });
   }
 
   @override
@@ -83,8 +59,8 @@ class _UniandesSportsAppState extends State<UniandesSportsApp> {
         builder: (context) {
           final themeController = context.watch<ThemeController>();
 
-          return FutureBuilder<FirebaseApp>(
-            future: _firebaseInitFuture,
+          return FutureBuilder<void>(
+            future: _appInitFuture,
             builder: (context, snapshot) {
               if (snapshot.connectionState != ConnectionState.done) {
                 return MaterialApp(
@@ -160,54 +136,6 @@ class _UniandesSportsAppState extends State<UniandesSportsApp> {
               );
             },
           );
-        }
-
-        return MultiProvider(
-          providers: [
-            // ── Capa de datos ─────────────────────────────────────────────
-            // AuthRepository: instancia normal (1 por árbol, pero no Singleton
-            // porque podría necesitar distintas instancias en tests).
-            ChangeNotifierProvider(
-              create: (_) => CoachesViewModel(
-                CoachRepositoryImpl(firestore: FirebaseFirestore.instance),
-              )..loadCoaches(),
-            ),
-            Provider<AuthRepository>(create: (_) => AuthRepository()),
-            // EventsRepository: Singleton — se comparte la MISMA instancia
-            // en toda la app (PlayPage, HomePage, etc.) sin recrearla.
-            Provider<EventsRepository>(
-              create: (_) => EventsRepository.instance,
-            ),
-
-            // ── ViewModels (MVVM) ─────────────────────────────────────────
-            // AuthController depende de AuthRepository → ProxyProvider.
-            ChangeNotifierProxyProvider<AuthRepository, AuthController>(
-              create: (context) =>
-                  AuthController(context.read<AuthRepository>()),
-              update: (context, repository, controller) =>
-                  controller ?? AuthController(repository),
-            ),
-            // PlayViewModel depende de EventsRepository y del perfil del usuario.
-            // El perfil se inyecta más abajo desde AppShell cuando ya existe sesión.
-            // Aquí se provisiona con un perfil vacío que AppShell sobreescribe.
-            ChangeNotifierProxyProvider<EventsRepository, PlayViewModel>(
-              create: (context) => PlayViewModel(
-                repository: context.read<EventsRepository>(),
-                profile: UserProfile.empty(),
-              ),
-              update: (context, repo, vm) =>
-                  vm ??
-                  PlayViewModel(repository: repo, profile: UserProfile.empty()),
-            ),
-          ],
-          child: MaterialApp(
-            debugShowCheckedModeBanner: false,
-            title: 'Uniandes Sports',
-            theme: AppTheme.light,
-            home: const AuthGate(),
-          ),
-        );
-      },
         },
       ),
     );
