@@ -37,7 +37,6 @@ class _AppShellState extends State<AppShell> {
     Icons.sports_tennis,
     Icons.pool,
     Icons.sports,
-    Icons.pool,
     Icons.sports_golf,
   ];
 
@@ -48,9 +47,6 @@ class _AppShellState extends State<AppShell> {
     _setupProfileListener();
     _startPlayIconRotation();
 
-    // Inyectar el perfil real en el PlayViewModel tan pronto como AppShell
-    // se construye. Así el ViewModel tiene acceso al UID correcto para
-    // registrar usuarios en eventos.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       context.read<PlayViewModel>().updateProfile(_profile);
@@ -112,7 +108,10 @@ class _AppShellState extends State<AppShell> {
             ),
             label: '',
           ),
-          const BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Social'),
+          const BottomNavigationBarItem(
+            icon: Icon(Icons.people),
+            label: 'Social',
+          ),
           const BottomNavigationBarItem(
             icon: Icon(Icons.person_outline),
             label: 'Profes',
@@ -185,7 +184,6 @@ class _HomePageWrapper extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Header badge
                 Text(
                   'UNIANDES SPORTS',
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
@@ -194,8 +192,6 @@ class _HomePageWrapper extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 12),
-
-                // Greeting
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -244,8 +240,6 @@ class _HomePageWrapper extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 24),
-
-                // Stats row
                 Row(
                   children: [
                     Expanded(
@@ -268,45 +262,42 @@ class _HomePageWrapper extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 24),
-
-                // Quick filters
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
                     children: [
                       _QuickFilterChip(
                         icon: '⛅',
-                        label: "24° Cloudy",
+                        label: '24° Cloudy',
                         onTap: () {},
                       ),
                       const SizedBox(width: 8),
                       _QuickFilterChip(
                         icon: '📊',
-                        label: "Strava",
+                        label: 'Strava',
                         onTap: () {},
                       ),
                       const SizedBox(width: 8),
                       _QuickFilterChip(
                         icon: '🕐',
-                        label: "History",
+                        label: 'History',
                         onTap: () {},
                       ),
                       const SizedBox(width: 8),
                       _QuickFilterChip(
                         icon: '🏆',
-                        label: "Trophies",
+                        label: 'Trophies',
                         onTap: () {},
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 28),
-
                 Text(
                   'EVENTOS RECOMENDADOS',
-                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -316,8 +307,6 @@ class _HomePageWrapper extends StatelessWidget {
                 const SizedBox(height: 16),
                 RecommendedEventsSection(userId: profile.uid),
                 const SizedBox(height: 32),
-
-                // Quick Activity section
                 Text(
                   'QUICK ACTIVITY',
                   style: Theme.of(
@@ -329,8 +318,6 @@ class _HomePageWrapper extends StatelessWidget {
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: 16),
-
-                // Activity cards
                 _ActivityCard(
                   icon: '🏃',
                   title: '30-min Interval Run',

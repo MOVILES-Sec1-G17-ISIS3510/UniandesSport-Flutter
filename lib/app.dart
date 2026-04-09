@@ -9,12 +9,18 @@ import 'features/auth/presentation/controllers/auth_controller.dart';
 import 'features/auth/presentation/pages/auth_gate.dart';
 import 'features/home/data/events_repository.dart';
 import 'features/home/presentation/controllers/play_view_model.dart';
+import 'core/services/notification_service.dart';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:uniandessport_flutter/features/coach/presentation/viewmodels/coaches_view_model.dart';
 import 'package:uniandessport_flutter/features/home/data/coach_repository.dart';
 
-
+/// Root widget de la aplicacion.
+///
+/// Responsabilidades principales:
+/// 1) Inicializar Firebase una sola vez.
+/// 2) Inicializar servicios que dependen de Firebase (p.ej. notificaciones).
+/// 3) Construir el arbol de providers (repositorios + controladores).
 class UniandesSportsApp extends StatefulWidget {
   const UniandesSportsApp({super.key});
 
@@ -23,18 +29,30 @@ class UniandesSportsApp extends StatefulWidget {
 }
 
 class _UniandesSportsAppState extends State<UniandesSportsApp> {
-  late final Future<FirebaseApp> _firebaseInitFuture;
+  /// Future unico para toda la vida del State.
+  ///
+  /// Evita reinicializaciones de Firebase en cada rebuild.
+  late final Future<void> _appInitFuture;
 
   @override
   void initState() {
     super.initState();
-    _firebaseInitFuture = Firebase.initializeApp();
+
+    // Orden recomendado:
+    // 1) Firebase.initializeApp()
+    // 2) Servicios dependientes de Firebase
+    // Si Firebase falla, _appInitFuture termina en error y se muestra
+    // _FirebaseErrorPage con detalle util para diagnostico.
+    _appInitFuture = Firebase.initializeApp().then((_) {
+      // Las notificaciones se inicializan una vez que Firebase ya esta listo.
+      return NotificationService.instance.initialize();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<FirebaseApp>(
-      future: _firebaseInitFuture,
+    return FutureBuilder<void>(
+      future: _appInitFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
           return MaterialApp(
@@ -62,9 +80,7 @@ class _UniandesSportsAppState extends State<UniandesSportsApp> {
                 CoachRepositoryImpl(firestore: FirebaseFirestore.instance),
               )..loadCoaches(),
             ),
-            Provider<AuthRepository>(
-              create: (_) => AuthRepository(),
-            ),
+            Provider<AuthRepository>(create: (_) => AuthRepository()),
             // EventsRepository: Singleton — se comparte la MISMA instancia
             // en toda la app (PlayPage, HomePage, etc.) sin recrearla.
             Provider<EventsRepository>(
@@ -74,7 +90,8 @@ class _UniandesSportsAppState extends State<UniandesSportsApp> {
             // ── ViewModels (MVVM) ─────────────────────────────────────────
             // AuthController depende de AuthRepository → ProxyProvider.
             ChangeNotifierProxyProvider<AuthRepository, AuthController>(
-              create: (context) => AuthController(context.read<AuthRepository>()),
+              create: (context) =>
+                  AuthController(context.read<AuthRepository>()),
               update: (context, repository, controller) =>
                   controller ?? AuthController(repository),
             ),
@@ -87,7 +104,8 @@ class _UniandesSportsAppState extends State<UniandesSportsApp> {
                 profile: UserProfile.empty(),
               ),
               update: (context, repo, vm) =>
-                  vm ?? PlayViewModel(repository: repo, profile: UserProfile.empty()),
+                  vm ??
+                  PlayViewModel(repository: repo, profile: UserProfile.empty()),
             ),
           ],
           child: MaterialApp(
@@ -107,11 +125,7 @@ class _SplashLoadingPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(
-        child: CircularProgressIndicator(),
-      ),
-    );
+    return const Scaffold(body: Center(child: CircularProgressIndicator()));
   }
 }
 

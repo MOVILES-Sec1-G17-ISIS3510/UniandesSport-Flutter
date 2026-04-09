@@ -9,6 +9,7 @@ import '../widgets/action_buttons_section.dart';
 import '../widgets/event_card.dart';
 import '../widgets/modality_selector.dart';
 import '../widgets/sport_selector.dart';
+import '../widgets/recommended_events_section.dart';
 import 'create_casual_event_page.dart';
 import 'event_registration_result_page.dart';
 
@@ -107,12 +108,7 @@ class PlayPage extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  'Aun no hay recomendaciones disponibles',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
+                RecommendedEventsSection(userId: vm.profile.uid),
                 const SizedBox(height: 32),
               ],
               if (vm.hasSearched)

@@ -5,6 +5,13 @@ import '../../../../core/theme/app_theme.dart';
 import '../controllers/auth_controller.dart';
 import 'register_page.dart';
 
+/// Pantalla de inicio de sesion.
+///
+/// Flujo funcional:
+/// 1) Valida email y contrasena en formulario.
+/// 2) Llama AuthController.signIn(...).
+/// 3) Si login falla, muestra mensaje legible en SnackBar.
+/// 4) Si login es exitoso, AuthGate detecta la sesion y redirige a AppShell.
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
@@ -25,6 +32,11 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
+  /// Ejecuta el intento de login.
+  ///
+  /// Notas:
+  /// - No navega manualmente al home.
+  /// - La navegacion se resuelve por AuthGate escuchando authStateChanges().
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -37,7 +49,11 @@ class _LoginPageState extends State<LoginPage> {
     if (!mounted || success) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(controller.errorMessage ?? 'No fue posible iniciar sesión')),
+      SnackBar(
+        content: Text(
+          controller.errorMessage ?? 'No fue posible iniciar sesión',
+        ),
+      ),
     );
   }
 
@@ -56,10 +72,10 @@ class _LoginPageState extends State<LoginPage> {
               Text(
                 'UNIANDES SPORTS',
                 style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      color: AppTheme.teal,
-                      letterSpacing: 3,
-                      fontWeight: FontWeight.w700,
-                    ),
+                  color: AppTheme.teal,
+                  letterSpacing: 3,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               const SizedBox(height: 8),
               Text(
@@ -131,7 +147,9 @@ class _LoginPageState extends State<LoginPage> {
                               ? const SizedBox(
                                   width: 20,
                                   height: 20,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
                                 )
                               : const Text('Entrar'),
                         ),

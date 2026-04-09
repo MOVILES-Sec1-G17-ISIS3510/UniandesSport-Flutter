@@ -3,6 +3,12 @@ import 'package:flutter/material.dart';
 import '../../data/auth_repository.dart';
 import '../../domain/models/user_role.dart';
 
+/// Capa de presentacion para autenticacion.
+///
+/// Encapsula estados de UI (loading/error) y delega operaciones reales al
+/// AuthRepository. Mantiene separadas las responsabilidades:
+/// - UI: formularios, loading, mensajes
+/// - Data: Firebase Auth + Firestore
 class AuthController extends ChangeNotifier {
   AuthController(this._repository);
 
@@ -14,6 +20,7 @@ class AuthController extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
+  /// Limpia mensaje de error previo.
   void clearError() {
     if (_errorMessage == null) return;
     _errorMessage = null;
@@ -70,6 +77,7 @@ class AuthController extends ChangeNotifier {
 
   Future<void> signOut() => _repository.signOut();
 
+  /// Cambia el estado loading y notifica a listeners de Provider.
   void _setLoading(bool value) {
     _isLoading = value;
     notifyListeners();

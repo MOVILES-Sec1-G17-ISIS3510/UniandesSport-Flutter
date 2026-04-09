@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../../core/services/analytics_service.dart';
 import '../../../core/theme/app_sports.dart';
@@ -91,9 +92,19 @@ class EventsRepository {
     int limit = 10,
   }) async {
     try {
+      debugPrint(
+        '[Recommendations] Start getRecommendedEvents | userId=$userId | limit=$limit',
+      );
+
       final userDoc = await _firestore.collection('users').doc(userId).get();
       final userData = userDoc.data();
-      if (userData == null) return [];
+      if (userData == null) {
+        debugPrint(
+          '[Recommendations] User profile not found in /users/$userId. Using active-events fallback.',
+        );
+        // Fallback robusto para cuentas sin documento de perfil.
+        return _fetchAnyActiveEvents(limit: limit);
+      }
 
       final rawPrefs = userData['inferredPreferences'];
       final prefs = <String, num>{};
@@ -108,8 +119,9 @@ class EventsRepository {
       List<String> topSports;
       if (prefs.isEmpty) {
         final mainSport = userData['mainSport'] as String?;
-        if (mainSport == null || mainSport.trim().isEmpty) return [];
-        topSports = [AppSports.normalizeSportKey(mainSport)];
+        topSports = (mainSport == null || mainSport.trim().isEmpty)
+            ? <String>[]
+            : <String>[AppSports.normalizeSportKey(mainSport)];
       } else {
         final sorted = prefs.entries.toList()
           ..sort((a, b) => b.value.compareTo(a.value));
@@ -119,24 +131,23 @@ class EventsRepository {
             .toList();
       }
 
-      if (topSports.isEmpty) return [];
+      debugPrint(
+        '[Recommendations] Profile loaded | prefs=${prefs.length} | topSports=$topSports',
+      );
 
-      final snapshot = await _firestore
-          .collection('events')
-          .where('status', isEqualTo: 'active')
-          .where('sport', whereIn: topSports)
-          .limit(limit)
-          .get();
+      final events = await _fetchRecommendedOrFallbackEvents(
+        userId: userId,
+        topSports: topSports,
+        prefs: prefs,
+        limit: limit,
+      );
 
-      final events = snapshot.docs
-          .map(SportEvent.fromFirestore)
-          // No recomendar eventos del propio usuario ni eventos donde ya participa.
-          .where(
-            (event) =>
-                event.createdBy != userId &&
-                !event.participants.contains(userId),
-          )
-          .toList();
+      if (events.isEmpty) {
+        debugPrint(
+          '[Recommendations] Result empty after prioritized + fallback queries.',
+        );
+        return [];
+      }
 
       events.sort((a, b) {
         final aScore = (prefs[a.sport] ?? 0).toDouble();
@@ -147,14 +158,111 @@ class EventsRepository {
       });
 
       // Mostrar solo 5 recomendaciones, priorizando variedad entre deportes.
-      return _pickVariedRecommendedEvents(
+      final finalEvents = _pickVariedRecommendedEvents(
         events,
         topSports: topSports,
         maxResults: 5,
       );
+
+      debugPrint(
+        '[Recommendations] Final list size=${finalEvents.length} | rawSize=${events.length}',
+      );
+
+      return finalEvents;
     } catch (e) {
+      debugPrint('[Recommendations] Error getRecommendedEvents: $e');
       throw Exception('Error obteniendo recomendaciones: $e');
     }
+  }
+
+  Future<List<SportEvent>> _fetchRecommendedOrFallbackEvents({
+    required String userId,
+    required List<String> topSports,
+    required Map<String, num> prefs,
+    required int limit,
+  }) async {
+    // 1) Intento principal: usar deportes priorizados por el perfil.
+    if (topSports.isNotEmpty) {
+      final prioritizedSnapshot = await _firestore
+          .collection('events')
+          .where('status', isEqualTo: 'active')
+          .where('sport', whereIn: topSports)
+          .limit(limit)
+          .get();
+
+      debugPrint(
+        '[Recommendations] Prioritized query docs=${prioritizedSnapshot.docs.length} | sports=$topSports',
+      );
+
+      final prioritizedEvents = prioritizedSnapshot.docs
+          .map(SportEvent.fromFirestore)
+          .where(
+            (event) =>
+                event.createdBy != userId &&
+                !event.participants.contains(userId),
+          )
+          .toList();
+
+      debugPrint(
+        '[Recommendations] Prioritized after user filters=${prioritizedEvents.length}',
+      );
+
+      if (prioritizedEvents.isNotEmpty) {
+        return prioritizedEvents;
+      }
+    }
+
+    // 2) Fallback: mostrar eventos activos recientes aunque no coincidan
+    // con la preferencia del usuario. Esto evita la pantalla vacia.
+    final fallbackSnapshot = await _firestore
+        .collection('events')
+        .where('status', isEqualTo: 'active')
+        .limit(limit)
+        .get();
+
+    debugPrint(
+      '[Recommendations] Fallback active query docs=${fallbackSnapshot.docs.length}',
+    );
+
+    final fallbackEvents = fallbackSnapshot.docs
+        .map(SportEvent.fromFirestore)
+        .where(
+          (event) =>
+              event.createdBy != userId && !event.participants.contains(userId),
+        )
+        .toList();
+
+    debugPrint(
+      '[Recommendations] Fallback after user filters=${fallbackEvents.length}',
+    );
+
+    if (fallbackEvents.isEmpty) {
+      // Ultimo fallback: en ambientes de prueba puede que solo existan eventos
+      // creados por el mismo usuario. En ese caso mostramos activos sin filtro.
+      debugPrint(
+        '[Recommendations] Strict fallback empty. Using ANY active events fallback.',
+      );
+      return _fetchAnyActiveEvents(limit: limit);
+    }
+
+    fallbackEvents.sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
+    return fallbackEvents;
+  }
+
+  Future<List<SportEvent>> _fetchAnyActiveEvents({required int limit}) async {
+    final snapshot = await _firestore
+        .collection('events')
+        .where('status', isEqualTo: 'active')
+        .limit(limit)
+        .get();
+
+    debugPrint(
+      '[Recommendations] Any-active fallback docs=${snapshot.docs.length}',
+    );
+
+    final events = snapshot.docs.map(SportEvent.fromFirestore).toList();
+    events.sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
+    return events;
   }
 
   List<SportEvent> _pickVariedRecommendedEvents(
@@ -163,6 +271,12 @@ class EventsRepository {
     required int maxResults,
   }) {
     if (events.length <= maxResults) return events;
+
+    // Si no hay deportes priorizados en perfil, conserva los primeros eventos
+    // ordenados y evita vaciar la lista por round-robin sin buckets.
+    if (topSports.isEmpty) {
+      return events.take(maxResults).toList();
+    }
 
     final buckets = <String, List<SportEvent>>{
       for (final sport in topSports) sport: [],
@@ -173,6 +287,12 @@ class EventsRepository {
       if (buckets.containsKey(sport)) {
         buckets[sport]!.add(event);
       }
+    }
+
+    if (buckets.values.every((queue) => queue.isEmpty)) {
+      // Ningun evento coincide con los deportes priorizados; devolvemos la
+      // lista base para no dejar la seccion vacia.
+      return events.take(maxResults).toList();
     }
 
     final selected = <SportEvent>[];
@@ -190,6 +310,11 @@ class EventsRepository {
       }
 
       if (!addedInCycle) break;
+    }
+
+    if (selected.isEmpty) {
+      // Si el round-robin no pudo seleccionar nada, devolvemos la base.
+      return events.take(maxResults).toList();
     }
 
     return selected;
@@ -509,17 +634,266 @@ class EventsRepository {
   /// - `user` (default): usa el usuario autenticado.
   /// - `global`: agrega todos los usuarios.
   ///
+  /// [sources] es opcional y permite filtrar el calculo por origen:
+  /// - `event_created`
+  /// - `event_joined`
+  /// - `coach_request`
+  ///
+  /// Si [sources] es null o vacio, se usa el total acumulado.
+  ///
   /// Respuesta esperada (keys principales):
   /// - `mostScheduledSport`
   /// - `totalSchedules`
+  /// - `ranking`
+  /// - `appliedSources`
   /// - `sourceBreakdown`
   /// - `sports`
   Future<Map<String, dynamic>> getBq3MostScheduledSport({
     String scope = 'user',
+    List<String>? sources,
   }) async {
-    final callable = _functions.httpsCallable('getBq3MostScheduledSport');
-    final response = await callable.call({'scope': scope});
-    return Map<String, dynamic>.from(response.data as Map);
+    try {
+      final callable = _functions.httpsCallable('getBq3MostScheduledSport');
+      final response = await callable.call({
+        'scope': scope,
+        if (sources != null && sources.isNotEmpty) 'sources': sources,
+      });
+      return Map<String, dynamic>.from(response.data as Map);
+    } on FirebaseFunctionsException catch (e) {
+      if (e.code == 'not-found' || e.code == 'unavailable') {
+        debugPrint(
+          '[BQ3] Callable no disponible (${e.code}). Usando fallback local con Firestore.',
+        );
+        return _getBq3FallbackFromFirestore(scope: scope, sources: sources);
+      }
+      rethrow;
+    } on FirebaseException catch (e) {
+      if (e.code == 'permission-denied') {
+        return {
+          'scope': scope.trim().toLowerCase(),
+          'userId': FirebaseAuth.instance.currentUser?.uid,
+          'appliedSources': (sources == null || sources.isEmpty)
+              ? ['all']
+              : sources,
+          'hasData': false,
+          'mostScheduledSport': null,
+          'totalSchedules': 0,
+          'sourceBreakdown': <String, dynamic>{},
+          'ranking': const <Map<String, dynamic>>[],
+          'recommendedHomeFeedSport': null,
+          'sports': <String, dynamic>{},
+          'fallback': true,
+          'fallbackReason': 'permission_denied',
+        };
+      }
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> _getBq3FallbackFromFirestore({
+    required String scope,
+    List<String>? sources,
+  }) async {
+    final normalizedScope = scope.trim().toLowerCase();
+    final normalizedSources = (sources ?? const <String>[])
+        .map((s) => s.trim().toLowerCase())
+        .where((s) => s.isNotEmpty)
+        .toList();
+    final hasFilter = normalizedSources.isNotEmpty;
+
+    Map<String, dynamic> sports = {};
+    String? userId;
+
+    try {
+      if (normalizedScope == 'global') {
+        try {
+          final globalDoc = await _firestore
+              .collection('business_metrics')
+              .doc('bq3_global')
+              .get();
+          final data = globalDoc.data();
+          sports = Map<String, dynamic>.from((data?['sports'] ?? {}) as Map);
+        } on FirebaseException catch (e) {
+          if (e.code != 'permission-denied') rethrow;
+          debugPrint(
+            '[BQ3] Sin permisos para business_metrics/bq3_global. Retornando vacio en scope global.',
+          );
+          sports = {};
+        }
+      } else {
+        userId = FirebaseAuth.instance.currentUser?.uid;
+        if (userId == null || userId.isEmpty) {
+          throw Exception(
+            'No hay sesión activa para calcular BQ3 en fallback.',
+          );
+        }
+
+        Map<String, dynamic> existingSports = {};
+        try {
+          final userAggDoc = await _firestore
+              .collection('bq3_user_sport_counts')
+              .doc(userId)
+              .get();
+          final userAggData = userAggDoc.data();
+          existingSports = Map<String, dynamic>.from(
+            (userAggData?['sports'] ?? {}) as Map,
+          );
+        } on FirebaseException catch (e) {
+          if (e.code != 'permission-denied') rethrow;
+          debugPrint(
+            '[BQ3] Sin permisos para bq3_user_sport_counts/$userId. Reconstruyendo en cliente.',
+          );
+        }
+
+        if (existingSports.isNotEmpty) {
+          sports = existingSports;
+        } else {
+          sports = await _rebuildUserBq3Locally(userId);
+        }
+      }
+    } on FirebaseException catch (e) {
+      if (e.code != 'permission-denied') rethrow;
+      debugPrint(
+        '[BQ3] Fallback bloqueado por reglas. Retornando respuesta vacia.',
+      );
+      sports = {};
+    }
+
+    final ranking = <Map<String, dynamic>>[];
+    sports.forEach((sport, payload) {
+      final payloadMap = Map<String, dynamic>.from((payload as Map?) ?? {});
+      final sourceBreakdown = Map<String, dynamic>.from(
+        (payloadMap['sources'] ?? {}) as Map,
+      );
+
+      final total = hasFilter
+          ? normalizedSources.fold<int>(0, (acc, source) {
+              return acc + ((sourceBreakdown[source] as num?)?.toInt() ?? 0);
+            })
+          : ((payloadMap['total'] as num?)?.toInt() ?? 0);
+
+      if (total > 0) {
+        ranking.add({
+          'sport': sport,
+          'total': total,
+          'sourceBreakdown': sourceBreakdown,
+        });
+      }
+    });
+
+    ranking.sort((a, b) {
+      final bTotal = (b['total'] as num?)?.toInt() ?? 0;
+      final aTotal = (a['total'] as num?)?.toInt() ?? 0;
+      return bTotal.compareTo(aTotal);
+    });
+
+    final top = ranking.isNotEmpty ? ranking.first : null;
+
+    return {
+      'scope': normalizedScope,
+      'userId': normalizedScope == 'global' ? null : userId,
+      'appliedSources': hasFilter ? normalizedSources : ['all'],
+      'hasData': ranking.isNotEmpty,
+      'mostScheduledSport': top?['sport'],
+      'totalSchedules': top?['total'] ?? 0,
+      'sourceBreakdown': top?['sourceBreakdown'] ?? <String, dynamic>{},
+      'ranking': ranking,
+      'recommendedHomeFeedSport': top?['sport'],
+      'sports': sports,
+      'fallback': true,
+      'fallbackReason': 'cloud_function_not_available',
+    };
+  }
+
+  Future<Map<String, dynamic>> _rebuildUserBq3Locally(String userId) async {
+    final totals = <String, Map<String, dynamic>>{};
+
+    void addCount(String sport, String source) {
+      final normalizedSport = AppSports.normalizeSportKey(sport);
+      if (normalizedSport.isEmpty) return;
+
+      final sportBucket = totals.putIfAbsent(
+        normalizedSport,
+        () => {'total': 0, 'sources': <String, int>{}},
+      );
+      sportBucket['total'] = ((sportBucket['total'] as int?) ?? 0) + 1;
+
+      final sourceMap = Map<String, int>.from(
+        (sportBucket['sources'] as Map?) ?? {},
+      );
+      sourceMap[source] = (sourceMap[source] ?? 0) + 1;
+      sportBucket['sources'] = sourceMap;
+    }
+
+    try {
+      final activeEvents = await _firestore
+          .collection('events')
+          .where('status', isEqualTo: 'active')
+          .limit(300)
+          .get();
+
+      for (final doc in activeEvents.docs) {
+        final data = doc.data();
+        final sport = (data['sport'] as String?) ?? '';
+        final createdBy = (data['createdBy'] as String?) ?? '';
+        final participants = List<String>.from(
+          data['participants'] ?? const [],
+        );
+
+        if (createdBy == userId) {
+          addCount(sport, 'event_created');
+        }
+
+        if (participants.contains(userId)) {
+          addCount(sport, 'event_joined');
+        }
+      }
+    } on FirebaseException catch (e) {
+      if (e.code != 'permission-denied') rethrow;
+      debugPrint('[BQ3] Sin permisos para leer events en fallback local.');
+    }
+
+    try {
+      final coachRequests = await _firestore
+          .collection('coach_requests')
+          .where('userId', isEqualTo: userId)
+          .get();
+
+      for (final doc in coachRequests.docs) {
+        final sport = (doc.data()['sport'] as String?) ?? '';
+        addCount(sport, 'coach_request');
+      }
+    } on FirebaseException catch (e) {
+      if (e.code != 'permission-denied') rethrow;
+      debugPrint('[BQ3] Sin permisos para coach_requests en fallback local.');
+    }
+
+    if (totals.isEmpty) {
+      try {
+        final profile = await _firestore.collection('users').doc(userId).get();
+        final inferred = Map<String, dynamic>.from(
+          (profile.data()?['inferredPreferences'] ?? {}) as Map,
+        );
+
+        inferred.forEach((sport, value) {
+          final normalizedSport = AppSports.normalizeSportKey(sport);
+          final count = (value as num?)?.toInt() ?? 0;
+          if (normalizedSport.isEmpty || count <= 0) return;
+
+          totals[normalizedSport] = {
+            'total': count,
+            'sources': {'profile_inferred': count},
+          };
+        });
+      } on FirebaseException catch (e) {
+        if (e.code != 'permission-denied') rethrow;
+        debugPrint('[BQ3] Sin permisos para users/$userId en fallback local.');
+      }
+    }
+
+    return totals.map(
+      (key, value) => MapEntry(key, Map<String, dynamic>.from(value)),
+    );
   }
 
   /// BQ4: Obtiene el KPI de conversion de notificaciones a registros de torneo.
@@ -570,5 +944,61 @@ class EventsRepository {
       'notificationId': notificationId,
       'interactionType': interactionType,
     });
+  }
+
+  /// BQ5: Calcula la brecha de preparacion para competencias proximas.
+  ///
+  /// La respuesta incluye:
+  /// - ultima senal persistida de coaching/tutoria
+  /// - competencias proximas del usuario
+  /// - horas desde la ultima sesion
+  /// - horas restantes hasta la competencia
+  ///
+  /// Nota: el backend usa `coach_requests.createdAt` como fuente de coaching
+  /// porque el proyecto no tiene una coleccion separada de sesiones confirmadas.
+  Future<Map<String, dynamic>> getBq5ReadinessGapForUpcomingCompetitions({
+    int limit = 5,
+  }) async {
+    final callable = _functions.httpsCallable(
+      'getBq5ReadinessGapForUpcomingCompetitions',
+    );
+    final response = await callable.call({'limit': limit});
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  /// BQ5: Historial de tiempos registrados al unirse a torneos/retos.
+  ///
+  /// Cada fila representa una inscripcion detectada y contiene:
+  /// - baselineType: `coaching_touch` o `app_registration`
+  /// - elapsedHoursSinceBaseline
+  /// - readinessGapHoursToCompetition
+  Future<Map<String, dynamic>> getBq5ReadinessTimeLogs({int limit = 20}) async {
+    final callable = _functions.httpsCallable('getBq5ReadinessTimeLogs');
+    final response = await callable.call({'limit': limit});
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  /// BQ6: Obtiene la capacidad disponible de torneos proximos segun intereses.
+  ///
+  /// La respuesta incluye:
+  /// - deportes candidatos del perfil
+  /// - torneos proximos con cupos disponibles
+  /// - capacidad total disponible
+  /// - desglose por deporte
+  /// - candidatos de notificacion urgente basados en intencion demostrada
+  Future<Map<String, dynamic>> getBq6UpcomingTournamentCapacity({
+    int limit = 20,
+    int lowCapacityThreshold = 3,
+    double highUtilizationThreshold = 85,
+  }) async {
+    final callable = _functions.httpsCallable(
+      'getBq6UpcomingTournamentCapacity',
+    );
+    final response = await callable.call({
+      'limit': limit,
+      'lowCapacityThreshold': lowCapacityThreshold,
+      'highUtilizationThreshold': highUtilizationThreshold,
+    });
+    return Map<String, dynamic>.from(response.data as Map);
   }
 }

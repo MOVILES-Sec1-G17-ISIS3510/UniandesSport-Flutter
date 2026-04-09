@@ -2,6 +2,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'user_role.dart';
 
+/// Modelo de dominio para el perfil del usuario autenticado.
+///
+/// Este modelo representa exactamente el documento Firestore /users/{uid}.
 class UserProfile {
   const UserProfile({
     required this.uid,
@@ -29,6 +32,11 @@ class UserProfile {
   final String? photoUrl;
   final DateTime? createdAt;
 
+  /// Serializa el perfil para persistirlo en Firestore.
+  ///
+  /// createdAt:
+  /// - si viene en memoria, se serializa a Timestamp
+  /// - si no viene, usa serverTimestamp para asegurar reloj del servidor
   Map<String, dynamic> toJson() {
     return {
       'uid': uid,
@@ -41,12 +49,13 @@ class UserProfile {
       'mainSport': mainSport,
       'inferredPreferences': inferredPreferences,
       'photoUrl': photoUrl,
-      'createdAt': createdAt != null
-          ? Timestamp.fromDate(createdAt!)
-          : FieldValue.serverTimestamp(),
+      'createdAt': createdAt == null
+          ? FieldValue.serverTimestamp()
+          : Timestamp.fromDate(createdAt!),
     };
   }
 
+  /// Deserializa un documento Firestore a UserProfile.
   factory UserProfile.fromJson(Map<String, dynamic> json) {
     final createdAtValue = json['createdAt'];
     final rawPreferences = json['inferredPreferences'] as Map<String, dynamic>?;
@@ -60,11 +69,9 @@ class UserProfile {
       program: json['program'] as String?,
       semester: (json['semester'] as num?)?.toInt(),
       mainSport: json['mainSport'] as String?,
-      inferredPreferences: rawPreferences == null
-          ? null
-          : rawPreferences.map(
-              (key, value) => MapEntry(key, (value as num).toDouble()),
-            ),
+      inferredPreferences: rawPreferences?.map(
+        (key, value) => MapEntry(key, (value as num).toDouble()),
+      ),
       photoUrl: json['photoUrl'] as String?,
       createdAt: createdAtValue is Timestamp ? createdAtValue.toDate() : null,
     );
@@ -74,9 +81,9 @@ class UserProfile {
   /// inicie sesión. Permite registrar [PlayViewModel] en el árbol de Provider
   /// desde [app.dart] sin requerir un perfil real todavía.
   factory UserProfile.empty() => const UserProfile(
-        uid: '',
-        email: '',
-        fullName: '',
-        role: UserRole.athlete,
-      );
+    uid: '',
+    email: '',
+    fullName: '',
+    role: UserRole.athlete,
+  );
 }

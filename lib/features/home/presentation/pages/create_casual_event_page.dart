@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_sports.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/services/notification_service.dart';
 import '../../../auth/domain/models/user_profile.dart';
 import '../../data/events_repository.dart';
 import '../../domain/models/event_modality.dart';
@@ -38,7 +39,8 @@ class _CreateCasualEventPageState extends State<CreateCasualEventPage> {
       return AppSports.getSport(widget.sport).name;
     }
     // Capitalizar la primera letra para deportes personalizados
-    return widget.sport.substring(0, 1).toUpperCase() + widget.sport.substring(1);
+    return widget.sport.substring(0, 1).toUpperCase() +
+        widget.sport.substring(1);
   }
 
   @override
@@ -92,7 +94,9 @@ class _CreateCasualEventPageState extends State<CreateCasualEventPage> {
     if (widget.profile.semester == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Debes tener semestre registrado en tu perfil para crear eventos'),
+          content: Text(
+            'Debes tener semestre registrado en tu perfil para crear eventos',
+          ),
         ),
       );
       return;
@@ -101,7 +105,7 @@ class _CreateCasualEventPageState extends State<CreateCasualEventPage> {
     setState(() => _isSubmitting = true);
 
     try {
-      await _repository.createEvent(
+      final eventId = await _repository.createEvent(
         createdBy: widget.profile.uid,
         creatorSemester: widget.profile.semester!,
         title: _titleController.text.trim(),
@@ -112,6 +116,23 @@ class _CreateCasualEventPageState extends State<CreateCasualEventPage> {
         scheduledAt: _scheduledAt!,
         maxParticipants: int.parse(_maxParticipantsController.text.trim()),
       );
+
+      // Disparamos una notificacion local para confirmar visualmente la creacion.
+      // El tap queda trazado en backend mediante NotificationService.
+      try {
+        await NotificationService.instance.showEventCreatedNotification(
+          notificationId: eventId,
+          eventId: eventId,
+          title: _titleController.text.trim(),
+          sport: widget.sport,
+          modality: EventModality.casual.code,
+          userId: widget.profile.uid,
+        );
+      } catch (e) {
+        debugPrint(
+          '[CreateCasualEventPage] Error mostrando notificacion local: $e',
+        );
+      }
 
       if (!mounted) return;
       final goHome = await Navigator.of(context).push<bool>(
@@ -129,15 +150,14 @@ class _CreateCasualEventPageState extends State<CreateCasualEventPage> {
       }
     } on FirebaseException catch (e) {
       if (!mounted) return;
-      final message =
-          e.code == 'permission-denied' ? 'No tienes permiso para crear esta partida' : 'Error al crear partida: ${e.message}';
+      final message = e.code == 'permission-denied'
+          ? 'No tienes permiso para crear esta partida'
+          : 'Error al crear partida: ${e.message}';
 
       await Navigator.of(context).push<bool>(
         MaterialPageRoute(
-          builder: (_) => EventCreationResultPage(
-            isSuccess: false,
-            message: message,
-          ),
+          builder: (_) =>
+              EventCreationResultPage(isSuccess: false, message: message),
         ),
       );
       // En fallo vuelve al formulario automaticamente para reintentar.
@@ -161,9 +181,7 @@ class _CreateCasualEventPageState extends State<CreateCasualEventPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Crear partida casual'),
-      ),
+      appBar: AppBar(title: const Text('Crear partida casual')),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
@@ -179,7 +197,9 @@ class _CreateCasualEventPageState extends State<CreateCasualEventPage> {
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _titleController,
-                  decoration: const InputDecoration(labelText: 'Titulo de la partida'),
+                  decoration: const InputDecoration(
+                    labelText: 'Titulo de la partida',
+                  ),
                   validator: (value) {
                     if (value == null || value.trim().length < 4) {
                       return 'Ingresa un titulo valido';
@@ -214,7 +234,9 @@ class _CreateCasualEventPageState extends State<CreateCasualEventPage> {
                 TextFormField(
                   controller: _maxParticipantsController,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Maximo de participantes'),
+                  decoration: const InputDecoration(
+                    labelText: 'Maximo de participantes',
+                  ),
                   validator: (value) {
                     final parsed = int.tryParse(value ?? '');
                     if (parsed == null || parsed < 2) {
@@ -251,7 +273,9 @@ class _CreateCasualEventPageState extends State<CreateCasualEventPage> {
                   width: double.infinity,
                   child: ElevatedButton(
                     onPressed: _isSubmitting ? null : _submit,
-                    style: ElevatedButton.styleFrom(backgroundColor: AppTheme.teal),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.teal,
+                    ),
                     child: _isSubmitting
                         ? const SizedBox(
                             width: 20,
@@ -272,4 +296,3 @@ class _CreateCasualEventPageState extends State<CreateCasualEventPage> {
     );
   }
 }
-

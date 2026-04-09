@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/app_sports.dart';
 import '../../data/events_repository.dart';
 import '../../domain/models/event_modality.dart';
 import '../../domain/models/sport_event.dart';
@@ -20,7 +21,17 @@ class PlayViewModel extends ChangeNotifier {
     required EventsRepository repository,
     required UserProfile profile,
   }) : _repo = repository,
-       _profile = profile;
+       _profile = profile {
+    final normalizedMainSport = AppSports.normalizeSportKey(
+      profile.mainSport ?? '',
+    );
+
+    // Estado inicial para evitar CTA deshabilitados al abrir Play.
+    _selectedSport = normalizedMainSport.isNotEmpty
+        ? normalizedMainSport
+        : AppSports.sportKeys.first;
+    _selectedModality = EventModality.casual;
+  }
 
   // ─── Dependencias ────────────────────────────────────────────────────────
 
@@ -76,6 +87,18 @@ class PlayViewModel extends ChangeNotifier {
   /// el usuario ya tiene sesión activa y el perfil real está disponible.
   void updateProfile(UserProfile profile) {
     _profile = profile;
+
+    // Si por alguna razon no hay deporte seleccionado, intenta usar el del perfil.
+    if (_selectedSport == null || _selectedSport!.trim().isEmpty) {
+      final normalizedMainSport = AppSports.normalizeSportKey(
+        profile.mainSport ?? '',
+      );
+      if (normalizedMainSport.isNotEmpty) {
+        _selectedSport = normalizedMainSport;
+      }
+    }
+
+    _selectedModality ??= EventModality.casual;
     notifyListeners();
   }
 
