@@ -39,7 +39,10 @@ class NotificationService {
     );
 
     await _plugin.initialize(
-      const InitializationSettings(android: androidSettings, iOS: iosSettings),
+      settings: const InitializationSettings(
+        android: androidSettings,
+        iOS: iosSettings,
+      ),
       onDidReceiveNotificationResponse: _onNotificationResponse,
     );
 
@@ -84,10 +87,10 @@ class NotificationService {
         'Se genero "$title" en $sport ($modality). Toca para registrar la interaccion.';
 
     await _plugin.show(
-      notificationId.hashCode.abs(),
-      'Evento generado',
-      body,
-      notificationDetails,
+      id: notificationId.hashCode.abs(),
+      title: 'Evento generado',
+      body: body,
+      notificationDetails: notificationDetails,
       payload: eventId,
     );
 

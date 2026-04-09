@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_sports.dart';
 import '../../../auth/domain/models/user_profile.dart';
 
+/// Challenges page that renders active retos, recommendation, and participation UI.
 class RetosPage extends StatefulWidget {
   final UserProfile profile;
 
@@ -17,9 +18,11 @@ class _RetosPageState extends State<RetosPage>
     with AutomaticKeepAliveClientMixin {
   late final Stream<QuerySnapshot<Map<String, dynamic>>> _challengesStream;
 
+  /// Keeps tab state alive to avoid refetching and losing scroll position.
   @override
   bool get wantKeepAlive => true;
 
+  /// Subscribes to active challenges stream from Firestore.
   @override
   void initState() {
     super.initState();
@@ -29,6 +32,7 @@ class _RetosPageState extends State<RetosPage>
         .snapshots();
   }
 
+  /// Builds the complete retos experience: header, recommendation, and cards.
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -160,6 +164,7 @@ class _RetosPageState extends State<RetosPage>
   }
 }
 
+/// Card with challenge information, details modal, and join/leave action.
 class _ChallengeCard extends StatefulWidget {
   const _ChallengeCard({
     required this.challengeDoc,
@@ -178,6 +183,7 @@ class _ChallengeCard extends StatefulWidget {
 class _ChallengeCardState extends State<_ChallengeCard> {
   bool _loading = false;
 
+  /// Returns sport accent color used in chip, icon, and progress highlights.
   Color _accentForSport(String sport) {
     switch (sport.toLowerCase()) {
       case 'running':
@@ -196,6 +202,7 @@ class _ChallengeCardState extends State<_ChallengeCard> {
     }
   }
 
+  /// Maps raw sport key to a user-facing English label.
   String _sportLabel(String sport) {
     switch (sport.toLowerCase()) {
       case 'futbol':
@@ -214,6 +221,7 @@ class _ChallengeCardState extends State<_ChallengeCard> {
     }
   }
 
+  /// Selects icon by sport to make each challenge visually distinguishable.
   IconData _iconForSport(String sport) {
     switch (sport.toLowerCase()) {
       case 'running':
@@ -232,6 +240,7 @@ class _ChallengeCardState extends State<_ChallengeCard> {
     }
   }
 
+  /// Computes remaining time label from challenge end date.
   String _daysLeft(DateTime? endDate) {
     if (endDate == null) return 'No end date';
 
@@ -243,6 +252,7 @@ class _ChallengeCardState extends State<_ChallengeCard> {
     return '$left days left';
   }
 
+  /// Opens a bottom sheet with extended challenge details and metadata.
   Future<void> _openChallengeDetails(Map<String, dynamic> data) async {
     final title = (data['title'] as String?)?.trim().isNotEmpty == true
         ? data['title'] as String
@@ -355,6 +365,9 @@ class _ChallengeCardState extends State<_ChallengeCard> {
     );
   }
 
+  /// Joins or leaves the challenge in a Firestore transaction.
+  ///
+  /// Transaction guarantees participant counters and per-user progress stay in sync.
   Future<void> _toggleParticipation() async {
     if (_loading) return;
 
@@ -407,6 +420,7 @@ class _ChallengeCardState extends State<_ChallengeCard> {
     }
   }
 
+  /// Renders challenge card with progress, participants, and CTA state.
   @override
   Widget build(BuildContext context) {
     final data = widget.challengeDoc.data();
@@ -620,11 +634,13 @@ class _ChallengeCardState extends State<_ChallengeCard> {
   }
 }
 
+/// Neutral informational box shown on loading-error-empty states.
 class _InfoBox extends StatelessWidget {
   const _InfoBox({required this.text});
 
   final String text;
 
+  /// Renders one message container with subtle background emphasis.
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -639,6 +655,7 @@ class _InfoBox extends StatelessWidget {
   }
 }
 
+/// DTO for recommendation content consumed by the recommendation banner.
 class _ChallengeRecommendation {
   final String challengeId;
   final String title;
@@ -653,7 +670,9 @@ class _ChallengeRecommendation {
   });
 }
 
+/// Smart recommendation engine for ordering and selecting best next challenge.
 class _SmartChallengeRecommender {
+  /// Sorts challenges by computed score and then by nearest end date as tie-breaker.
   static List<QueryDocumentSnapshot<Map<String, dynamic>>> rankChallenges({
     required List<QueryDocumentSnapshot<Map<String, dynamic>>> challenges,
     required UserProfile profile,
@@ -685,6 +704,7 @@ class _SmartChallengeRecommender {
     return ranked;
   }
 
+  /// Produces a single recommendation with human-readable reason text.
   static _ChallengeRecommendation? buildRecommendation({
     required List<QueryDocumentSnapshot<Map<String, dynamic>>> challenges,
     required UserProfile profile,
@@ -722,6 +742,10 @@ class _SmartChallengeRecommender {
     );
   }
 
+  /// Computes multi-factor score for one challenge.
+  ///
+  /// Factors: user preference, ease, date urgency, progress continuity, and
+  /// match with main sport.
   static _ScoredChallenge? _scoreChallenge({
     required QueryDocumentSnapshot<Map<String, dynamic>> doc,
     required UserProfile profile,
@@ -741,7 +765,7 @@ class _SmartChallengeRecommender {
     final participants = List<String>.from(data['participants'] ?? const []);
     final isJoined = participants.contains(profile.uid);
 
-    // Si ya va avanzado en uno, prioriza sugerir continuar ese mismo.
+    // If user already joined and progressed, prioritize continuity.
     final progressByUser = Map<String, dynamic>.from(
       data['progressByUser'] ?? const {},
     );
@@ -808,6 +832,7 @@ class _SmartChallengeRecommender {
   }
 }
 
+/// Internal score container used by ranking and recommendation methods.
 class _ScoredChallenge {
   final String id;
   final String title;
@@ -830,11 +855,13 @@ class _ScoredChallenge {
   });
 }
 
+/// Banner widget that displays the smart recommendation result.
 class _ChallengeRecommendationBox extends StatelessWidget {
   final _ChallengeRecommendation recommendation;
 
   const _ChallengeRecommendationBox({required this.recommendation});
 
+  /// Renders recommendation title and explanation.
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
