@@ -57,7 +57,7 @@ class _ProfesPageState extends State<ProfesPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'APRENDE CON EXPERTOS',
+                'LEARN WITH EXPERTS',
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
                   color: Colors.teal,
                   letterSpacing: 2,
@@ -70,7 +70,7 @@ class _ProfesPageState extends State<ProfesPage> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Profesores',
+                    'Coaches',
                     style: Theme.of(context).textTheme.headlineSmall,
                   ),
                   Row(
@@ -111,7 +111,7 @@ class _ProfesPageState extends State<ProfesPage> {
                                 return const SizedBox(
                                   height: 200,
                                   child: Center(
-                                    child: Text("Filtros próximamente"),
+                                    child: Text('Filters coming soon'),
                                   ),
                                 );
                               },
@@ -185,7 +185,7 @@ class _ProfesPageState extends State<ProfesPage> {
                             ),
                             const SizedBox(height: 16),
                             Text(
-                              "Oops! No hay profes para este deporte.",
+                              "Oops! No coaches available for this sport.",
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontSize: 18,
@@ -195,7 +195,7 @@ class _ProfesPageState extends State<ProfesPage> {
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              "Intenta con otro deporte o restablece el filtro.",
+                              "Try another sport or reset the filter.",
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontSize: 14,

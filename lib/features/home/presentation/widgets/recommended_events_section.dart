@@ -75,12 +75,12 @@ class _RecommendedEventsSectionState extends State<RecommendedEventsSection> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Fecha: ${_formatDate(event.scheduledAt)}',
+                    'Date: ${_formatDate(event.scheduledAt)}',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Cupos disponibles: ${event.availableSpots}',
+                    'Available spots: ${event.availableSpots}',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: AppTheme.teal,
                       fontWeight: FontWeight.w700,
@@ -132,7 +132,7 @@ class _RecommendedEventsSectionState extends State<RecommendedEventsSection> {
                                 color: Colors.white,
                               ),
                             )
-                          : const Text('Unirme'),
+                          : const Text('Join'),
                     ),
                   ),
                 ],
@@ -146,20 +146,20 @@ class _RecommendedEventsSectionState extends State<RecommendedEventsSection> {
 
   String _formatDate(DateTime date) {
     const months = [
-      'ene',
+      'jan',
       'feb',
       'mar',
-      'abr',
+      'apr',
       'may',
       'jun',
       'jul',
-      'ago',
+      'aug',
       'sep',
       'oct',
       'nov',
-      'dic',
+      'dec',
     ];
-    const weekdays = ['lun', 'mar', 'mie', 'jue', 'vie', 'sab', 'dom'];
+    const weekdays = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
     final weekday = weekdays[date.weekday - 1];
     final month = months[date.month - 1];
     return '$weekday, $month ${date.day}';
@@ -176,7 +176,7 @@ class _RecommendedEventsSectionState extends State<RecommendedEventsSection> {
 
         if (snapshot.hasError) {
           return Text(
-            'No se pudieron cargar las recomendaciones',
+            'Could not load recommendations',
             style: Theme.of(context).textTheme.bodySmall,
           );
         }
@@ -184,7 +184,7 @@ class _RecommendedEventsSectionState extends State<RecommendedEventsSection> {
         final events = snapshot.data ?? [];
         if (events.isEmpty) {
           return Text(
-            'Aun no hay recomendaciones para ti',
+            'There are no recommendations for you yet',
             style: Theme.of(context).textTheme.bodySmall,
           );
         }
@@ -300,7 +300,7 @@ class _RecommendedEventsSectionState extends State<RecommendedEventsSection> {
                             ),
                             const SizedBox(width: 8),
                             Text(
-                              '${event.availableSpots} cupos',
+                              '${event.availableSpots} spots',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: Theme.of(context).textTheme.bodySmall

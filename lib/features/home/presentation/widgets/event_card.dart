@@ -156,7 +156,7 @@ class _EventCardState extends State<EventCard> {
               const Divider(),
               const SizedBox(height: 12),
               Text(
-                'Descripción',
+                'Description',
                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.bold,
                     ),
@@ -165,7 +165,7 @@ class _EventCardState extends State<EventCard> {
               Text(
                 widget.description?.isNotEmpty == true
                     ? widget.description!
-                    : 'Sin descripción disponible',
+                    : 'No description available',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: widget.description?.isNotEmpty == true
                       ? null
@@ -197,7 +197,7 @@ class _EventCardState extends State<EventCard> {
                             color: Colors.white,
                           ),
                         )
-                      : const Text('Unirse'),
+                      : const Text('Join'),
                 ),
               ),
             ],

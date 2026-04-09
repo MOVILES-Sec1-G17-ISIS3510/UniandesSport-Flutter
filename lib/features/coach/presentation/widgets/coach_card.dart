@@ -173,6 +173,6 @@ Future<void> callCoach(String phone) async {
   if (await canLaunchUrl(url)) {
     await launchUrl(url);
   } else {
-    throw 'No se pudo realizar la llamada';
+    throw 'Could not place the call';
   }
 }
