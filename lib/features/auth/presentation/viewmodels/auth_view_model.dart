@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../data/auth_repository.dart';
-import '../../domain/models/user_role.dart';
+import '../../domain/entities/user_role.dart';
 
 /// Capa de presentacion para autenticacion.
 ///
@@ -9,8 +9,8 @@ import '../../domain/models/user_role.dart';
 /// AuthRepository. Mantiene separadas las responsabilidades:
 /// - UI: formularios, loading, mensajes
 /// - Data: Firebase Auth + Firestore
-class AuthController extends ChangeNotifier {
-  AuthController(this._repository);
+class AuthViewModel extends ChangeNotifier {
+  AuthViewModel(this._repository);
 
   final AuthRepository _repository;
 

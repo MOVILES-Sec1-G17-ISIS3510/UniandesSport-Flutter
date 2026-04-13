@@ -1,8 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
-import '../../../../core/theme/app_sports.dart';
-import '../../../auth/domain/models/user_profile.dart';
+import '../../../../core/validation/app_field_limits.dart';
+import '../../../auth/domain/entities/user_profile.dart';
+import '../../domain/recommendation/challenge_recommendation_engine.dart';
 
 /// Challenges page that renders active retos, recommendation, and participation UI.
 class RetosPage extends StatefulWidget {
@@ -17,6 +19,8 @@ class RetosPage extends StatefulWidget {
 class _RetosPageState extends State<RetosPage>
     with AutomaticKeepAliveClientMixin {
   late final Stream<QuerySnapshot<Map<String, dynamic>>> _challengesStream;
+  final ChallengeRecommendationEngine _recommendationEngine =
+      const ChallengeRecommendationEngine();
   bool _isCreatingChallenge = false;
 
   /// Keeps tab state alive to avoid refetching and losing scroll position.
@@ -109,14 +113,13 @@ class _RetosPageState extends State<RetosPage>
                       return const _InfoBox(text: 'No active challenges yet.');
                     }
 
-                    final sortedDocs =
-                        _SmartChallengeRecommender.rankChallenges(
-                          challenges: docs,
-                          profile: widget.profile,
-                        );
+                    final sortedDocs = _recommendationEngine.rankChallenges(
+                      challenges: docs,
+                      profile: widget.profile,
+                    );
 
-                    final recommendation =
-                        _SmartChallengeRecommender.buildRecommendation(
+                    final recommendation = _recommendationEngine
+                        .buildRecommendation(
                           challenges: sortedDocs,
                           profile: widget.profile,
                         );
@@ -203,12 +206,26 @@ class _RetosPageState extends State<RetosPage>
                     children: [
                       TextFormField(
                         controller: titleController,
+                        textInputAction: TextInputAction.next,
+                        maxLength: AppFieldLimits.challengeTitle,
+                        inputFormatters: [
+                          LengthLimitingTextInputFormatter(
+                            AppFieldLimits.challengeTitle,
+                          ),
+                        ],
                         decoration: const InputDecoration(
                           labelText: 'Challenge Title',
                           hintText: '30-Day Challenge',
                         ),
-                        validator: (v) =>
-                            v?.isEmpty ?? true ? 'Title required' : null,
+                        validator: (v) {
+                          final text = (v ?? '').trim();
+                          if (text.isEmpty) return 'Title required';
+                          if (text.length <
+                              AppValidationRules.challengeTitleMinLength) {
+                            return 'At least 3 characters';
+                          }
+                          return null;
+                        },
                       ),
                       const SizedBox(height: 12),
                       DropdownButtonFormField<String>(
@@ -226,19 +243,52 @@ class _RetosPageState extends State<RetosPage>
                       const SizedBox(height: 12),
                       TextFormField(
                         controller: descriptionController,
+                        textInputAction: TextInputAction.next,
+                        maxLength: AppFieldLimits.challengeDescription,
+                        inputFormatters: [
+                          LengthLimitingTextInputFormatter(
+                            AppFieldLimits.challengeDescription,
+                          ),
+                        ],
                         decoration: const InputDecoration(
                           labelText: 'Description',
                           hintText: 'Run 100K total...',
                         ),
                         maxLines: 2,
+                        validator: (v) {
+                          final text = (v ?? '').trim();
+                          if (text.isNotEmpty &&
+                              text.length <
+                                  AppValidationRules
+                                      .challengeDescriptionMinLength) {
+                            return 'Use at least 8 characters';
+                          }
+                          return null;
+                        },
                       ),
                       const SizedBox(height: 12),
                       TextFormField(
                         controller: goalController,
+                        textInputAction: TextInputAction.next,
+                        maxLength: AppFieldLimits.challengeGoal,
+                        inputFormatters: [
+                          LengthLimitingTextInputFormatter(
+                            AppFieldLimits.challengeGoal,
+                          ),
+                        ],
                         decoration: const InputDecoration(
                           labelText: 'Goal',
                           hintText: 'Complete 100 km',
                         ),
+                        validator: (v) {
+                          final text = (v ?? '').trim();
+                          if (text.isNotEmpty &&
+                              text.length <
+                                  AppValidationRules.challengeGoalMinLength) {
+                            return 'Goal is too short';
+                          }
+                          return null;
+                        },
                       ),
                       const SizedBox(height: 12),
                       DropdownButtonFormField<String>(
@@ -257,10 +307,26 @@ class _RetosPageState extends State<RetosPage>
                       const SizedBox(height: 12),
                       TextFormField(
                         controller: rewardController,
+                        textInputAction: TextInputAction.done,
+                        maxLength: AppFieldLimits.challengeReward,
+                        inputFormatters: [
+                          LengthLimitingTextInputFormatter(
+                            AppFieldLimits.challengeReward,
+                          ),
+                        ],
                         decoration: const InputDecoration(
                           labelText: 'Reward',
                           hintText: 'Free sports gear',
                         ),
+                        validator: (v) {
+                          final text = (v ?? '').trim();
+                          if (text.isNotEmpty &&
+                              text.length <
+                                  AppValidationRules.challengeRewardMinLength) {
+                            return 'Reward is too short';
+                          }
+                          return null;
+                        },
                       ),
                       const SizedBox(height: 12),
                       ElevatedButton(
@@ -314,12 +380,12 @@ class _RetosPageState extends State<RetosPage>
                             return;
                           }
                           await _createChallenge(
-                            title: titleController.text,
+                            title: titleController.text.trim(),
                             sport: selectedSport!,
-                            description: descriptionController.text,
-                            goal: goalController.text,
+                            description: descriptionController.text.trim(),
+                            goal: goalController.text.trim(),
                             difficulty: selectedDifficulty,
-                            reward: rewardController.text,
+                            reward: rewardController.text.trim(),
                             endDate: selectedEndDate!,
                           );
                           if (mounted) dialogNavigator.pop();
@@ -989,209 +1055,9 @@ class _InfoBox extends StatelessWidget {
   }
 }
 
-/// DTO for recommendation content consumed by the recommendation banner.
-class _ChallengeRecommendation {
-  final String challengeId;
-  final String title;
-  final String sportLabel;
-  final String reason;
-
-  const _ChallengeRecommendation({
-    required this.challengeId,
-    required this.title,
-    required this.sportLabel,
-    required this.reason,
-  });
-}
-
-/// Smart recommendation engine for ordering and selecting best next challenge.
-class _SmartChallengeRecommender {
-  /// Sorts challenges by computed score and then by nearest end date as tie-breaker.
-  static List<QueryDocumentSnapshot<Map<String, dynamic>>> rankChallenges({
-    required List<QueryDocumentSnapshot<Map<String, dynamic>>> challenges,
-    required UserProfile profile,
-  }) {
-    if (challenges.isEmpty) return const [];
-
-    final scored = challenges
-        .map((doc) => _scoreChallenge(doc: doc, profile: profile))
-        .whereType<_ScoredChallenge>()
-        .toList();
-
-    final scoreById = {for (final item in scored) item.id: item.score};
-
-    final ranked = [...challenges]
-      ..sort((a, b) {
-        final aScore = scoreById[a.id] ?? double.negativeInfinity;
-        final bScore = scoreById[b.id] ?? double.negativeInfinity;
-        final byScore = bScore.compareTo(aScore);
-        if (byScore != 0) return byScore;
-
-        final aDate = (a.data()['endDate'] as Timestamp?)?.toDate();
-        final bDate = (b.data()['endDate'] as Timestamp?)?.toDate();
-        if (aDate == null && bDate == null) return 0;
-        if (aDate == null) return 1;
-        if (bDate == null) return -1;
-        return aDate.compareTo(bDate);
-      });
-
-    return ranked;
-  }
-
-  /// Produces a single recommendation with human-readable reason text.
-  static _ChallengeRecommendation? buildRecommendation({
-    required List<QueryDocumentSnapshot<Map<String, dynamic>>> challenges,
-    required UserProfile profile,
-  }) {
-    if (challenges.isEmpty) return null;
-
-    final scored =
-        challenges
-            .map((doc) => _scoreChallenge(doc: doc, profile: profile))
-            .where((entry) => entry != null)
-            .cast<_ScoredChallenge>()
-            .toList()
-          ..sort((a, b) => b.score.compareTo(a.score));
-
-    if (scored.isEmpty) return null;
-    final best = scored.first;
-
-    final reasons = <String>[
-      if (best.matchesMainSport) 'it matches your main sport',
-      if (best.preferenceScore >= 0.5) 'it aligns with your interests',
-      if (best.daysLeft >= 0 && best.daysLeft <= 10)
-        'it has a near and achievable goal',
-      if (best.easeScore >= 0.55) 'it looks easier to start with',
-    ];
-
-    final reason = reasons.isEmpty
-        ? 'it is a good starting point based on your recent activity'
-        : reasons.take(2).join(' and ');
-
-    return _ChallengeRecommendation(
-      challengeId: best.id,
-      title: best.title,
-      sportLabel: best.sportLabel,
-      reason: reason,
-    );
-  }
-
-  /// Computes multi-factor score for one challenge.
-  ///
-  /// Factors: user preference, ease, date urgency, progress continuity, and
-  /// match with main sport.
-  static _ScoredChallenge? _scoreChallenge({
-    required QueryDocumentSnapshot<Map<String, dynamic>> doc,
-    required UserProfile profile,
-  }) {
-    final data = doc.data();
-
-    final sportRaw = (data['sport'] as String?)?.trim() ?? '';
-    final sportKey = AppSports.normalizeSportKey(sportRaw);
-    final sportLabel = AppSports.formatSportLabel(sportRaw);
-
-    final title = (data['title'] as String?)?.trim().isNotEmpty == true
-        ? data['title'] as String
-        : ((data['goalLabel'] as String?)?.trim().isNotEmpty == true
-              ? data['goalLabel'] as String
-              : 'Challenge');
-
-    final participants = List<String>.from(data['participants'] ?? const []);
-    final isJoined = participants.contains(profile.uid);
-
-    // If user already joined and progressed, prioritize continuity.
-    final progressByUser = Map<String, dynamic>.from(
-      data['progressByUser'] ?? const {},
-    );
-    final userProgress =
-        (progressByUser[profile.uid] as num?)?.toDouble() ?? 0.0;
-
-    final endDate = (data['endDate'] as Timestamp?)?.toDate();
-    final daysLeft = endDate == null
-        ? 30
-        : endDate.difference(DateTime.now()).inDays;
-
-    final prefs = profile.inferredPreferences ?? const <String, double>{};
-    final preferenceScore = (prefs[sportKey] ?? prefs[sportRaw] ?? 0.0).clamp(
-      0.0,
-      1.0,
-    );
-
-    final normalizedMain = profile.mainSport == null
-        ? ''
-        : AppSports.normalizeSportKey(profile.mainSport!);
-    final matchesMainSport =
-        normalizedMain.isNotEmpty && normalizedMain == sportKey;
-
-    final participantsCount =
-        (data['participantsCount'] as num?)?.toInt() ?? participants.length;
-    final socialEase = (participantsCount / 20).clamp(0.0, 1.0);
-
-    final daysScore = daysLeft < 0
-        ? 0.0
-        : (daysLeft >= 5 ? 1.0 : (daysLeft / 5).clamp(0.0, 1.0));
-
-    final explicitDifficulty = ((data['difficulty'] as String?) ?? '')
-        .toLowerCase();
-    final difficultyEase = switch (explicitDifficulty) {
-      'easy' || 'facil' => 1.0,
-      'medium' || 'intermedio' => 0.65,
-      'hard' || 'dificil' => 0.35,
-      _ => 0.55,
-    };
-
-    final easeScore =
-        (0.50 * difficultyEase) + (0.30 * socialEase) + (0.20 * daysScore);
-
-    final continuationBoost = isJoined ? (0.15 + (userProgress * 0.20)) : 0.0;
-    final mainSportBoost = matchesMainSport ? 0.25 : 0.0;
-
-    final total =
-        (0.45 * preferenceScore) +
-        (0.30 * easeScore) +
-        (0.25 * daysScore) +
-        continuationBoost +
-        mainSportBoost;
-
-    return _ScoredChallenge(
-      id: doc.id,
-      title: title,
-      sportLabel: sportLabel,
-      score: total,
-      preferenceScore: preferenceScore,
-      easeScore: easeScore,
-      daysLeft: daysLeft,
-      matchesMainSport: matchesMainSport,
-    );
-  }
-}
-
-/// Internal score container used by ranking and recommendation methods.
-class _ScoredChallenge {
-  final String id;
-  final String title;
-  final String sportLabel;
-  final double score;
-  final double preferenceScore;
-  final double easeScore;
-  final int daysLeft;
-  final bool matchesMainSport;
-
-  const _ScoredChallenge({
-    required this.id,
-    required this.title,
-    required this.sportLabel,
-    required this.score,
-    required this.preferenceScore,
-    required this.easeScore,
-    required this.daysLeft,
-    required this.matchesMainSport,
-  });
-}
-
 /// Banner widget that displays the smart recommendation result.
 class _ChallengeRecommendationBox extends StatelessWidget {
-  final _ChallengeRecommendation recommendation;
+  final ChallengeRecommendation recommendation;
 
   const _ChallengeRecommendationBox({required this.recommendation});
 

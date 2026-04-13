@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_sports.dart';
 import '../../data/events_repository.dart';
-import '../../domain/models/event_modality.dart';
-import '../../domain/models/sport_event.dart';
-import '../../../auth/domain/models/user_profile.dart';
+import '../../domain/entities/event_modality.dart';
+import '../../domain/entities/sport_event.dart';
+import '../../../auth/domain/entities/user_profile.dart';
 
 /// ViewModel de la pantalla Play.
 ///
@@ -77,7 +77,8 @@ class PlayViewModel extends ChangeNotifier {
 
   bool get showMyScheduled => _showMyScheduled;
   bool get isLoadingMyScheduled => _isLoadingMyScheduled;
-  List<SportEvent> get myScheduledEvents => List.unmodifiable(_myScheduledEvents);
+  List<SportEvent> get myScheduledEvents =>
+      List.unmodifiable(_myScheduledEvents);
   String? get myScheduledError => _myScheduledError;
 
   // ─── Getters derivados (lógica de negocio) ────────────────────────────────
@@ -181,7 +182,9 @@ class PlayViewModel extends ChangeNotifier {
 
     try {
       final events = await _repo.getUserParticipatingEvents(_profile.uid);
-      _myScheduledEvents = events.where((event) => event.status == 'active').toList();
+      _myScheduledEvents = events
+          .where((event) => event.status == 'active')
+          .toList();
     } catch (_) {
       _myScheduledError = 'Could not load your scheduled events';
     } finally {
@@ -262,4 +265,3 @@ class PlayViewModel extends ChangeNotifier {
     return '$dayLabel $displayHour:$minute $period';
   }
 }
-
