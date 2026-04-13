@@ -4,13 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../auth/data/auth_repository.dart';
-import '../../../auth/domain/models/user_profile.dart';
+import '../../../auth/domain/entities/user_profile.dart';
 import '../../presentation/pages/retos_page.dart';
 import '../../presentation/pages/play_page.dart';
 import '../../presentation/pages/social_page.dart';
 import '../../presentation/pages/profes_page.dart';
 import '../../presentation/pages/profile_page.dart';
-import '../controllers/play_view_model.dart';
+import '../viewmodels/play_view_model.dart';
 import '../widgets/play_nav_item.dart';
 import '../widgets/recommended_events_section.dart';
 

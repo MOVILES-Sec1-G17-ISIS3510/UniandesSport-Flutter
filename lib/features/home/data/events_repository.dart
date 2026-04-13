@@ -5,8 +5,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../../core/services/analytics_service.dart';
 import '../../../core/theme/app_sports.dart';
-import '../domain/models/event_modality.dart';
-import '../domain/models/sport_event.dart';
+import '../domain/entities/event_modality.dart';
+import '../domain/entities/sport_event.dart';
 
 /// Repositorio de eventos deportivos.
 ///
@@ -43,9 +43,9 @@ class EventsRepository {
     AnalyticsService.instance.logSearchSportEvent(sportCategory: sport);
 
     try {
-      FirebaseFunctions.instance
-          .httpsCallable('logSportSearch')
-          .call({'sport': AppSports.normalizeSportKey(sport)});
+      FirebaseFunctions.instance.httpsCallable('logSportSearch').call({
+        'sport': AppSports.normalizeSportKey(sport),
+      });
     } catch (e) {
       debugPrint('Warning: Could not log search increment: $e');
     }
@@ -59,11 +59,14 @@ class EventsRepository {
           .where('status', isEqualTo: status)
           .get();
 
-      final events = snapshot.docs
-          .map((doc) => SportEvent.fromFirestore(doc))
-          .where((event) => event.modality == modality && event.status == status)
-          .toList()
-        ..sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
+      final events =
+          snapshot.docs
+              .map((doc) => SportEvent.fromFirestore(doc))
+              .where(
+                (event) => event.modality == modality && event.status == status,
+              )
+              .toList()
+            ..sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
 
       return _pickVariedEvents(events, maxResults: 5);
     } catch (e) {
@@ -506,10 +509,7 @@ class EventsRepository {
 
         if (!snapshot.exists) {
           debugPrint('[registerUserInEvent] El evento $eventId no existe');
-          return {
-            'success': false,
-            'message': 'Event does not exist',
-          };
+          return {'success': false, 'message': 'Event does not exist'};
         }
 
         final data = snapshot.data() as Map<String, dynamic>;
@@ -534,10 +534,7 @@ class EventsRepository {
 
         if (participants.length >= maxParticipants) {
           debugPrint('[registerUserInEvent] Evento $eventId está lleno');
-          return {
-            'success': false,
-            'message': 'The event is full',
-          };
+          return {'success': false, 'message': 'The event is full'};
         }
 
         debugPrint('[registerUserInEvent] Agregando $userId a participantes');
@@ -553,7 +550,8 @@ class EventsRepository {
         };
       });
 
-      if (result['success'] == true && result['message'] == 'Registered successfully') {
+      if (result['success'] == true &&
+          result['message'] == 'Registered successfully') {
         final sportCategory = (result['sportCategory'] as String?) ?? '';
         AnalyticsService.instance.logJoinSportEvent(
           sportCategory: sportCategory,

@@ -72,7 +72,8 @@ class SportEvent {
       modality: EventModality.fromCode(data['modality'] ?? 'casual'),
       description: data['description'] ?? '',
       location: data['location'] ?? '',
-      scheduledAt: (data['scheduledAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      scheduledAt:
+          (data['scheduledAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       maxParticipants: data['maxParticipants'] ?? 0,
       participants: List<String>.from(data['participants'] ?? []),
       status: data['status'] ?? 'active',
@@ -114,5 +115,3 @@ class SportEvent {
     );
   }
 }
-
-
