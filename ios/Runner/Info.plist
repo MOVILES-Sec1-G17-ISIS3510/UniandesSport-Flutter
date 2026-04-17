@@ -53,5 +53,9 @@
 	<string>Usamos la galería para adjuntar fotos en tus reviews de coaches.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Usamos la fototeca para guardar imágenes asociadas a reviews cuando sea necesario.</string>
+	<key>GMSApiKey</key>
+    <string>YOUR_IOS_MAPS_KEY</string>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>Usamos tu ubicación en el mapa para mostrarte en tiempo real respecto al punto del coach.</string>
 </dict>
 </plist>
