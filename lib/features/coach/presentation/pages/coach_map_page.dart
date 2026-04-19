@@ -372,8 +372,8 @@ class _CoachMapPageState extends State<CoachMapPage> {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        'Demo: coach en Bogotá. Tu posición es el pin azul “Tú” '
-                        '(GPS en vivo).',
+                        'Demo: coach in Bogotá. Your position is the blue pin “You” '
+                        '(Live GPS).',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: colorScheme.onSurfaceVariant,
                         ),
