@@ -14,10 +14,55 @@ class _RequestCoachDialogState extends State<RequestCoachDialog> {
   String skillLevel = "Beginner";
   bool isSubmitting = false;
 
-  final scheduleController = TextEditingController();
+  DateTime? selectedSchedule;
   final notesController = TextEditingController();
 
+  Future<void> _pickSchedule() async {
+    final now = DateTime.now();
+    final pickedDate = await showDatePicker(
+      context: context,
+      initialDate: selectedSchedule ?? now,
+      firstDate: now,
+      lastDate: now.add(const Duration(days: 365)),
+    );
+    if (pickedDate == null || !mounted) return;
+
+    final pickedTime = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(selectedSchedule ?? now),
+    );
+    if (pickedTime == null || !mounted) return;
+
+    setState(() {
+      selectedSchedule = DateTime(
+        pickedDate.year,
+        pickedDate.month,
+        pickedDate.day,
+        pickedTime.hour,
+        pickedTime.minute,
+      );
+    });
+  }
+
+  String _formatSchedule(DateTime dt) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    final hour12 = dt.hour == 0 ? 12 : (dt.hour > 12 ? dt.hour - 12 : dt.hour);
+    final minute = dt.minute.toString().padLeft(2, '0');
+    final period = dt.hour >= 12 ? 'PM' : 'AM';
+    return "${months[dt.month - 1]} ${dt.day}, ${dt.year} · $hour12:$minute $period";
+  }
+
   Future<void> _submit() async {
+    if (selectedSchedule == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please select a preferred schedule")),
+      );
+      return;
+    }
+
     setState(() => isSubmitting = true);
 
     try {
@@ -27,7 +72,7 @@ class _RequestCoachDialogState extends State<RequestCoachDialog> {
         'userId': uid,
         'sport': sport,
         'skillLevel': skillLevel,
-        'schedule': scheduleController.text.trim(),
+        'schedule': Timestamp.fromDate(selectedSchedule!),
         'notes': notesController.text.trim(),
         'status': 'pending',
         'createdAt': FieldValue.serverTimestamp(),
@@ -125,9 +170,24 @@ class _RequestCoachDialogState extends State<RequestCoachDialog> {
               child: Text("Preferred Schedule", style: TextStyle(color: Colors.grey.shade700)),
             ),
             const SizedBox(height: 5),
-            TextField(
-              controller: scheduleController,
-              decoration: _inputDecoration(hint: "e.g. Weekdays 4-6 PM"),
+            InkWell(
+              onTap: _pickSchedule,
+              borderRadius: BorderRadius.circular(12),
+              child: InputDecorator(
+                decoration: _inputDecoration().copyWith(
+                  suffixIcon: const Icon(Icons.calendar_today, color: Colors.teal, size: 20),
+                ),
+                child: Text(
+                  selectedSchedule != null
+                      ? _formatSchedule(selectedSchedule!)
+                      : "Select a date and time",
+                  style: TextStyle(
+                    color: selectedSchedule != null
+                        ? Colors.black
+                        : Colors.grey.shade600,
+                  ),
+                ),
+              ),
             ),
 
             const SizedBox(height: 15),
