@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../core/theme/app_theme.dart';
-import '../controllers/auth_controller.dart';
+import '../../../../core/validation/app_field_limits.dart';
+import '../viewmodels/auth_view_model.dart';
 import 'register_page.dart';
 
 /// Pantalla de inicio de sesion.
 ///
 /// Flujo funcional:
 /// 1) Valida email y contrasena en formulario.
-/// 2) Llama AuthController.signIn(...).
+/// 2) Llama AuthViewModel.signIn(...).
 /// 3) Si login falla, muestra mensaje legible en SnackBar.
 /// 4) Si login es exitoso, AuthGate detecta la sesion y redirige a AppShell.
 class LoginPage extends StatefulWidget {
@@ -40,9 +42,9 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final controller = context.read<AuthController>();
+    final controller = context.read<AuthViewModel>();
     final success = await controller.signIn(
-      email: _emailController.text,
+      email: _emailController.text.trim(),
       password: _passwordController.text,
     );
 
@@ -55,7 +57,7 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
-    final authController = context.watch<AuthController>();
+    final authController = context.watch<AuthViewModel>();
 
     return Scaffold(
       body: SafeArea(
@@ -100,6 +102,13 @@ class _LoginPageState extends State<LoginPage> {
                         TextFormField(
                           controller: _emailController,
                           keyboardType: TextInputType.emailAddress,
+                          textInputAction: TextInputAction.next,
+                          maxLength: AppFieldLimits.email,
+                          inputFormatters: [
+                            LengthLimitingTextInputFormatter(
+                              AppFieldLimits.email,
+                            ),
+                          ],
                           decoration: const InputDecoration(
                             labelText: 'Institutional email',
                             prefixIcon: Icon(Icons.mail_outline),
@@ -107,7 +116,12 @@ class _LoginPageState extends State<LoginPage> {
                           validator: (value) {
                             final text = value?.trim() ?? '';
                             if (text.isEmpty) return 'Enter your email';
-                            if (!text.contains('@')) return 'Invalid email';
+                            final emailRegex = RegExp(
+                              r'^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$',
+                            );
+                            if (!emailRegex.hasMatch(text)) {
+                              return 'Invalid email';
+                            }
                             return null;
                           },
                         ),
@@ -115,6 +129,13 @@ class _LoginPageState extends State<LoginPage> {
                         TextFormField(
                           controller: _passwordController,
                           obscureText: _obscurePassword,
+                          textInputAction: TextInputAction.done,
+                          maxLength: AppFieldLimits.password,
+                          inputFormatters: [
+                            LengthLimitingTextInputFormatter(
+                              AppFieldLimits.password,
+                            ),
+                          ],
                           decoration: InputDecoration(
                             labelText: 'Password',
                             prefixIcon: const Icon(Icons.lock_outline),
@@ -130,8 +151,13 @@ class _LoginPageState extends State<LoginPage> {
                             ),
                           ),
                           validator: (value) {
-                            if ((value ?? '').isEmpty) {
+                            final password = value ?? '';
+                            if (password.isEmpty) {
                               return 'Enter your password';
+                            }
+                            if (password.length <
+                                AppValidationRules.passwordMinLength) {
+                              return 'Minimum 6 characters';
                             }
                             return null;
                           },

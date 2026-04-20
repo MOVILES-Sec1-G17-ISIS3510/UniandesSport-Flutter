@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_theme.dart';
-import '../../../home/domain/models/event_modality.dart';
+import '../../../home/domain/entities/event_modality.dart';
 
 class ModalitySelector extends StatelessWidget {
   final EventModality? selectedModality;
@@ -84,10 +84,7 @@ class _ModalityButton extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           color: isSelected ? AppTheme.teal : Colors.white,
-          border: Border.all(
-            color: AppTheme.teal,
-            width: 2,
-          ),
+          border: Border.all(color: AppTheme.teal, width: 2),
           borderRadius: BorderRadius.circular(16),
         ),
         child: Column(
@@ -101,9 +98,9 @@ class _ModalityButton extends StatelessWidget {
             Text(
               label,
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: isSelected ? Colors.white : AppTheme.teal,
-                    fontWeight: FontWeight.w700,
-                  ),
+                color: isSelected ? Colors.white : AppTheme.teal,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ],
         ),
@@ -111,4 +108,3 @@ class _ModalityButton extends StatelessWidget {
     );
   }
 }
-
