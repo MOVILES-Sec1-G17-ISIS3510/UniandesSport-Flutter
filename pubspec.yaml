@@ -51,6 +51,11 @@ dependencies:
   firebase_storage: ^12.3.7
   connectivity_plus: ^6.1.4
   shared_preferences: ^2.3.2
+  google_sign_in: ^6.2.1
+  googleapis: ^13.2.0
+  http: ^1.2.2
+  record: ^6.0.0
+  google_generative_ai: ^0.4.6
 
 dev_dependencies:
   flutter_test:
