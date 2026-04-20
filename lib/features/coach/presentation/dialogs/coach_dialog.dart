@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:uniandessport_flutter/core/theme/app_theme.dart';
-import 'package:uniandessport_flutter/features/coach/domain/models/coach_model.dart';
+import 'package:uniandessport_flutter/features/coach/domain/entities/coach_model.dart';
 import 'package:uniandessport_flutter/features/coach/presentation/dialogs/review_dialog.dart';
 import 'package:uniandessport_flutter/features/coach/presentation/pages/coach_map_page.dart';
 import 'package:url_launcher/url_launcher.dart';

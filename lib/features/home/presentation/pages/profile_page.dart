@@ -7,7 +7,7 @@ import '../../../../core/validation/app_field_limits.dart';
 import '../../../auth/data/auth_repository.dart';
 import '../../../auth/domain/entities/user_profile.dart';
 import '../../../auth/domain/entities/user_role.dart';
-import '../../../auth/presentation/viewmodels/auth_view_model.dart';
+import '../../../auth/presentation/controllers/auth_controller.dart';
 
 class ProfilePage extends StatefulWidget {
   final UserProfile profile;

@@ -8,7 +8,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../data/coach_demo_locations.dart';
-import '../../domain/models/coach_model.dart';
+import '../../domain/entities/coach_model.dart';
 
 /// Google Maps en este proyecto solo está integrado en Android e iOS.
 bool isCoachMapsSdkSupported() =>
@@ -260,7 +260,6 @@ class _CoachMapPageState extends State<CoachMapPage> {
     if (c == null) return;
     try {
       final user = await Geolocator.getCurrentPosition();
-      final userLatLng = LatLng(user.latitude, user.longitude);
       final south = user.latitude < _coachLatLng.latitude
           ? user.latitude
           : _coachLatLng.latitude;
