@@ -6,6 +6,7 @@ import '../../../auth/data/auth_repository.dart';
 import '../../../auth/domain/models/user_profile.dart';
 import '../../../auth/domain/models/user_role.dart';
 import '../../../auth/presentation/controllers/auth_controller.dart';
+import 'available_time_slots_page.dart';
 
 class ProfilePage extends StatefulWidget {
   final UserProfile profile;
@@ -24,6 +25,7 @@ class _ProfilePageState extends State<ProfilePage> {
   late TextEditingController _semesterController;
   late TextEditingController _mainSportController;
   bool _isEditing = false;
+  bool _isSigningOut = false;
 
   String _buildInitials(String fullName) {
     final parts = fullName
@@ -130,8 +132,6 @@ class _ProfilePageState extends State<ProfilePage> {
                   ],
                 ),
                 const SizedBox(height: 24),
-
-                // Profile Header
                 Center(
                   child: Column(
                     children: [
@@ -173,12 +173,10 @@ class _ProfilePageState extends State<ProfilePage> {
                   ),
                 ),
                 const SizedBox(height: 32),
-
-                // Stats
                 if (!_isEditing)
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
+                    children: const [
                       _StatBox(label: 'MATCHES', value: '34'),
                       _StatBox(label: 'WIN RATE', value: '66%'),
                       _StatBox(label: 'AVG PACE', value: '5:23 min/km'),
@@ -186,8 +184,6 @@ class _ProfilePageState extends State<ProfilePage> {
                     ],
                   ),
                 if (!_isEditing) const SizedBox(height: 32),
-
-                // Form
                 if (_isEditing) ...[
                   const Text('Full name'),
                   const SizedBox(height: 8),
@@ -257,7 +253,6 @@ class _ProfilePageState extends State<ProfilePage> {
                   ),
                   const SizedBox(height: 32),
                 ] else ...[
-                  // Perfil Info
                   _ProfileInfoCard(
                     icon: Icons.school,
                     title: 'University',
@@ -292,11 +287,32 @@ class _ProfilePageState extends State<ProfilePage> {
                     title: 'Email',
                     value: widget.profile.email,
                   ),
+                  const SizedBox(height: 16),
+                  _AvailableTimeSlotsLauncher(
+                    onOpen: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => AvailableTimeSlotsPage(
+                            userId: widget.profile.uid,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                   const SizedBox(height: 32),
                   ElevatedButton.icon(
-                    onPressed: () => context.read<AuthController>().signOut(),
-                    icon: const Icon(Icons.logout),
-                    label: const Text('Sign out'),
+                    onPressed: _isSigningOut ? null : _handleSignOut,
+                    icon: _isSigningOut
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.logout),
+                    label: Text(_isSigningOut ? 'Signing out...' : 'Sign out'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.red,
                       foregroundColor: Colors.white,
@@ -309,6 +325,26 @@ class _ProfilePageState extends State<ProfilePage> {
         ),
       ),
     );
+  }
+
+  Future<void> _handleSignOut() async {
+    setState(() => _isSigningOut = true);
+
+    try {
+      await context.read<AuthController>().signOut();
+      if (!mounted) return;
+
+      Navigator.of(context).popUntil((route) => route.isFirst);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not sign out: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSigningOut = false);
+      }
+    }
   }
 
   void _saveProfile() async {
@@ -331,6 +367,49 @@ class _ProfilePageState extends State<ProfilePage> {
         context,
       ).showSnackBar(const SnackBar(content: Text('Profile updated')));
     }
+  }
+}
+
+class _AvailableTimeSlotsLauncher extends StatelessWidget {
+  final VoidCallback onOpen;
+
+  const _AvailableTimeSlotsLauncher({required this.onOpen});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outlineVariant,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Available time slots',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Manage your available schedule with editable chips or voice input.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 12),
+          ElevatedButton.icon(
+            onPressed: onOpen,
+            icon: const Icon(Icons.schedule),
+            label: const Text('Open time slots'),
+          ),
+        ],
+      ),
+    );
   }
 }
 
