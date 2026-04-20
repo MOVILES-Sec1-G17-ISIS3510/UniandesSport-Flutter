@@ -1,7 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:uniandessport_flutter/features/coach/domain/models/coach_model.dart';
+import 'package:uniandessport_flutter/core/theme/app_theme.dart';
+import 'package:uniandessport_flutter/features/coach/domain/entities/coach_model.dart';
 import 'package:uniandessport_flutter/features/coach/presentation/dialogs/review_dialog.dart';
+import 'package:uniandessport_flutter/features/coach/presentation/pages/coach_map_page.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class CoachProfileDialog extends StatelessWidget {
@@ -171,6 +173,50 @@ class CoachProfileDialog extends StatelessWidget {
 
                 const SizedBox(height: 20),
 
+                OutlinedButton.icon(
+                  onPressed: () {
+                    if (!isCoachMapsSdkSupported()) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: const Text(
+                            'El mapa está disponible en la app para Android e iOS.',
+                          ),
+                          behavior: SnackBarBehavior.floating,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                      );
+                      return;
+                    }
+                    final nav = Navigator.of(context, rootNavigator: true);
+                    nav.pop();
+                    nav.push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => CoachMapPage(coach: coach),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.map_outlined, color: AppTheme.teal),
+                  label: const Text(
+                    'View on map',
+                    style: TextStyle(
+                      color: AppTheme.teal,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: AppTheme.teal),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    minimumSize: const Size.fromHeight(48),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
                 /// REVIEWS
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -183,11 +229,10 @@ class CoachProfileDialog extends StatelessWidget {
                       onPressed: () {
                         showDialog(
                           context: context,
-                          builder: (_) =>
-                              AddReviewDialog(
-                                coachId: coach.id ?? '',
-                                coachSport: coach.deporte ?? '',
-                              ),
+                          builder: (_) => AddReviewDialog(
+                            coachId: coach.id ?? '',
+                            coachSport: coach.deporte ?? '',
+                          ),
                         );
                       },
                       icon: const Icon(Icons.rate_review_outlined),
@@ -406,8 +451,13 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-Widget _reviewCard(String name, String date, String review, int rating,
-    {String? imageUrl}) {
+Widget _reviewCard(
+  String name,
+  String date,
+  String review,
+  int rating, {
+  String? imageUrl,
+}) {
   return Container(
     padding: const EdgeInsets.all(14),
     decoration: BoxDecoration(
@@ -419,7 +469,14 @@ Widget _reviewCard(String name, String date, String review, int rating,
       children: [
         Row(
           children: [
-            Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
+            Expanded(
+              child: Text(
+                name,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
+            ),
             const SizedBox(width: 8),
             Row(
               children: List.generate(

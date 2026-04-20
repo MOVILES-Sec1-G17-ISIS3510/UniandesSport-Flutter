@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_sports.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../data/events_repository.dart';
-import '../../domain/models/sport_event.dart';
+import '../../domain/entities/sport_event.dart';
 
 class RecommendedEventsSection extends StatefulWidget {
   final String userId;

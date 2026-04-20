@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../data/auth_repository.dart';
-import '../../domain/models/user_role.dart';
+import '../../domain/entities/user_role.dart';
 
 /// Capa de presentacion para autenticacion.
 ///

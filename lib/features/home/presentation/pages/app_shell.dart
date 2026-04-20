@@ -1,16 +1,17 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../auth/data/auth_repository.dart';
-import '../../../auth/domain/models/user_profile.dart';
+import '../../../auth/domain/entities/user_profile.dart';
 import '../../presentation/pages/retos_page.dart';
 import '../../presentation/pages/play_page.dart';
 import '../../presentation/pages/social_page.dart';
 import '../../presentation/pages/profes_page.dart';
 import '../../presentation/pages/profile_page.dart';
-import '../controllers/play_view_model.dart';
+import '../viewmodels/play_view_model.dart';
 import '../widgets/play_nav_item.dart';
 import '../widgets/recommended_events_section.dart';
 import '../widgets/smart_recommendation_section.dart';
@@ -29,6 +30,7 @@ class _AppShellState extends State<AppShell> {
   int _selectedIndex = 0;
   int _playSportIndex = 0;
   Timer? _playSportTimer;
+  StreamSubscription<UserProfile?>? _profileSubscription;
 
   static const List<IconData> _playSportIcons = [
     Icons.sports_soccer,
@@ -57,6 +59,7 @@ class _AppShellState extends State<AppShell> {
   @override
   void dispose() {
     _playSportTimer?.cancel();
+    _profileSubscription?.cancel();
     super.dispose();
   }
 
@@ -71,12 +74,34 @@ class _AppShellState extends State<AppShell> {
 
   void _setupProfileListener() {
     final repository = context.read<AuthRepository>();
-    repository.userProfileChanges(_profile.uid).listen((profile) {
-      if (profile != null && mounted) {
-        setState(() {
-          _profile = profile;
-        });
+    _profileSubscription?.cancel();
+    _profileSubscription = repository.userProfileChanges(_profile.uid).listen((
+      profile,
+    ) {
+      if (profile == null || !mounted) {
+        return;
       }
+
+      final didProfileChange =
+          profile.uid != _profile.uid ||
+          profile.email != _profile.email ||
+          profile.fullName != _profile.fullName ||
+          profile.photoUrl != _profile.photoUrl ||
+          profile.mainSport != _profile.mainSport ||
+          profile.university != _profile.university ||
+          profile.program != _profile.program ||
+          profile.semester != _profile.semester ||
+          profile.role != _profile.role ||
+          !mapEquals(profile.inferredPreferences, _profile.inferredPreferences);
+
+      if (!didProfileChange) {
+        return;
+      }
+
+      setState(() {
+        _profile = profile;
+      });
+      context.read<PlayViewModel>().updateProfile(profile);
     });
   }
 

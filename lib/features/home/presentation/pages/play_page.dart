@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../core/theme/app_theme.dart';
-import '../../../auth/domain/models/user_profile.dart';
-import '../../domain/models/sport_event.dart';
-import '../controllers/play_view_model.dart';
+import '../../../auth/domain/entities/user_profile.dart';
+import '../../domain/entities/sport_event.dart';
+import '../viewmodels/play_view_model.dart';
 import '../widgets/action_buttons_section.dart';
 import '../widgets/event_card.dart';
 import '../widgets/modality_selector.dart';
@@ -178,6 +178,35 @@ class PlayPage extends StatelessWidget {
                   canCreate: vm.canCreate,
                   onSearchPressed: () => _handleSearch(vm),
                   onCreatePressed: () => _openCreateForm(context, vm),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: vm.toggleMyScheduled,
+                    icon: Icon(
+                      vm.showMyScheduled
+                          ? Icons.event_available
+                          : Icons.calendar_month,
+                      color: AppTheme.navy,
+                    ),
+                    label: Text(
+                      'My Schedule',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        color: AppTheme.navy,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(
+                        color: vm.showMyScheduled
+                            ? AppTheme.navy
+                            : AppTheme.teal,
+                        width: 1.4,
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                  ),
                 ),
                 if (vm.showMyScheduled) ...[
                   const SizedBox(height: 12),

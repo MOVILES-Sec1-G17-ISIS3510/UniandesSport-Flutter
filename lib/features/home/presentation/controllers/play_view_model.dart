@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_sports.dart';
 import '../../data/events_repository.dart';
-import '../../domain/models/event_modality.dart';
-import '../../domain/models/sport_event.dart';
-import '../../../auth/domain/models/user_profile.dart';
+import '../../domain/entities/event_modality.dart';
+import '../../domain/entities/sport_event.dart';
+import '../../../auth/domain/entities/user_profile.dart';
 
 /// ViewModel de la pantalla Play.
 ///

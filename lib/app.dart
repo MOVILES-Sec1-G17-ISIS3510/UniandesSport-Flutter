@@ -5,11 +5,11 @@ import 'package:provider/provider.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_controller.dart';
 import 'features/auth/data/auth_repository.dart';
-import 'features/auth/domain/models/user_profile.dart';
-import 'features/auth/presentation/controllers/auth_controller.dart';
+import 'features/auth/domain/entities/user_profile.dart';
+import 'features/auth/presentation/viewmodels/auth_view_model.dart';
 import 'features/auth/presentation/pages/auth_gate.dart';
 import 'features/home/data/events_repository.dart';
-import 'features/home/presentation/controllers/play_view_model.dart';
+import 'features/home/presentation/viewmodels/play_view_model.dart';
 import 'core/services/notification_service.dart';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -102,12 +102,12 @@ class _UniandesSportsAppState extends State<UniandesSportsApp> {
                   ),
 
                   // ── ViewModels (MVVM) ─────────────────────────────────────────
-                  // AuthController depende de AuthRepository → ProxyProvider.
-                  ChangeNotifierProxyProvider<AuthRepository, AuthController>(
+                  // AuthViewModel depende de AuthRepository → ProxyProvider.
+                  ChangeNotifierProxyProvider<AuthRepository, AuthViewModel>(
                     create: (context) =>
-                        AuthController(context.read<AuthRepository>()),
+                        AuthViewModel(context.read<AuthRepository>()),
                     update: (context, repository, controller) =>
-                        controller ?? AuthController(repository),
+                        controller ?? AuthViewModel(repository),
                   ),
                   // PlayViewModel depende de EventsRepository y del perfil del usuario.
                   // El perfil se inyecta más abajo desde AppShell cuando ya existe sesión.

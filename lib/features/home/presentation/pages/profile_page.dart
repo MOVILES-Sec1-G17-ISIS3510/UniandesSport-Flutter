@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../core/theme/app_sports.dart';
+import '../../../../core/validation/app_field_limits.dart';
 import '../../../auth/data/auth_repository.dart';
-import '../../../auth/domain/models/user_profile.dart';
-import '../../../auth/domain/models/user_role.dart';
+import '../../../auth/domain/entities/user_profile.dart';
+import '../../../auth/domain/entities/user_role.dart';
 import '../../../auth/presentation/controllers/auth_controller.dart';
 import 'available_time_slots_page.dart';
 
@@ -19,6 +21,7 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
+  final _editFormKey = GlobalKey<FormState>();
   late TextEditingController _fullNameController;
   late TextEditingController _universityController;
   late TextEditingController _programController;
@@ -185,73 +188,150 @@ class _ProfilePageState extends State<ProfilePage> {
                   ),
                 if (!_isEditing) const SizedBox(height: 32),
                 if (_isEditing) ...[
-                  const Text('Full name'),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _fullNameController,
-                    decoration: InputDecoration(
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text('University'),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _universityController,
-                    decoration: InputDecoration(
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text('Program'),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _programController,
-                    decoration: InputDecoration(
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text('Semester'),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _semesterController,
-                    keyboardType: TextInputType.number,
-                    decoration: InputDecoration(
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text('Main sport'),
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(
-                    initialValue: selectedMainSportForDropdown,
-                    items: AppSports.sportKeys
-                        .map(
-                          (key) => DropdownMenuItem(
-                            value: key,
-                            child: Text(AppSports.getSport(key).name),
+                  Form(
+                    key: _editFormKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Full name'),
+                        const SizedBox(height: 8),
+                        TextFormField(
+                          controller: _fullNameController,
+                          textInputAction: TextInputAction.next,
+                          maxLength: AppFieldLimits.fullName,
+                          inputFormatters: [
+                            LengthLimitingTextInputFormatter(
+                              AppFieldLimits.fullName,
+                            ),
+                          ],
+                          validator: (value) {
+                            final text = (value ?? '').trim();
+                            if (text.isEmpty) return 'Full name is required';
+                            if (text.length <
+                                AppValidationRules.fullNameMinLength) {
+                              return 'At least 3 characters';
+                            }
+                            return null;
+                          },
+                          decoration: InputDecoration(
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
                           ),
-                        )
-                        .toList(),
-                    onChanged: (value) {
-                      _mainSportController.text = value ?? '';
-                    },
-                    decoration: InputDecoration(
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
+                        ),
+                        const SizedBox(height: 16),
+                        const Text('University'),
+                        const SizedBox(height: 8),
+                        TextFormField(
+                          controller: _universityController,
+                          textInputAction: TextInputAction.next,
+                          maxLength: AppFieldLimits.university,
+                          inputFormatters: [
+                            LengthLimitingTextInputFormatter(
+                              AppFieldLimits.university,
+                            ),
+                          ],
+                          validator: (value) {
+                            final text = (value ?? '').trim();
+                            if (text.isNotEmpty &&
+                                text.length <
+                                    AppValidationRules
+                                        .shortOptionalTextMinLength) {
+                              return 'University is too short';
+                            }
+                            return null;
+                          },
+                          decoration: InputDecoration(
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        const Text('Program'),
+                        const SizedBox(height: 8),
+                        TextFormField(
+                          controller: _programController,
+                          textInputAction: TextInputAction.next,
+                          maxLength: AppFieldLimits.program,
+                          inputFormatters: [
+                            LengthLimitingTextInputFormatter(
+                              AppFieldLimits.program,
+                            ),
+                          ],
+                          validator: (value) {
+                            final text = (value ?? '').trim();
+                            if (text.isNotEmpty &&
+                                text.length <
+                                    AppValidationRules
+                                        .shortOptionalTextMinLength) {
+                              return 'Program is too short';
+                            }
+                            return null;
+                          },
+                          decoration: InputDecoration(
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        const Text('Semester'),
+                        const SizedBox(height: 8),
+                        TextFormField(
+                          controller: _semesterController,
+                          textInputAction: TextInputAction.done,
+                          keyboardType: TextInputType.number,
+                          maxLength: AppFieldLimits.semesterDigits,
+                          inputFormatters: [
+                            LengthLimitingTextInputFormatter(
+                              AppFieldLimits.semesterDigits,
+                            ),
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
+                          validator: (value) {
+                            final text = (value ?? '').trim();
+                            if (text.isEmpty) return 'Semester is required';
+                            final semester = int.tryParse(text);
+                            if (semester == null ||
+                                semester < AppValidationRules.semesterMin ||
+                                semester > AppValidationRules.semesterMax) {
+                              return 'Enter a semester between 1 and 20';
+                            }
+                            return null;
+                          },
+                          decoration: InputDecoration(
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        const Text('Main sport'),
+                        const SizedBox(height: 8),
+                        DropdownButtonFormField<String>(
+                          initialValue: selectedMainSportForDropdown,
+                          items: AppSports.sportKeys
+                              .map(
+                                (key) => DropdownMenuItem(
+                                  value: key,
+                                  child: Text(AppSports.getSport(key).name),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (value) {
+                            _mainSportController.text = value ?? '';
+                          },
+                          decoration: InputDecoration(
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 32),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 32),
                 ] else ...[
                   _ProfileInfoCard(
                     icon: Icons.school,
@@ -313,6 +393,17 @@ class _ProfilePageState extends State<ProfilePage> {
                           )
                         : const Icon(Icons.logout),
                     label: Text(_isSigningOut ? 'Signing out...' : 'Sign out'),
+                    onPressed: () async {
+                      await context.read<AuthController>().signOut();
+                      if (!mounted) return;
+                      Navigator.of(
+                        context,
+                        rootNavigator: true,
+                      ).popUntil((route) => route.isFirst);
+                    },
+
+                    icon: const Icon(Icons.logout),
+                    label: const Text('Sign out'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.red,
                       foregroundColor: Colors.white,
@@ -348,16 +439,18 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   void _saveProfile() async {
+    if (!_editFormKey.currentState!.validate()) return;
+
     final repository = context.read<AuthRepository>();
-    final semester = int.tryParse(_semesterController.text);
+    final semester = int.tryParse(_semesterController.text.trim());
 
     await repository.updateUserProfile(
       uid: widget.profile.uid,
-      fullName: _fullNameController.text,
-      university: _universityController.text,
-      program: _programController.text,
+      fullName: _fullNameController.text.trim(),
+      university: _universityController.text.trim(),
+      program: _programController.text.trim(),
       semester: semester,
-      mainSport: _mainSportController.text,
+      mainSport: _mainSportController.text.trim(),
     );
 
     setState(() => _isEditing = false);

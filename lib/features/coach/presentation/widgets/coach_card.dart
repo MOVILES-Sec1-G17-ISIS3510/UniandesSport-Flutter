@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:uniandessport_flutter/core/services/analytics_service.dart';
-import 'package:uniandessport_flutter/features/coach/domain/models/coach_model.dart';
+import 'package:uniandessport_flutter/features/coach/domain/entities/coach_model.dart';
 import 'package:uniandessport_flutter/features/coach/presentation/dialogs/coach_dialog.dart';
+import 'package:uniandessport_flutter/features/coach/presentation/pages/coach_map_page.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class CoachCard extends StatelessWidget {
@@ -145,6 +146,35 @@ class CoachCard extends StatelessWidget {
                   ),
                   child: const Text('View Profile'),
                 ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                style: IconButton.styleFrom(
+                  backgroundColor: colorScheme.surfaceContainerHighest,
+                  foregroundColor: colorScheme.onSurfaceVariant,
+                ),
+                onPressed: () {
+                  if (!isCoachMapsSdkSupported()) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: const Text(
+                          'El mapa está disponible en la app para Android e iOS.',
+                        ),
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                    );
+                    return;
+                  }
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => CoachMapPage(coach: coach),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.map_outlined),
               ),
               const SizedBox(width: 8),
               Container(
