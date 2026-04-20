@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:uniandessport_flutter/core/services/google_calendar_service.dart';
 
 import '../../../core/services/analytics_service.dart';
 import '../../../core/theme/app_sports.dart';
@@ -43,9 +44,9 @@ class EventsRepository {
     AnalyticsService.instance.logSearchSportEvent(sportCategory: sport);
 
     try {
-      FirebaseFunctions.instance
-          .httpsCallable('logSportSearch')
-          .call({'sport': AppSports.normalizeSportKey(sport)});
+      FirebaseFunctions.instance.httpsCallable('logSportSearch').call({
+        'sport': AppSports.normalizeSportKey(sport),
+      });
     } catch (e) {
       debugPrint('Warning: Could not log search increment: $e');
     }
@@ -59,11 +60,14 @@ class EventsRepository {
           .where('status', isEqualTo: status)
           .get();
 
-      final events = snapshot.docs
-          .map((doc) => SportEvent.fromFirestore(doc))
-          .where((event) => event.modality == modality && event.status == status)
-          .toList()
-        ..sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
+      final events =
+          snapshot.docs
+              .map((doc) => SportEvent.fromFirestore(doc))
+              .where(
+                (event) => event.modality == modality && event.status == status,
+              )
+              .toList()
+            ..sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
 
       return _pickVariedEvents(events, maxResults: 5);
     } catch (e) {
@@ -506,10 +510,7 @@ class EventsRepository {
 
         if (!snapshot.exists) {
           debugPrint('[registerUserInEvent] El evento $eventId no existe');
-          return {
-            'success': false,
-            'message': 'Event does not exist',
-          };
+          return {'success': false, 'message': 'Event does not exist'};
         }
 
         final data = snapshot.data() as Map<String, dynamic>;
@@ -534,10 +535,7 @@ class EventsRepository {
 
         if (participants.length >= maxParticipants) {
           debugPrint('[registerUserInEvent] Evento $eventId está lleno');
-          return {
-            'success': false,
-            'message': 'The event is full',
-          };
+          return {'success': false, 'message': 'The event is full'};
         }
 
         debugPrint('[registerUserInEvent] Agregando $userId a participantes');
@@ -553,7 +551,8 @@ class EventsRepository {
         };
       });
 
-      if (result['success'] == true && result['message'] == 'Registered successfully') {
+      if (result['success'] == true &&
+          result['message'] == 'Registered successfully') {
         final sportCategory = (result['sportCategory'] as String?) ?? '';
         AnalyticsService.instance.logJoinSportEvent(
           sportCategory: sportCategory,
@@ -1002,5 +1001,71 @@ class EventsRepository {
       'highUtilizationThreshold': highUtilizationThreshold,
     });
     return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  /// Devuelve una recomendación única para hoy según deporte y disponibilidad.
+  Future<SportEvent?> getDailyRecommendedEvent({
+    required String sport,
+    List<TimeSlot>? userAvailableSlots,
+  }) async {
+    try {
+      final now = DateTime.now();
+      final startOfDay = DateTime(now.year, now.month, now.day);
+      final endOfDay = DateTime(now.year, now.month, now.day, 23, 59, 59);
+
+      final normalizedSport = AppSports.normalizeSportKey(sport);
+      final snapshot = await _firestore
+          .collection('events')
+          .where('sport', isEqualTo: normalizedSport)
+          .where('status', isEqualTo: 'active')
+          .where(
+            'scheduledAt',
+            isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay),
+          )
+          .where(
+            'scheduledAt',
+            isLessThanOrEqualTo: Timestamp.fromDate(endOfDay),
+          )
+          .get();
+
+      final candidates =
+          snapshot.docs
+              .map(SportEvent.fromFirestore)
+              .where((event) => !event.isFull)
+              .where((event) => event.scheduledAt.isAfter(now))
+              .toList()
+            ..sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
+
+      if (candidates.isEmpty) return null;
+
+      if (userAvailableSlots == null || userAvailableSlots.isEmpty) {
+        return candidates.first;
+      }
+
+      for (final event in candidates) {
+        if (_isEventInAnyAvailableSlot(event, userAvailableSlots)) {
+          return event;
+        }
+      }
+
+      return null;
+    } catch (e) {
+      throw Exception('Error getting daily recommended event: $e');
+    }
+  }
+
+  bool _isEventInAnyAvailableSlot(SportEvent event, List<TimeSlot> slots) {
+    final eventStart = event.scheduledAt;
+    final eventEnd = eventStart.add(const Duration(hours: 1));
+
+    for (final slot in slots) {
+      final startsInside = !eventStart.isBefore(slot.start);
+      final endsInside = !eventEnd.isAfter(slot.end);
+      if (startsInside && endsInside) {
+        return true;
+      }
+    }
+
+    return false;
   }
 }
