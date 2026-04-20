@@ -13,6 +13,7 @@ class AppFieldLimits {
   static const int challengeDescription = 240;
   static const int challengeGoal = 80;
   static const int challengeReward = 80;
+  static const int challengeReview = 400;
 }
 
 class AppValidationRules {
@@ -30,4 +31,5 @@ class AppValidationRules {
   static const int challengeDescriptionMinLength = 8;
   static const int challengeGoalMinLength = 4;
   static const int challengeRewardMinLength = 4;
+  static const int challengeReviewMinLength = 8;
 }

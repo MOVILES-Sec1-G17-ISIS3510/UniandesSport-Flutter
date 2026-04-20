@@ -20,6 +20,53 @@ class ChallengeRecommendation {
 class ChallengeRecommendationEngine {
   const ChallengeRecommendationEngine();
 
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> topRatedChallenges({
+    required List<QueryDocumentSnapshot<Map<String, dynamic>>> challenges,
+    int maxResults = 4,
+    int minReviews = 1,
+  }) {
+    if (challenges.isEmpty || maxResults <= 0) {
+      return const [];
+    }
+
+    final eligible = challenges.where((doc) {
+      final data = doc.data();
+      final ratingCount = (data['ratingCount'] as num?)?.toInt() ?? 0;
+      return ratingCount >= minReviews;
+    }).toList();
+
+    final source = eligible.isNotEmpty ? eligible : [...challenges];
+
+    source.sort((a, b) {
+      final aData = a.data();
+      final bData = b.data();
+
+      final aAverage = (aData['ratingAverage'] as num?)?.toDouble() ?? 0.0;
+      final bAverage = (bData['ratingAverage'] as num?)?.toDouble() ?? 0.0;
+
+      final aCount = (aData['ratingCount'] as num?)?.toInt() ?? 0;
+      final bCount = (bData['ratingCount'] as num?)?.toInt() ?? 0;
+
+      final aNormalized = (aAverage / 5.0).clamp(0.0, 1.0);
+      final bNormalized = (bAverage / 5.0).clamp(0.0, 1.0);
+      final aConfidence = (aCount / 12.0).clamp(0.0, 1.0);
+      final bConfidence = (bCount / 12.0).clamp(0.0, 1.0);
+
+      final aScore = (0.75 * aNormalized) + (0.25 * aConfidence);
+      final bScore = (0.75 * bNormalized) + (0.25 * bConfidence);
+
+      final byScore = bScore.compareTo(aScore);
+      if (byScore != 0) return byScore;
+
+      final byCount = bCount.compareTo(aCount);
+      if (byCount != 0) return byCount;
+
+      return bAverage.compareTo(aAverage);
+    });
+
+    return source.take(maxResults).toList();
+  }
+
   List<QueryDocumentSnapshot<Map<String, dynamic>>> rankChallenges({
     required List<QueryDocumentSnapshot<Map<String, dynamic>>> challenges,
     required UserProfile profile,
@@ -68,6 +115,7 @@ class ChallengeRecommendationEngine {
     final reasons = <String>[
       if (best.matchesMainSport) 'it matches your main sport',
       if (best.preferenceScore >= 0.5) 'it aligns with your interests',
+      if (best.ratingScore >= 0.65) 'users rated it highly',
       if (best.daysLeft >= 0 && best.daysLeft <= 10)
         'it has a near and achievable goal',
       if (best.easeScore >= 0.55) 'it looks easier to start with',
@@ -131,6 +179,14 @@ class ChallengeRecommendationEngine {
         (data['participantsCount'] as num?)?.toInt() ?? participants.length;
     final socialEase = (participantsCount / 20).clamp(0.0, 1.0);
 
+    final ratingAverage = (data['ratingAverage'] as num?)?.toDouble() ?? 0.0;
+    final ratingCount = (data['ratingCount'] as num?)?.toInt() ?? 0;
+    final normalizedAverage = (ratingAverage / 5.0).clamp(0.0, 1.0);
+    final confidence = (ratingCount / 8.0).clamp(0.0, 1.0);
+    final ratingScore =
+        ((normalizedAverage * 0.6) + (normalizedAverage * confidence * 0.4))
+            .clamp(0.0, 1.0);
+
     final daysScore = daysLeft < 0
         ? 0.0
         : (daysLeft >= 5 ? 1.0 : (daysLeft / 5).clamp(0.0, 1.0));
@@ -156,6 +212,7 @@ class ChallengeRecommendationEngine {
       preferenceScore: preferenceScore,
       easeScore: easeScore,
       daysScore: daysScore,
+      ratingScore: ratingScore,
       userProgress: userProgress,
       matchesMainSport: matchesMainSport,
     );
@@ -167,6 +224,7 @@ class ChallengeRecommendationEngine {
       score: total,
       preferenceScore: preferenceScore,
       easeScore: easeScore,
+      ratingScore: ratingScore,
       daysLeft: daysLeft,
       matchesMainSport: matchesMainSport,
     );
@@ -178,6 +236,7 @@ abstract class _ChallengeScoringStrategy {
     required double preferenceScore,
     required double easeScore,
     required double daysScore,
+    required double ratingScore,
     required double userProgress,
     required bool matchesMainSport,
   });
@@ -191,14 +250,16 @@ class _ExplorationScoringStrategy implements _ChallengeScoringStrategy {
     required double preferenceScore,
     required double easeScore,
     required double daysScore,
+    required double ratingScore,
     required double userProgress,
     required bool matchesMainSport,
   }) {
     final mainSportBoost = matchesMainSport ? 0.25 : 0.0;
 
     return (0.45 * preferenceScore) +
-        (0.30 * easeScore) +
-        (0.25 * daysScore) +
+        (0.22 * easeScore) +
+        (0.15 * daysScore) +
+        (0.18 * ratingScore) +
         mainSportBoost;
   }
 }
@@ -211,6 +272,7 @@ class _ConsistencyScoringStrategy implements _ChallengeScoringStrategy {
     required double preferenceScore,
     required double easeScore,
     required double daysScore,
+    required double ratingScore,
     required double userProgress,
     required bool matchesMainSport,
   }) {
@@ -218,8 +280,9 @@ class _ConsistencyScoringStrategy implements _ChallengeScoringStrategy {
     final mainSportBoost = matchesMainSport ? 0.10 : 0.0;
 
     return (0.35 * preferenceScore) +
-        (0.20 * easeScore) +
-        (0.15 * daysScore) +
+        (0.12 * easeScore) +
+        (0.08 * daysScore) +
+        (0.15 * ratingScore) +
         continuationBoost +
         mainSportBoost;
   }
@@ -245,6 +308,7 @@ class _ScoredChallenge {
   final double score;
   final double preferenceScore;
   final double easeScore;
+  final double ratingScore;
   final int daysLeft;
   final bool matchesMainSport;
 
@@ -255,6 +319,7 @@ class _ScoredChallenge {
     required this.score,
     required this.preferenceScore,
     required this.easeScore,
+    required this.ratingScore,
     required this.daysLeft,
     required this.matchesMainSport,
   });
