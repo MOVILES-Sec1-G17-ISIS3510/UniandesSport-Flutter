@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:uniandessport_flutter/core/services/analytics_service.dart';
 import 'package:uniandessport_flutter/core/services/coach_cache_service.dart';
 import 'package:uniandessport_flutter/core/services/pending_reviews_service.dart';
-import 'package:uniandessport_flutter/features/coach/domain/models/coach_model.dart';
+import 'package:uniandessport_flutter/features/coach/domain/entities/coach_model.dart';
 import 'package:uniandessport_flutter/features/home/data/coach_repository.dart';
 
 class CoachesViewModel extends ChangeNotifier {

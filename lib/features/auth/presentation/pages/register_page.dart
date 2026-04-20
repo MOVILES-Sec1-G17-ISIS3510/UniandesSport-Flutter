@@ -1,17 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/app_sports.dart';
-import '../../domain/models/user_role.dart';
-import '../controllers/auth_controller.dart';
+import '../../../../core/validation/app_field_limits.dart';
+import '../../domain/entities/user_role.dart';
+import '../viewmodels/auth_view_model.dart';
 
 /// Pantalla de registro de cuenta.
 ///
 /// Flujo funcional:
 /// 1) Captura datos basicos del usuario y preferencias iniciales.
 /// 2) Construye correo institucional con dominio Uniandes.
-/// 3) Ejecuta AuthController.signUp(...).
+/// 3) Ejecuta AuthViewModel.signUp(...).
 /// 4) Si el registro es exitoso, vuelve al login.
 ///
 /// Persistencia asociada:
@@ -61,15 +63,15 @@ class _RegisterPageState extends State<RegisterPage> {
     if (!_formKey.currentState!.validate()) return;
 
     final semester = int.parse(_semesterController.text.trim());
-    final controller = context.read<AuthController>();
+    final controller = context.read<AuthViewModel>();
     final institutionalEmail = _buildUniandesEmail(_emailController.text);
 
     final success = await controller.signUp(
       email: institutionalEmail,
       password: _passwordController.text,
-      fullName: _nameController.text,
+      fullName: _nameController.text.trim(),
       role: _selectedRole,
-      program: _programController.text,
+      program: _programController.text.trim(),
       semester: semester,
       mainSport: _selectedSport,
     );
@@ -85,13 +87,17 @@ class _RegisterPageState extends State<RegisterPage> {
     }
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(controller.errorMessage ?? 'Could not create the account')),
+      SnackBar(
+        content: Text(
+          controller.errorMessage ?? 'Could not create the account',
+        ),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final controller = context.watch<AuthController>();
+    final controller = context.watch<AuthViewModel>();
 
     return Scaffold(
       appBar: AppBar(
@@ -123,13 +129,25 @@ class _RegisterPageState extends State<RegisterPage> {
                       children: [
                         TextFormField(
                           controller: _nameController,
+                          textInputAction: TextInputAction.next,
+                          maxLength: AppFieldLimits.fullName,
+                          inputFormatters: [
+                            LengthLimitingTextInputFormatter(
+                              AppFieldLimits.fullName,
+                            ),
+                          ],
                           decoration: const InputDecoration(
                             labelText: 'Full name',
                             prefixIcon: Icon(Icons.person_outline),
                           ),
                           validator: (value) {
-                            if ((value ?? '').trim().isEmpty) {
+                            final text = (value ?? '').trim();
+                            if (text.isEmpty) {
                               return 'Enter your name';
+                            }
+                            if (text.length <
+                                AppValidationRules.fullNameMinLength) {
+                              return 'At least 3 characters';
                             }
                             return null;
                           },
@@ -138,6 +156,16 @@ class _RegisterPageState extends State<RegisterPage> {
                         TextFormField(
                           controller: _emailController,
                           keyboardType: TextInputType.text,
+                          textInputAction: TextInputAction.next,
+                          maxLength: AppFieldLimits.username,
+                          inputFormatters: [
+                            LengthLimitingTextInputFormatter(
+                              AppFieldLimits.username,
+                            ),
+                            FilteringTextInputFormatter.allow(
+                              RegExp(r'[a-zA-Z0-9._-]'),
+                            ),
+                          ],
                           decoration: const InputDecoration(
                             labelText: 'Uniandes username',
                             hintText: 'Ex: jperez',
@@ -145,9 +173,14 @@ class _RegisterPageState extends State<RegisterPage> {
                           ),
                           validator: (value) {
                             final text = value?.trim() ?? '';
-                            if (text.isEmpty) return 'Enter your Uniandes username';
+                            if (text.isEmpty)
+                              return 'Enter your Uniandes username';
                             if (text.contains('@')) {
                               return 'Only enter the username, without @domain';
+                            }
+                            if (text.length <
+                                AppValidationRules.usernameMinLength) {
+                              return 'At least 3 characters';
                             }
                             final isValid = RegExp(
                               r'^[a-zA-Z0-9._-]+$',
@@ -183,6 +216,13 @@ class _RegisterPageState extends State<RegisterPage> {
                         TextFormField(
                           controller: _passwordController,
                           obscureText: _obscurePassword,
+                          textInputAction: TextInputAction.next,
+                          maxLength: AppFieldLimits.password,
+                          inputFormatters: [
+                            LengthLimitingTextInputFormatter(
+                              AppFieldLimits.password,
+                            ),
+                          ],
                           decoration: InputDecoration(
                             labelText: 'Password',
                             prefixIcon: const Icon(Icons.lock_outline),
@@ -200,7 +240,9 @@ class _RegisterPageState extends State<RegisterPage> {
                             ),
                           ),
                           validator: (value) {
-                            if ((value ?? '').length < 6) {
+                            final text = value ?? '';
+                            if (text.length <
+                                AppValidationRules.passwordMinLength) {
                               return 'Minimum 6 characters';
                             }
                             return null;
@@ -210,6 +252,13 @@ class _RegisterPageState extends State<RegisterPage> {
                         TextFormField(
                           controller: _confirmPasswordController,
                           obscureText: _obscureConfirmPassword,
+                          textInputAction: TextInputAction.next,
+                          maxLength: AppFieldLimits.password,
+                          inputFormatters: [
+                            LengthLimitingTextInputFormatter(
+                              AppFieldLimits.password,
+                            ),
+                          ],
                           decoration: InputDecoration(
                             labelText: 'Confirm password',
                             prefixIcon: const Icon(Icons.lock_outline),
@@ -228,6 +277,9 @@ class _RegisterPageState extends State<RegisterPage> {
                             ),
                           ),
                           validator: (value) {
+                            if ((value ?? '').isEmpty) {
+                              return 'Confirm your password';
+                            }
                             if (value != _passwordController.text) {
                               return 'Passwords do not match';
                             }
@@ -237,6 +289,13 @@ class _RegisterPageState extends State<RegisterPage> {
                         const SizedBox(height: 12),
                         TextFormField(
                           controller: _programController,
+                          textInputAction: TextInputAction.next,
+                          maxLength: AppFieldLimits.program,
+                          inputFormatters: [
+                            LengthLimitingTextInputFormatter(
+                              AppFieldLimits.program,
+                            ),
+                          ],
                           decoration: const InputDecoration(
                             labelText: 'Academic program (optional)',
                             prefixIcon: Icon(Icons.menu_book_outlined),
@@ -246,17 +305,25 @@ class _RegisterPageState extends State<RegisterPage> {
                         TextFormField(
                           controller: _semesterController,
                           keyboardType: TextInputType.number,
+                          textInputAction: TextInputAction.done,
+                          maxLength: AppFieldLimits.semesterDigits,
+                          inputFormatters: [
+                            LengthLimitingTextInputFormatter(
+                              AppFieldLimits.semesterDigits,
+                            ),
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
                           decoration: const InputDecoration(
                             labelText: 'Semester',
                             prefixIcon: Icon(Icons.calendar_today_outlined),
                           ),
                           validator: (value) {
                             final text = value?.trim() ?? '';
-                            if (text.isEmpty)
-                              return 'El semestre es obligatorio';
                             if (text.isEmpty) return 'Semester is required';
                             final parsed = int.tryParse(text);
-                            if (parsed == null || parsed <= 0) {
+                            if (parsed == null ||
+                                parsed < AppValidationRules.semesterMin ||
+                                parsed > AppValidationRules.semesterMax) {
                               return 'Enter a valid semester';
                             }
                             return null;

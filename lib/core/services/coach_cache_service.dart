@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../features/coach/domain/models/coach_model.dart';
+import '../../features/coach/domain/entities/coach_model.dart';
 
 /// Local cache for coach listings and the highlighted coach of the month.
 ///
