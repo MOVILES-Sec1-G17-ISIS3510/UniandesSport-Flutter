@@ -53,5 +53,7 @@
 	<string>Usamos la galería para adjuntar fotos en tus reviews de coaches.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Usamos la fototeca para guardar imágenes asociadas a reviews cuando sea necesario.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>Usamos el sensor de movimiento para medir pasos en retos compatibles como running.</string>
 </dict>
 </plist>

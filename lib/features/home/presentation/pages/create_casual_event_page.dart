@@ -4,9 +4,9 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_sports.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/services/notification_service.dart';
-import '../../../auth/domain/models/user_profile.dart';
+import '../../../auth/domain/entities/user_profile.dart';
 import '../../data/events_repository.dart';
-import '../../domain/models/event_modality.dart';
+import '../../domain/entities/event_modality.dart';
 import 'event_creation_result_page.dart';
 
 class CreateCasualEventPage extends StatefulWidget {
@@ -94,7 +94,9 @@ class _CreateCasualEventPageState extends State<CreateCasualEventPage> {
     if (widget.profile.semester == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('You must have a semester registered in your profile to create events'),
+          content: Text(
+            'You must have a semester registered in your profile to create events',
+          ),
         ),
       );
       return;
@@ -148,8 +150,9 @@ class _CreateCasualEventPageState extends State<CreateCasualEventPage> {
       }
     } on FirebaseException catch (e) {
       if (!mounted) return;
-      final message =
-          e.code == 'permission-denied' ? 'You do not have permission to create this match' : 'Error creating match: ${e.message}';
+      final message = e.code == 'permission-denied'
+          ? 'You do not have permission to create this match'
+          : 'Error creating match: ${e.message}';
 
       await Navigator.of(context).push<bool>(
         MaterialPageRoute(
@@ -178,9 +181,7 @@ class _CreateCasualEventPageState extends State<CreateCasualEventPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Create casual match'),
-      ),
+      appBar: AppBar(title: const Text('Create casual match')),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
@@ -231,7 +232,9 @@ class _CreateCasualEventPageState extends State<CreateCasualEventPage> {
                 TextFormField(
                   controller: _maxParticipantsController,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Maximum participants'),
+                  decoration: const InputDecoration(
+                    labelText: 'Maximum participants',
+                  ),
                   validator: (value) {
                     final parsed = int.tryParse(value ?? '');
                     if (parsed == null || parsed < 2) {

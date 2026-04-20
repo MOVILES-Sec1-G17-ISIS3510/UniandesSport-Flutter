@@ -2,8 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../../core/theme/app_sports.dart';
-import '../domain/models/user_profile.dart';
-import '../domain/models/user_role.dart';
+import '../domain/entities/user_profile.dart';
+import '../domain/entities/user_role.dart';
 
 /// Repositorio de autenticacion y perfil de usuario.
 ///

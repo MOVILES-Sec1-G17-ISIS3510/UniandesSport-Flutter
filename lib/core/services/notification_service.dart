@@ -1,5 +1,7 @@
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
@@ -20,8 +22,11 @@ class NotificationService {
 
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
+  final FirebaseMessaging _messaging = FirebaseMessaging.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   bool _initialized = false;
+  bool _remoteNotificationsInitialized = false;
 
   /// Inicializa el plugin y registra el callback de tap.
   ///
@@ -52,8 +57,121 @@ class NotificationService {
         >();
     await androidImplementation?.requestNotificationsPermission();
 
+    await _initializeRemoteNotifications();
+
     _initialized = true;
     debugPrint('[NotificationService] Initialized');
+  }
+
+  Future<void> _initializeRemoteNotifications() async {
+    if (_remoteNotificationsInitialized) return;
+
+    final settings = await _messaging.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+      provisional: false,
+    );
+
+    debugPrint(
+      '[NotificationService] Remote permission status: ${settings.authorizationStatus}',
+    );
+
+    await _syncFcmTokenForCurrentUser();
+
+    FirebaseMessaging.instance.onTokenRefresh.listen((token) async {
+      await _persistToken(token);
+    });
+
+    FirebaseMessaging.onMessage.listen((message) async {
+      final title =
+          message.notification?.title ??
+          message.data['title'] ??
+          'UniandesSport';
+      final body =
+          message.notification?.body ??
+          message.data['body'] ??
+          'You have a new smart notification.';
+
+      const androidDetails = AndroidNotificationDetails(
+        'smart_challenge_channel',
+        'Smart challenge notifications',
+        channelDescription: 'Real-time smart challenge match notifications',
+        importance: Importance.high,
+        priority: Priority.high,
+      );
+
+      await _plugin.show(
+        id: DateTime.now().millisecondsSinceEpoch.remainder(1000000),
+        title: title,
+        body: body,
+        notificationDetails: const NotificationDetails(
+          android: androidDetails,
+          iOS: DarwinNotificationDetails(),
+        ),
+        payload: message.data['challengeId'] ?? message.data['eventId'] ?? '',
+      );
+    });
+
+    FirebaseMessaging.onMessageOpenedApp.listen(_handleRemoteMessageOpened);
+
+    final initialMessage = await _messaging.getInitialMessage();
+    if (initialMessage != null) {
+      await _handleRemoteMessageOpened(initialMessage);
+    }
+
+    FirebaseAuth.instance.authStateChanges().listen((user) async {
+      if (user == null) return;
+      await _syncFcmTokenForCurrentUser();
+    });
+
+    _remoteNotificationsInitialized = true;
+  }
+
+  Future<void> _syncFcmTokenForCurrentUser() async {
+    final token = await _messaging.getToken();
+    if (token == null || token.trim().isEmpty) {
+      return;
+    }
+
+    await _persistToken(token);
+  }
+
+  Future<void> _persistToken(String token) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || user.uid.isEmpty) return;
+
+    try {
+      await _firestore.collection('users').doc(user.uid).set({
+        'fcmToken': token,
+        'fcmTokens': FieldValue.arrayUnion([token]),
+        'notificationToken': token,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } catch (error) {
+      debugPrint('[NotificationService] Error saving FCM token: $error');
+    }
+  }
+
+  Future<void> _handleRemoteMessageOpened(RemoteMessage message) async {
+    final challengeId = (message.data['challengeId'] ?? '').toString().trim();
+    final eventId = (message.data['eventId'] ?? '').toString().trim();
+
+    if (challengeId.isNotEmpty) {
+      debugPrint(
+        '[NotificationService] Challenge notification opened | challengeId=$challengeId',
+      );
+      return;
+    }
+
+    if (eventId.isNotEmpty) {
+      await FirebaseFunctions.instance
+          .httpsCallable('logAutomatedNotificationInteraction')
+          .call({'notificationId': eventId, 'interactionType': 'opened'});
+      debugPrint(
+        '[NotificationService] Event notification opened | eventId=$eventId',
+      );
+    }
   }
 
   /// Muestra una notificacion local para un evento recien creado.

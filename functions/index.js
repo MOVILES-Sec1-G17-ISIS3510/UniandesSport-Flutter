@@ -13,6 +13,7 @@ const BQ4_CONVERSION_COLLECTION = 'bq4_notification_conversions';
 const BQ4_SNAPSHOT_COLLECTION = 'bq4_conversion_snapshots';
 const BQ5_READINESS_LOG_COLLECTION = 'bq5_readiness_time_logs';
 const BQ6_URGENCY_QUEUE_COLLECTION = 'bq6_urgency_notification_queue';
+const USER_CHALLENGE_NOTIFICATION_COLLECTION = 'user_challenge_notifications';
 const BQ3_GLOBAL_DOC = db.collection(BQ_COLLECTION).doc('bq3_global');
 const BQ4_GLOBAL_DOC = db.collection(BQ_COLLECTION).doc('bq4_global');
 const BQ5_GLOBAL_DOC = db.collection(BQ_COLLECTION).doc('bq5_global');
@@ -564,6 +565,70 @@ function collectUserNotificationTokens(userData) {
     return Array.from(tokens);
 }
 
+function isStepTrackedChallenge(challengeData) {
+    const trackingMode = String((challengeData && challengeData.trackingMode) || '').trim().toLowerCase();
+    return trackingMode === 'steps';
+}
+
+function toDateIfPossible(value) {
+    if (!value) {
+        return null;
+    }
+
+    if (value instanceof Date) {
+        return value;
+    }
+
+    if (typeof value.toDate === 'function') {
+        return value.toDate();
+    }
+
+    return null;
+}
+
+function hasChallengeNotificationCooldown(userData, cooldownHours) {
+    const rawTimestamp = userData
+        ? userData.smartFeatureLastChallengeNotificationAt || userData.lastChallengeNotificationAt
+        : null;
+    const timestampDate = toDateIfPossible(rawTimestamp);
+
+    if (!timestampDate) {
+        return false;
+    }
+
+    const cooldownMillis = Number(cooldownHours) * 60 * 60 * 1000;
+    const elapsedMillis = Date.now() - timestampDate.getTime();
+    return elapsedMillis >= 0 && elapsedMillis < cooldownMillis;
+}
+
+function scoreChallengeUserMatch({challengeSport, isStepChallenge, userData}) {
+    const normalizedMainSport = normalizeSport(userData && userData.mainSport);
+    const matchesMainSport = normalizedMainSport.length > 0 && normalizedMainSport === challengeSport;
+
+    const prefs = userData && typeof userData.inferredPreferences === 'object'
+        ? userData.inferredPreferences
+        : {};
+    const rawPreference = Number(prefs[challengeSport] || 0);
+    const preferenceScore = clamp(rawPreference / 10, 0, 1);
+
+    const stepCompatibility = isStepChallenge
+        ? (matchesMainSport || challengeSport === 'running' ? 1 : 0)
+        : 1;
+
+    const weightedScore = Number((
+        (matchesMainSport ? 0.45 : 0) +
+        (preferenceScore * 0.40) +
+        (stepCompatibility * 0.15)
+    ).toFixed(4));
+
+    return {
+        weightedScore,
+        matchesMainSport,
+        preferenceScore,
+        stepCompatibility,
+    };
+}
+
 /**
  * Envia (o encola) notificaciones automaticas por coincidencia de deporte BQ3.
  *
@@ -686,6 +751,194 @@ async function notifyUsersByBq3MainSportOnEventCreated({eventId, eventData, crea
 
     return {targetedUsers, sentUsers, queuedUsers};
 }
+
+/**
+ * Smart Feature: notifica en tiempo real cuando se crea un reto relevante.
+ *
+ * Regla de matching:
+ * - score ponderado por deporte principal + preferencia inferida + compatibilidad de tracking.
+ * - umbral minimo para enviar.
+ * - cooldown para evitar spam por usuario.
+ */
+async function notifyUsersOnChallengeCreatedSmartMatch({challengeId, challengeData, creatorId}) {
+    const challengeSport = normalizeSport(challengeData && challengeData.sport);
+    if (!challengeId || !challengeSport) {
+        return {
+            targetedUsers: 0,
+            sentUsers: 0,
+            queuedUsers: 0,
+            skippedByCooldown: 0,
+        };
+    }
+
+    const smartConfig = {
+        minScore: 0.7,
+        cooldownHours: 8,
+    };
+
+    const challengeTitle = String((challengeData && challengeData.title) || 'New challenge').trim() || 'New challenge';
+    const isStepChallenge = isStepTrackedChallenge(challengeData);
+
+    const [byMainSportSnap, byPreferenceSnap] = await Promise.all([
+        db.collection('users')
+            .where('mainSport', '==', challengeSport)
+            .limit(350)
+            .get(),
+        db.collection('users')
+            .where(`inferredPreferences.${challengeSport}`, '>=', 1)
+            .limit(350)
+            .get(),
+    ]);
+
+    const candidates = new Map();
+    byMainSportSnap.docs.forEach((doc) => candidates.set(doc.id, doc));
+    byPreferenceSnap.docs.forEach((doc) => candidates.set(doc.id, doc));
+
+    if (candidates.size === 0) {
+        return {
+            targetedUsers: 0,
+            sentUsers: 0,
+            queuedUsers: 0,
+            skippedByCooldown: 0,
+        };
+    }
+
+    let targetedUsers = 0;
+    let sentUsers = 0;
+    let queuedUsers = 0;
+    let skippedByCooldown = 0;
+
+    for (const [userId, userSnap] of candidates.entries()) {
+        if (!userId || userId === creatorId) {
+            continue;
+        }
+
+        if (!userSnap.exists) {
+            continue;
+        }
+
+        const userData = userSnap.data() || {};
+
+        if (hasChallengeNotificationCooldown(userData, smartConfig.cooldownHours)) {
+            skippedByCooldown += 1;
+            continue;
+        }
+
+        const score = scoreChallengeUserMatch({
+            challengeSport,
+            isStepChallenge,
+            userData,
+        });
+
+        if (score.weightedScore < smartConfig.minScore) {
+            continue;
+        }
+
+        targetedUsers += 1;
+
+        const notificationDocId = `${challengeId}_${userId}`;
+        const notificationRef = db.collection(USER_CHALLENGE_NOTIFICATION_COLLECTION).doc(notificationDocId);
+        const payload = {
+            notificationId: notificationDocId,
+            userId,
+            challengeId,
+            challengeTitle,
+            sport: challengeSport,
+            status: 'queued',
+            reason: 'challenge_smart_match',
+            matchScore: score.weightedScore,
+            matchesMainSport: score.matchesMainSport,
+            preferenceScore: score.preferenceScore,
+            stepCompatibility: score.stepCompatibility,
+            isStepChallenge,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            source: 'onChallengeCreated',
+        };
+
+        const tokens = collectUserNotificationTokens(userData);
+
+        if (!tokens.length) {
+            queuedUsers += 1;
+            await Promise.all([
+                notificationRef.set(payload, {merge: true}),
+                db.collection('users').doc(userId).set({
+                    smartFeatureLastChallengeNotificationAt: admin.firestore.FieldValue.serverTimestamp(),
+                }, {merge: true}),
+            ]);
+            continue;
+        }
+
+        try {
+            const response = await admin.messaging().sendMulticast({
+                tokens,
+                notification: {
+                    title: 'New challenge for you',
+                    body: `${challengeTitle} matches your sport profile.`,
+                },
+                data: {
+                    challengeId,
+                    sport: challengeSport,
+                    source: 'challenge_smart_match',
+                    matchScore: String(score.weightedScore),
+                },
+            });
+
+            const hasAnySuccess = Number(response.successCount || 0) > 0;
+            if (hasAnySuccess) {
+                sentUsers += 1;
+            } else {
+                queuedUsers += 1;
+            }
+
+            await Promise.all([
+                notificationRef.set({
+                    ...payload,
+                    status: hasAnySuccess ? 'sent' : 'failed',
+                    fcmSuccessCount: Number(response.successCount || 0),
+                    fcmFailureCount: Number(response.failureCount || 0),
+                    attemptedTokenCount: tokens.length,
+                    sentAt: hasAnySuccess ? admin.firestore.FieldValue.serverTimestamp() : null,
+                }, {merge: true}),
+                db.collection('users').doc(userId).set({
+                    smartFeatureLastChallengeNotificationAt: admin.firestore.FieldValue.serverTimestamp(),
+                }, {merge: true}),
+            ]);
+        } catch (error) {
+            queuedUsers += 1;
+            await notificationRef.set({
+                ...payload,
+                status: 'failed',
+                attemptedTokenCount: tokens.length,
+                errorMessage: String((error && error.message) || error || 'unknown_error'),
+            }, {merge: true});
+        }
+    }
+
+    return {targetedUsers, sentUsers, queuedUsers, skippedByCooldown};
+}
+
+// ============================================================================
+// SMART FEATURE: MATCH EN TIEMPO REAL AL CREAR RETOS
+// ============================================================================
+exports.onChallengeCreated = functions.firestore
+    .document('challenges/{challengeId}')
+    .onCreate(async (snap, context) => {
+        const challengeData = snap.data();
+        const creatorId = challengeData.createdBy || null;
+
+        try {
+            await notifyUsersOnChallengeCreatedSmartMatch({
+                challengeId: context.params.challengeId,
+                challengeData,
+                creatorId,
+            });
+        } catch (error) {
+            console.error('[onChallengeCreated] Error sending smart challenge notifications:', error);
+        }
+
+        return null;
+    });
 
 // ============================================================================
 // REGLA 1: CREAR UNA PARTIDA (+8)

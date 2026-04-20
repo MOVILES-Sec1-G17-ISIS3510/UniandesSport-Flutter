@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:uniandessport_flutter/features/coach/domain/models/coach_model.dart';
+import 'package:uniandessport_flutter/features/coach/domain/entities/coach_model.dart';
 import 'package:uniandessport_flutter/features/coach/presentation/dialogs/review_dialog.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -183,11 +183,10 @@ class CoachProfileDialog extends StatelessWidget {
                       onPressed: () {
                         showDialog(
                           context: context,
-                          builder: (_) =>
-                              AddReviewDialog(
-                                coachId: coach.id ?? '',
-                                coachSport: coach.deporte ?? '',
-                              ),
+                          builder: (_) => AddReviewDialog(
+                            coachId: coach.id ?? '',
+                            coachSport: coach.deporte ?? '',
+                          ),
                         );
                       },
                       icon: const Icon(Icons.rate_review_outlined),
@@ -406,8 +405,13 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-Widget _reviewCard(String name, String date, String review, int rating,
-    {String? imageUrl}) {
+Widget _reviewCard(
+  String name,
+  String date,
+  String review,
+  int rating, {
+  String? imageUrl,
+}) {
   return Container(
     padding: const EdgeInsets.all(14),
     decoration: BoxDecoration(

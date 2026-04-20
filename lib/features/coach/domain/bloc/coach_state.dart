@@ -1,6 +1,5 @@
 import 'package:equatable/equatable.dart';
-import 'package:uniandessport_flutter/features/coach/domain/models/coach_model.dart';
-
+import 'package:uniandessport_flutter/features/coach/domain/entities/coach_model.dart';
 
 abstract class CoachesState extends Equatable {
   const CoachesState();
@@ -18,10 +17,7 @@ class CoachesLoaded extends CoachesState {
   final List<Coach> coaches;
   final String? selectedSport;
 
-  const CoachesLoaded(
-    this.coaches, {
-    this.selectedSport,
-  });
+  const CoachesLoaded(this.coaches, {this.selectedSport});
 
   @override
   List<Object?> get props => [coaches, selectedSport];

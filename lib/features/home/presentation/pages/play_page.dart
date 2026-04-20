@@ -3,14 +3,13 @@ import 'package:provider/provider.dart';
 
 import '../../../../core/theme/app_sports.dart';
 import '../../../../core/theme/app_theme.dart';
-import '../../../auth/domain/models/user_profile.dart';
-import '../../domain/models/sport_event.dart';
-import '../controllers/play_view_model.dart';
+import '../../../auth/domain/entities/user_profile.dart';
+import '../../domain/entities/sport_event.dart';
+import '../viewmodels/play_view_model.dart';
 import '../widgets/action_buttons_section.dart';
 import '../widgets/event_card.dart';
 import '../widgets/modality_selector.dart';
 import '../widgets/sport_selector.dart';
-import '../widgets/recommended_events_section.dart';
 import 'create_casual_event_page.dart';
 import 'event_registration_result_page.dart';
 
@@ -106,7 +105,9 @@ class PlayPage extends StatelessWidget {
                   child: OutlinedButton.icon(
                     onPressed: vm.toggleMyScheduled,
                     icon: Icon(
-                      vm.showMyScheduled ? Icons.event_available : Icons.calendar_month,
+                      vm.showMyScheduled
+                          ? Icons.event_available
+                          : Icons.calendar_month,
                       color: AppTheme.navy,
                     ),
                     label: Text(
@@ -118,7 +119,9 @@ class PlayPage extends StatelessWidget {
                     ),
                     style: OutlinedButton.styleFrom(
                       side: BorderSide(
-                        color: vm.showMyScheduled ? AppTheme.navy : AppTheme.teal,
+                        color: vm.showMyScheduled
+                            ? AppTheme.navy
+                            : AppTheme.teal,
                         width: 1.4,
                       ),
                       padding: const EdgeInsets.symmetric(vertical: 14),
@@ -185,14 +188,18 @@ class _MyScheduledSection extends StatelessWidget {
           if (confirm != true) return;
 
           setSheetState(() => isLeaving = true);
-          final success = await context.read<PlayViewModel>().leaveScheduledEvent(event);
+          final success = await context
+              .read<PlayViewModel>()
+              .leaveScheduledEvent(event);
           if (!sheetContext.mounted) return;
 
           Navigator.of(sheetContext).pop();
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                success ? 'You left the event successfully' : 'Could not leave the event',
+                success
+                    ? 'You left the event successfully'
+                    : 'Could not leave the event',
               ),
             ),
           );
@@ -215,17 +222,21 @@ class _MyScheduledSection extends StatelessWidget {
                         ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
                         decoration: BoxDecoration(
                           color: AppTheme.softTeal,
                           borderRadius: BorderRadius.circular(999),
                         ),
                         child: Text(
                           'Registered',
-                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: AppTheme.navy,
-                            fontWeight: FontWeight.w700,
-                          ),
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(
+                                color: AppTheme.navy,
+                                fontWeight: FontWeight.w700,
+                              ),
                         ),
                       ),
                     ],
@@ -236,19 +247,37 @@ class _MyScheduledSection extends StatelessWidget {
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   const SizedBox(height: 12),
-                  _DetailRow(icon: Icons.people, label: 'Participants', value: '${event.currentParticipants}/${event.maxParticipants}'),
+                  _DetailRow(
+                    icon: Icons.people,
+                    label: 'Participants',
+                    value:
+                        '${event.currentParticipants}/${event.maxParticipants}',
+                  ),
                   const SizedBox(height: 8),
-                  _DetailRow(icon: Icons.schedule, label: 'Schedule', value: vm.formatSchedule(event.scheduledAt)),
+                  _DetailRow(
+                    icon: Icons.schedule,
+                    label: 'Schedule',
+                    value: vm.formatSchedule(event.scheduledAt),
+                  ),
                   const SizedBox(height: 8),
-                  _DetailRow(icon: Icons.location_on, label: 'Location', value: event.location),
+                  _DetailRow(
+                    icon: Icons.location_on,
+                    label: 'Location',
+                    value: event.location,
+                  ),
                   if (event.description.trim().isNotEmpty) ...[
                     const SizedBox(height: 12),
                     Text(
                       'Description',
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                     const SizedBox(height: 6),
-                    Text(event.description, style: Theme.of(context).textTheme.bodyMedium),
+                    Text(
+                      event.description,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
                   ],
                   const SizedBox(height: 18),
                   Row(
@@ -387,7 +416,11 @@ class _DetailRow extends StatelessWidget {
   final String label;
   final String value;
 
-  const _DetailRow({required this.icon, required this.label, required this.value});
+  const _DetailRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -399,7 +432,9 @@ class _DetailRow extends StatelessWidget {
         Expanded(
           child: RichText(
             text: TextSpan(
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.onSurface),
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
               children: [
                 TextSpan(
                   text: '$label: ',

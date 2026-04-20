@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../auth/domain/models/user_profile.dart';
+import '../../../auth/domain/entities/user_profile.dart';
 
 class SocialPage extends StatelessWidget {
   final UserProfile profile;
