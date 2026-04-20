@@ -39,18 +39,6 @@ class _ProfilePageState extends State<ProfilePage> {
     return (parts.first[0] + parts.last[0]).toUpperCase();
   }
 
-  String _buildInitials(String fullName) {
-    final parts = fullName
-        .trim()
-        .split(RegExp(r'\s+'))
-        .where((part) => part.isNotEmpty)
-        .toList();
-
-    if (parts.isEmpty) return '?';
-    if (parts.length == 1) return parts.first[0].toUpperCase();
-    return (parts.first[0] + parts.last[0]).toUpperCase();
-  }
-
   @override
   void initState() {
     super.initState();

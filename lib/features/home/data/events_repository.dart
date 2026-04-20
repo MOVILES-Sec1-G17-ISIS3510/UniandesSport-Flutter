@@ -2,12 +2,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:uniandessport_flutter/core/services/google_calendar_service.dart';
 
 import '../../../core/services/analytics_service.dart';
 import '../../../core/theme/app_sports.dart';
 import '../domain/models/event_modality.dart';
 import '../domain/models/sport_event.dart';
+import '../domain/models/time_slot.dart';
 
 /// Repositorio de eventos deportivos.
 ///

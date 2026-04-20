@@ -24,5 +24,16 @@ class TimeSlot {
       'hora_fin': horaFin,
     };
   }
+
+  DateTime get start => _timeOfDayToDateTime(horaInicio);
+
+  DateTime get end => _timeOfDayToDateTime(horaFin);
+
+  static DateTime _timeOfDayToDateTime(String value) {
+    final parts = value.split(':');
+    final hour = int.tryParse(parts.isNotEmpty ? parts[0] : '') ?? 0;
+    final minute = int.tryParse(parts.length > 1 ? parts[1] : '') ?? 0;
+    return DateTime(2000, 1, 1, hour, minute);
+  }
 }
 

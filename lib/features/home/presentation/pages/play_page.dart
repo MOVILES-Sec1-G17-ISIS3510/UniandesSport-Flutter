@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../../../core/theme/app_sports.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../auth/domain/models/user_profile.dart';
 import '../../domain/models/sport_event.dart';
@@ -10,7 +9,6 @@ import '../widgets/action_buttons_section.dart';
 import '../widgets/event_card.dart';
 import '../widgets/modality_selector.dart';
 import '../widgets/sport_selector.dart';
-import '../widgets/recommended_events_section.dart';
 import 'create_casual_event_page.dart';
 import 'event_registration_result_page.dart';
 import 'my_scheduled_events_page.dart';
@@ -357,6 +355,107 @@ class _EventList extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _MyScheduledSection extends StatelessWidget {
+  const _MyScheduledSection({required this.vm});
+
+  final PlayViewModel vm;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.event_available, color: AppTheme.teal),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'My scheduled events',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: vm.toggleMyScheduled,
+                child: const Text('Hide'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Builder(
+            builder: (_) {
+              if (vm.isLoadingMyScheduled) {
+                return const Center(child: CircularProgressIndicator());
+              }
+
+              if (vm.myScheduledError != null) {
+                return Text(vm.myScheduledError!);
+              }
+
+              if (vm.myScheduledEvents.isEmpty) {
+                return Text(
+                  'You do not have active scheduled events yet.',
+                  style: theme.textTheme.bodyMedium,
+                );
+              }
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Active events: ${vm.myScheduledEvents.length}',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 12),
+                  ...vm.myScheduledEvents.take(3).map(
+                    (event) => Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(event.title),
+                        subtitle: Text(vm.formatSchedule(event.scheduledAt)),
+                        trailing: TextButton(
+                          onPressed: () async {
+                            await vm.leaveScheduledEvent(event);
+                          },
+                          child: const Text('Leave'),
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (vm.myScheduledEvents.length > 3)
+                    TextButton(
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const MyScheduledEventsPage(),
+                          ),
+                        );
+                      },
+                      child: const Text('See all'),
+                    ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
     );
   }
 }
