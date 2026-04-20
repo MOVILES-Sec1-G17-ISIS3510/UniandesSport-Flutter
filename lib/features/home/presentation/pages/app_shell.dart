@@ -14,6 +14,7 @@ import '../../presentation/pages/profile_page.dart';
 import '../viewmodels/play_view_model.dart';
 import '../widgets/play_nav_item.dart';
 import '../widgets/recommended_events_section.dart';
+import '../widgets/smart_recommendation_section.dart';
 
 class AppShell extends StatefulWidget {
   final UserProfile profile;
@@ -358,6 +359,8 @@ class _HomePageWrapper extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 28),
+                SmartRecommendationSection(profile: profile),
+                const SizedBox(height: 16),
                 Text(
                   'RECOMMENDED EVENTS',
                   style: Theme.of(

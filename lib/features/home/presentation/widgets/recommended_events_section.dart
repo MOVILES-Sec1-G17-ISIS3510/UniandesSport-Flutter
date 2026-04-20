@@ -258,6 +258,11 @@ class _RecommendedEventsSectionState extends State<RecommendedEventsSection> {
             itemBuilder: (context, index) {
               final event = events[index];
               final sportLabel = AppSports.formatSportLabel(event.sport);
+              final sportStyle = AppSports.sportKeys.contains(event.sport)
+                  ? AppSports.getSport(event.sport)
+                  : null;
+              final accentColor = sportStyle?.color ?? AppTheme.teal;
+              final icon = sportStyle?.icon ?? Icons.sports;
               return SizedBox(
                 width: cardWidth,
                 child: InkWell(
@@ -284,22 +289,54 @@ class _RecommendedEventsSectionState extends State<RecommendedEventsSection> {
                       children: [
                         Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 7,
-                            vertical: 3,
+                            horizontal: 10,
+                            vertical: 6,
                           ),
                           decoration: BoxDecoration(
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.surfaceContainerHighest,
+                            gradient: LinearGradient(
+                              colors: [
+                                accentColor.withValues(alpha: 0.16),
+                                accentColor.withValues(alpha: 0.08),
+                              ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
                             borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color: accentColor.withValues(alpha: 0.22),
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: accentColor.withValues(alpha: 0.08),
+                                blurRadius: 8,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
                           ),
-                          child: Text(
-                            sportLabel,
-                            style: Theme.of(context).textTheme.labelSmall
-                                ?.copyWith(
-                                  color: AppTheme.teal,
-                                  fontWeight: FontWeight.w700,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                icon,
+                                size: 13,
+                                color: accentColor,
+                              ),
+                              const SizedBox(width: 6),
+                              ConstrainedBox(
+                                constraints: const BoxConstraints(maxWidth: 110),
+                                child: Text(
+                                  sportLabel,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.labelSmall
+                                      ?.copyWith(
+                                        color: accentColor,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: 0.2,
+                                      ),
                                 ),
+                              ),
+                            ],
                           ),
                         ),
                         const SizedBox(height: 6),
@@ -355,15 +392,39 @@ class _RecommendedEventsSectionState extends State<RecommendedEventsSection> {
                               ),
                             ),
                             const SizedBox(width: 8),
-                            Text(
-                              '${event.availableSpots} spots',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppTheme.softTeal,
+                                borderRadius: BorderRadius.circular(999),
+                                border: Border.all(
+                                  color: AppTheme.teal.withValues(alpha: 0.14),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.bolt,
+                                    size: 12,
                                     color: AppTheme.teal,
-                                    fontWeight: FontWeight.w600,
                                   ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    '${event.availableSpots} spots',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(context).textTheme.bodySmall
+                                        ?.copyWith(
+                                          color: AppTheme.teal,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ],
                         ),

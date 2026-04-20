@@ -8,6 +8,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../data/coach_demo_locations.dart';
+import '../../domain/models/coach_model.dart';
 import '../../domain/entities/coach_model.dart';
 
 /// Google Maps en este proyecto solo está integrado en Android e iOS.
