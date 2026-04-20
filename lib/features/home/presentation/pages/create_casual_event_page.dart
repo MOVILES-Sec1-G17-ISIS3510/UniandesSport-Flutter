@@ -93,6 +93,15 @@ class _CreateCasualEventPageState extends State<CreateCasualEventPage> {
     return candidate;
   }
 
+  String get _displaySportName {
+    if (AppSports.sportKeys.contains(widget.sport)) {
+      return AppSports.getSport(widget.sport).name;
+    }
+    // Capitalizar la primera letra para deportes personalizados
+    return widget.sport.substring(0, 1).toUpperCase() +
+        widget.sport.substring(1);
+  }
+
   @override
   void dispose() {
     _titleController.dispose();

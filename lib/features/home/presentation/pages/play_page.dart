@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../../core/theme/app_sports.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../auth/domain/models/user_profile.dart';
 import '../../domain/models/sport_event.dart';
@@ -9,6 +10,7 @@ import '../widgets/action_buttons_section.dart';
 import '../widgets/event_card.dart';
 import '../widgets/modality_selector.dart';
 import '../widgets/sport_selector.dart';
+import '../widgets/recommended_events_section.dart';
 import 'create_casual_event_page.dart';
 import 'event_registration_result_page.dart';
 import 'my_scheduled_events_page.dart';
@@ -179,6 +181,10 @@ class PlayPage extends StatelessWidget {
                   onSearchPressed: () => _handleSearch(vm),
                   onCreatePressed: () => _openCreateForm(context, vm),
                 ),
+                if (vm.showMyScheduled) ...[
+                  const SizedBox(height: 12),
+                  _MyScheduledSection(vm: vm),
+                ],
                 const SizedBox(height: 32),
               ],
               if (vm.hasSearched)
