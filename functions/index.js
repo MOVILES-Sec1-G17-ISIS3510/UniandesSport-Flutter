@@ -1,9 +1,16 @@
 const functions = require('firebase-functions/v1');
 const admin = require('firebase-admin');
+// Carga diferida de Gemini dentro de dailyMatchmaker para evitar fallo global al iniciar.
 
-// Inicializa el SDK de administración
 admin.initializeApp();
 const db = admin.firestore();
+
+const SMART_RECOMMENDATION_COLLECTION = 'smart_recommendations';
+const SMART_MATCH_LOG_COLLECTION = 'smart_match_logs';
+const USERS_COLLECTION = 'users';
+const EVENTS_COLLECTION = 'events';
+const GEMINI_MODEL = 'gemini-2.5-flash';
+const GEMINI_API_KEY = 'AIzaSyDdC2I3Y62cVLYu60G7q4TFJSFQWsnv5Uo';
 
 const BQ_COLLECTION = 'business_metrics';
 const BQ3_USER_COLLECTION = 'bq3_user_sport_counts';
@@ -1241,7 +1248,7 @@ exports.getBq6UpcomingTournamentCapacity = functions.https.onCall(async (data, c
         return {
             ...tournament,
             intentScore: intent.intentScore,
-            hasDemonstratedIntent: intent.hasDemonstratedIntent,
+            hasDemonstratedIntent: intent.hasDemostradoIntent,
             urgencyReasons: {
                 lowCapacity: urgentByCapacity,
                 highUtilization: urgentByUtilization,
@@ -1784,3 +1791,293 @@ exports.cleanupPastEvents = functions.pubsub
         console.log(`Se han desactivado ${querySnapshot.size} eventos.`);
         return null;
     });
+
+// ============================================================================
+// SMART MATCHMAKING: RECOMENDACIONES AUTOMATICAS DIARIAS
+// ============================================================================
+function toPlainDate(input) {
+    const date = input && typeof input.toDate === 'function' ? input.toDate() : input;
+    if (!(date instanceof Date)) return null;
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function buildSmartMatchPrompt(userProfile, freeSlots, todayEvents) {
+    return `
+Eres un motor de Smart Matchmaking de UniandesSport y copywriter personalizado.
+Contexto clave: el usuario es estudiante universitario (ej. Ingenieria de Software, 8vo semestre).
+Usa jerga de la Universidad de los Andes (ej. "hueco", "edificio ML", "entregas") cuando tenga sentido.
+
+Datos del usuario:
+${JSON.stringify(userProfile, null, 2)}
+
+Bloques libres del usuario:
+${JSON.stringify(freeSlots, null, 2)}
+
+Eventos deportivos disponibles hoy:
+${JSON.stringify(todayEvents, null, 2)}
+
+Tu tarea:
+1) Evalua si conviene recomendar que se una a un evento existente o que cree uno nuevo.
+2) Si recomiendas JOIN, devuelve un evento_id valido de la lista de hoy.
+3) Si recomiendas CREATE, devuelve un borrador con deporte, hora_inicio y lugar.
+4) Redacta ui_title, ui_body y cta_text como copywriter empatico y persuasivo.
+
+Responde SOLO JSON ESTRICTO con esta estructura:
+{
+  "tipo_recomendacion": "join" | "create",
+  "evento_id": "string o null",
+  "borrador_evento": {"deporte":"", "hora_inicio":"", "lugar":""},
+  "ui_title": "",
+  "ui_body": "",
+  "cta_text": ""
+}
+`;
+}
+
+function sanitizeGeminiJson(text) {
+    const raw = String(text || '').trim();
+    if (!raw.startsWith('```')) return raw;
+    return raw
+        .split('\n')
+        .filter((line) => !line.trim().startsWith('```'))
+        .join('\n')
+        .trim();
+}
+
+function collectFcmTokens(userData) {
+    const tokens = new Set();
+    const rawSingle = ['fcmToken', 'notificationToken', 'pushToken'];
+    const rawList = ['fcmTokens', 'notificationTokens'];
+
+    rawSingle.forEach((key) => {
+        const value = userData && userData[key];
+        if (typeof value === 'string' && value.trim()) {
+            tokens.add(value.trim());
+        }
+    });
+
+    rawList.forEach((key) => {
+        const value = userData && userData[key];
+        if (Array.isArray(value)) {
+            value.forEach((token) => {
+                if (typeof token === 'string' && token.trim()) {
+                    tokens.add(token.trim());
+                }
+            });
+        }
+    });
+
+    return Array.from(tokens);
+}
+
+function buildFallbackSmartRecommendation(userProfile, freeSlots, todayEvents) {
+    const firstSlot = Array.isArray(freeSlots) && freeSlots.length > 0 ? freeSlots[0] : null;
+    const firstEvent = Array.isArray(todayEvents) && todayEvents.length > 0 ? todayEvents[0] : null;
+    const sport = String((userProfile && userProfile.mainSport) || (firstEvent && firstEvent.sport) || 'futbol').trim() || 'futbol';
+    const hour = firstSlot && firstSlot.hora_inicio ? String(firstSlot.hora_inicio).trim() : '18:00';
+    const location = (firstSlot && firstSlot.lugar) ? String(firstSlot.lugar).trim() : 'Campus';
+
+    if (firstEvent) {
+        return {
+            tipo_recomendacion: 'join',
+            evento_id: firstEvent.id,
+            borrador_evento: null,
+            ui_title: `Your best match today: ${firstEvent.title || 'available event'}`,
+            ui_body: `You have a free slot around ${hour}. Joining this event could fit your day without affecting your other plans.`,
+            cta_text: 'View event',
+        };
+    }
+
+    return {
+        tipo_recomendacion: 'create',
+        evento_id: null,
+        borrador_evento: {
+            deporte: sport,
+            hora_inicio: hour,
+            lugar: location,
+        },
+        ui_title: 'You have a good window to create a match',
+        ui_body: `It looks like you have a useful gap around ${hour}. Create a quick match and invite people who are also free.`,
+        cta_text: 'Create event',
+    };
+}
+
+exports.dailyMatchmaker = functions.pubsub
+    .schedule('every day 07:30')
+    .timeZone('America/Bogota')
+    .onRun(async () => {
+        let GoogleGenerativeAI;
+        try {
+            ({GoogleGenerativeAI} = require('@google/generative-ai'));
+        } catch (error) {
+            console.error('[dailyMatchmaker] Missing module @google/generative-ai. Run npm install in functions/.', error);
+            return null;
+        }
+
+        const apiKey = process.env.GEMINI_API_KEY || GEMINI_API_KEY;
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({model: GEMINI_MODEL});
+
+        const now = new Date();
+        const today = toPlainDate(now);
+        const nowTs = admin.firestore.Timestamp.now();
+
+        const [usersSnap, eventsSnap] = await Promise.all([
+            db.collection(USERS_COLLECTION).get(),
+            db.collection(EVENTS_COLLECTION).where('status', '==', 'active').get(),
+        ]);
+
+        const eventsToday = eventsSnap.docs
+            .map((doc) => ({id: doc.id, ...doc.data()}))
+            .filter((event) => {
+                const eventDate = toPlainDate(event.scheduledAt);
+                return eventDate === today;
+            })
+            .map((event) => ({
+                id: event.id,
+                title: event.title || '',
+                sport: event.sport || '',
+                modality: event.modality || '',
+                location: event.location || '',
+                scheduledAt: event.scheduledAt || null,
+                maxParticipants: Number(event.maxParticipants || 0),
+                currentParticipants: Array.isArray(event.participants) ? event.participants.length : 0,
+            }));
+
+        const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+        const generateWithRetry = async (prompt, attempts = 3) => {
+            let lastError;
+            for (let i = 0; i < attempts; i++) {
+                try {
+                    return await model.generateContent(prompt);
+                } catch (error) {
+                    lastError = error;
+                    const status = Number(error && error.status ? error.status : 0);
+                    const retryable = status === 503 || status === 429 || String(error && error.message || '').includes('Service Unavailable');
+                    if (!retryable || i === attempts - 1) {
+                        throw error;
+                    }
+                    await sleep(750 * (i + 1));
+                }
+            }
+            throw lastError;
+        };
+
+        for (const userDoc of usersSnap.docs) {
+            const userData = userDoc.data() || {};
+            if (userData.active === false) continue;
+
+            const freeSlots = Array.isArray(userData.free_time_slots) ? userData.free_time_slots : [];
+            if (freeSlots.length === 0) continue;
+
+            const prompt = buildSmartMatchPrompt(
+                {
+                    uid: userDoc.id,
+                    fullName: userData.fullName || '',
+                    program: userData.program || '',
+                    semester: userData.semester || null,
+                },
+                freeSlots,
+                eventsToday,
+            );
+
+            try {
+                const response = await generateWithRetry(prompt);
+                const text = response.response && response.response.text ? response.response.text() : '';
+                const cleaned = sanitizeGeminiJson(text);
+                const payload = JSON.parse(cleaned);
+
+                const recommendation = {
+                    tipo_recomendacion: payload.tipo_recomendacion === 'create' ? 'create' : 'join',
+                    evento_id: payload.evento_id || null,
+                    borrador_evento: payload.borrador_evento || {
+                        deporte: '',
+                        hora_inicio: '',
+                        lugar: '',
+                    },
+                    ui_title: String(payload.ui_title || ''),
+                    ui_body: String(payload.ui_body || ''),
+                    cta_text: String(payload.cta_text || ''),
+                    generatedAt: nowTs,
+                    source: 'dailyMatchmaker',
+                };
+
+                await db.collection(SMART_RECOMMENDATION_COLLECTION)
+                    .doc(userDoc.id)
+                    .set(recommendation, {merge: true});
+
+                await db.collection(USERS_COLLECTION)
+                    .doc(userDoc.id)
+                    .set({
+                        smart_recommendation: recommendation,
+                    }, {merge: true});
+
+                const tokens = collectFcmTokens(userData);
+                if (tokens.length > 0) {
+                    await admin.messaging().sendToDevice(tokens, {
+                        notification: {
+                            title: recommendation.ui_title,
+                            body: recommendation.ui_body,
+                        },
+                        data: {
+                            tipo_recomendacion: recommendation.tipo_recomendacion,
+                            evento_id: recommendation.evento_id ? String(recommendation.evento_id) : '',
+                            borrador_evento: JSON.stringify(recommendation.borrador_evento || {}),
+                            ui_title: recommendation.ui_title,
+                            ui_body: recommendation.ui_body,
+                            cta_text: recommendation.cta_text,
+                        },
+                    });
+                }
+
+                await db.collection(SMART_MATCH_LOG_COLLECTION).add({
+                    userId: userDoc.id,
+                    success: true,
+                    recommendation,
+                    createdAt: nowTs,
+                });
+            } catch (error) {
+                console.error('[dailyMatchmaker] user=', userDoc.id, error);
+                const fallback = buildFallbackSmartRecommendation(
+                    {
+                        uid: userDoc.id,
+                        mainSport: userData.mainSport || null,
+                    },
+                    freeSlots,
+                    eventsToday,
+                );
+
+                const fallbackRecommendation = {
+                    ...fallback,
+                    generatedAt: nowTs,
+                    source: 'dailyMatchmaker_fallback',
+                };
+
+                await db.collection(SMART_RECOMMENDATION_COLLECTION)
+                    .doc(userDoc.id)
+                    .set(fallbackRecommendation, {merge: true});
+
+                await db.collection(USERS_COLLECTION)
+                    .doc(userDoc.id)
+                    .set({
+                        smart_recommendation: fallbackRecommendation,
+                    }, {merge: true});
+
+                try {
+                    await db.collection(SMART_MATCH_LOG_COLLECTION).add({
+                        userId: userDoc.id,
+                        success: false,
+                        error: String(error && error.message ? error.message : error),
+                        fallbackApplied: true,
+                        recommendation: fallbackRecommendation,
+                        createdAt: nowTs,
+                    });
+                } catch (logError) {
+                    console.error('[dailyMatchmaker] failed to log error for user=', userDoc.id, logError);
+                }
+            }
+        }
+
+        return null;
+    });
+

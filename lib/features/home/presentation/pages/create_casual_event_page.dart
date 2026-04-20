@@ -26,6 +26,8 @@ class CreateCasualEventPage extends StatefulWidget {
 class _CreateCasualEventPageState extends State<CreateCasualEventPage> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
+  final _sportController = TextEditingController();
+  final _hourController = TextEditingController();
   final _locationController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _maxParticipantsController = TextEditingController(text: '10');
@@ -33,6 +35,7 @@ class _CreateCasualEventPageState extends State<CreateCasualEventPage> {
 
   DateTime? _scheduledAt;
   bool _isSubmitting = false;
+  bool _draftApplied = false;
 
   String get _displaySportName {
     if (AppSports.sportKeys.contains(widget.sport)) {
@@ -44,8 +47,57 @@ class _CreateCasualEventPageState extends State<CreateCasualEventPage> {
   }
 
   @override
+  void initState() {
+    super.initState();
+
+    _sportController.text = _displaySportName;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    if (_draftApplied) return;
+    _draftApplied = true;
+
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is! Map) return;
+
+    final draft = Map<String, dynamic>.from(args);
+    final draftLocation = (draft['lugar'] ?? '').toString().trim();
+    final draftHour = (draft['hora_inicio'] ?? '').toString().trim();
+
+    if (draftLocation.isNotEmpty) {
+      _locationController.text = draftLocation;
+    }
+
+    if (draftHour.isNotEmpty) {
+      _hourController.text = draftHour;
+      _scheduledAt = _scheduledAtFromHour(draftHour);
+    }
+  }
+
+  DateTime? _scheduledAtFromHour(String hourText) {
+    final regex = RegExp(r'^([01]\\d|2[0-3]):[0-5]\\d$');
+    if (!regex.hasMatch(hourText)) return null;
+
+    final parts = hourText.split(':');
+    final hour = int.parse(parts[0]);
+    final minute = int.parse(parts[1]);
+    final now = DateTime.now();
+
+    var candidate = DateTime(now.year, now.month, now.day, hour, minute);
+    if (candidate.isBefore(now)) {
+      candidate = candidate.add(const Duration(days: 1));
+    }
+    return candidate;
+  }
+
+  @override
   void dispose() {
     _titleController.dispose();
+    _sportController.dispose();
+    _hourController.dispose();
     _locationController.dispose();
     _descriptionController.dispose();
     _maxParticipantsController.dispose();
@@ -84,6 +136,11 @@ class _CreateCasualEventPageState extends State<CreateCasualEventPage> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+
+    if (_scheduledAt == null && _hourController.text.trim().isNotEmpty) {
+      _scheduledAt = _scheduledAtFromHour(_hourController.text.trim());
+    }
+
     if (_scheduledAt == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Select date and time for the event')),
@@ -207,7 +264,7 @@ class _CreateCasualEventPageState extends State<CreateCasualEventPage> {
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
-                  initialValue: _displaySportName,
+                  controller: _sportController,
                   enabled: false,
                   decoration: const InputDecoration(labelText: 'Sport'),
                 ),
@@ -224,6 +281,20 @@ class _CreateCasualEventPageState extends State<CreateCasualEventPage> {
                   validator: (value) {
                     if (value == null || value.trim().length < 3) {
                       return 'Enter a valid location';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _hourController,
+                  decoration: const InputDecoration(labelText: 'Start hour (HH:MM)'),
+                  validator: (value) {
+                    final raw = (value ?? '').trim();
+                    if (raw.isEmpty) return null;
+                    final regex = RegExp(r'^([01]\\d|2[0-3]):[0-5]\\d$');
+                    if (!regex.hasMatch(raw)) {
+                      return 'Use HH:MM';
                     }
                     return null;
                   },
