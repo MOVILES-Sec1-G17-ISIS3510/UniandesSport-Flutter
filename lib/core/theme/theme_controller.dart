@@ -4,6 +4,7 @@ import 'package:battery_plus/battery_plus.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 /// Controls dynamic app theming based on ambient light and battery level.
 ///
@@ -17,15 +18,23 @@ class ThemeController extends ChangeNotifier with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
   }
 
-  static const double _darkLightThreshold = 0.30;
-  static const double _lightLightThreshold = 0.36;
-  static const double _strongLightThreshold = 0.50;
-  static const double _smoothingFactor = 0.40;
-  static const int _requiredDarkSamples = 2;
-  static const int _requiredLightSamples = 1;
+  static const double _darkLightThreshold = 0.34;
+  static const double _lightLightThreshold = 0.42;
+  static const double _strongLightThreshold = 0.55;
+  static const double _instantDarkThreshold = 0.20;
+  static const double _smoothingFactor = 0.75;
+  static const int _requiredDarkSamples = 1;
+  static const int _requiredLightSamples = 2;
   static const int _lowBatteryThreshold = 20;
   static const Duration _batteryRefreshInterval = Duration(minutes: 1);
-  static const Duration _cameraSampleInterval = Duration(milliseconds: 800);
+  static const Duration _cameraSampleInterval = Duration(milliseconds: 300);
+  static const int _bgraSampleStride = 16;
+  static const int _yPlaneSampleStride = 32;
+  static const List<ImageFormatGroup> _preferredImageFormats = [
+    ImageFormatGroup.unknown,
+    ImageFormatGroup.yuv420,
+    ImageFormatGroup.bgra8888,
+  ];
 
   final Battery _battery = Battery();
 
@@ -79,7 +88,7 @@ class ThemeController extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  /// Initializes rear camera and starts image streaming for light estimation.
+  /// Initializes front camera and starts image streaming for light estimation.
   ///
   /// Includes defensive checks for unsupported targets and concurrent starts.
   Future<void> _startCameraMonitoring() async {
@@ -100,6 +109,13 @@ class ThemeController extends ChangeNotifier with WidgetsBindingObserver {
       return;
     }
 
+    final cameraPermission = await Permission.camera.request();
+    if (!cameraPermission.isGranted) {
+      debugPrint('ThemeController: camera permission not granted.');
+      _isCameraInitializing = false;
+      return;
+    }
+
     try {
       final cameras = await availableCameras();
       if (cameras.isEmpty) {
@@ -107,31 +123,83 @@ class ThemeController extends ChangeNotifier with WidgetsBindingObserver {
         return;
       }
 
-      final CameraDescription selectedCamera = cameras.firstWhere(
-        (camera) => camera.lensDirection == CameraLensDirection.back,
-        orElse: () => cameras.first,
-      );
+      final orderedCameras = <CameraDescription>[
+        ...cameras.where(
+          (camera) => camera.lensDirection == CameraLensDirection.front,
+        ),
+        ...cameras.where(
+          (camera) => camera.lensDirection == CameraLensDirection.external,
+        ),
+        ...cameras.where(
+          (camera) =>
+              camera.lensDirection != CameraLensDirection.front &&
+              camera.lensDirection != CameraLensDirection.external,
+        ),
+      ];
 
-      final controller = CameraController(
-        selectedCamera,
-        ResolutionPreset.low,
-        enableAudio: false,
-        imageFormatGroup: ImageFormatGroup.yuv420,
-      );
+      for (final candidateCamera in orderedCameras) {
+        final controller = await _tryCreateStreamingController(candidateCamera);
+        if (controller == null) {
+          continue;
+        }
 
-      await controller.initialize();
-      if (_isDisposed) {
-        await controller.dispose();
+        if (_isDisposed) {
+          await controller.dispose();
+          return;
+        }
+
+        _cameraController = controller;
+        debugPrint(
+          'ThemeController: camera stream started with ${candidateCamera.name}.',
+        );
         return;
       }
 
-      _cameraController = controller;
-      await controller.startImageStream(_handleCameraImage);
-    } catch (_) {
+      debugPrint('ThemeController: failed to initialize any camera stream.');
+      _cameraController = null;
+    } catch (error) {
+      debugPrint('ThemeController: camera initialization error: $error');
       _cameraController = null;
     } finally {
       _isCameraInitializing = false;
     }
+  }
+
+  Future<CameraController?> _tryCreateStreamingController(
+    CameraDescription camera,
+  ) async {
+    for (final format in _preferredImageFormats) {
+      CameraController? controller;
+      try {
+        controller = CameraController(
+          camera,
+          ResolutionPreset.low,
+          enableAudio: false,
+          imageFormatGroup: format,
+        );
+
+        await controller.initialize();
+        await controller.startImageStream(_handleCameraImage);
+        return controller;
+      } catch (error) {
+        debugPrint(
+          'ThemeController: camera ${camera.name} failed with format $format: $error',
+        );
+        if (controller != null) {
+          try {
+            if (controller.value.isStreamingImages) {
+              await controller.stopImageStream();
+            }
+          } catch (_) {}
+
+          try {
+            await controller.dispose();
+          } catch (_) {}
+        }
+      }
+    }
+
+    return null;
   }
 
   /// Processes camera frames at a controlled cadence and updates smoothed light.
@@ -173,7 +241,11 @@ class ThemeController extends ChangeNotifier with WidgetsBindingObserver {
       var blueTotal = 0;
       var sampleCount = 0;
 
-      for (var index = 0; index + 3 < bytes.length; index += 16) {
+      for (
+        var index = 0;
+        index + 3 < bytes.length;
+        index += _bgraSampleStride
+      ) {
         blueTotal += bytes[index];
         greenTotal += bytes[index + 1];
         redTotal += bytes[index + 2];
@@ -192,7 +264,7 @@ class ThemeController extends ChangeNotifier with WidgetsBindingObserver {
     var total = 0;
     var sampleCount = 0;
 
-    for (var index = 0; index < bytes.length; index += 32) {
+    for (var index = 0; index < bytes.length; index += _yPlaneSampleStride) {
       total += bytes[index];
       sampleCount++;
     }
@@ -207,11 +279,17 @@ class ThemeController extends ChangeNotifier with WidgetsBindingObserver {
   /// Applies theme decision logic using battery-first then ambient-light rules.
   void _applyThemePreference() {
     final batteryLow = (_batteryLevel ?? 100) <= _lowBatteryThreshold;
-    final ambientLight = _smoothedAmbientLight ?? _ambientLight;
+    final rawAmbientLight = _ambientLight;
+    final ambientLight = _smoothedAmbientLight ?? rawAmbientLight;
 
     ThemeMode nextThemeMode = _themeMode;
     if (batteryLow) {
       _darkConfidence = 0;
+      _lightConfidence = 0;
+      nextThemeMode = ThemeMode.dark;
+    } else if (rawAmbientLight != null &&
+        rawAmbientLight <= _instantDarkThreshold) {
+      _darkConfidence = _requiredDarkSamples;
       _lightConfidence = 0;
       nextThemeMode = ThemeMode.dark;
     } else if (ambientLight == null) {

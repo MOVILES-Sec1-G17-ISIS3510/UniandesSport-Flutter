@@ -4,8 +4,8 @@ import 'package:provider/provider.dart';
 
 import '../../../home/presentation/pages/app_shell.dart';
 import '../../data/auth_repository.dart';
-import '../../domain/models/user_profile.dart';
-import '../../domain/models/user_role.dart';
+import '../../domain/entities/user_profile.dart';
+import '../../domain/entities/user_role.dart';
 import 'login_page.dart';
 
 /// Puerta de entrada de autenticacion.
