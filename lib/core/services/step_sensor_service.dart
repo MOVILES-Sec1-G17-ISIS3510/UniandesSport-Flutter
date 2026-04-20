@@ -19,6 +19,7 @@ class StepSensorService {
   Object? _lastError;
   bool _initialized = false;
 
+  /// Verifica y solicita permisos necesarios para acceder al sensor.
   Future<bool> _ensureActivityRecognitionPermission() async {
     final status = await Permission.activityRecognition.status;
     if (status.isGranted) {
