@@ -374,7 +374,15 @@ class _ProfilePageState extends State<ProfilePage> {
                   ),
                   const SizedBox(height: 32),
                   ElevatedButton.icon(
-                    onPressed: () => context.read<AuthViewModel>().signOut(),
+                    onPressed: () async {
+                      await context.read<AuthController>().signOut();
+                      if (!mounted) return;
+                      Navigator.of(
+                        context,
+                        rootNavigator: true,
+                      ).popUntil((route) => route.isFirst);
+                    },
+
                     icon: const Icon(Icons.logout),
                     label: const Text('Sign out'),
                     style: ElevatedButton.styleFrom(
