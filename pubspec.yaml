@@ -52,9 +52,6 @@ dependencies:
   firebase_storage: ^12.3.7
   connectivity_plus: ^6.1.4
   shared_preferences: ^2.3.2
-  google_maps_flutter: ^2.10.1
-  geolocator: ^13.0.2
-  permission_handler: ^11.4.0
   google_sign_in: ^6.2.1
   googleapis: ^13.2.0
   http: ^1.2.2
@@ -63,6 +60,7 @@ dependencies:
   google_maps_flutter: ^2.17.0
   geolocator: ^14.0.2
   permission_handler: ^12.0.1
+  pedometer: ^4.0.2
 
 dev_dependencies:
   flutter_test:

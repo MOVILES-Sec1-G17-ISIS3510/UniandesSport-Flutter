@@ -8,7 +8,6 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../data/coach_demo_locations.dart';
-import '../../domain/models/coach_model.dart';
 import '../../domain/entities/coach_model.dart';
 
 /// Google Maps en este proyecto solo está integrado en Android e iOS.
@@ -217,6 +216,7 @@ class _CoachMapPageState extends State<CoachMapPage> {
     await Future<void>.delayed(const Duration(milliseconds: 350));
     if (!mounted) return;
     status = await Permission.location.status;
+    if (!mounted) return;
 
     if (_isLocationPermissionOk(status)) {
       setState(() {

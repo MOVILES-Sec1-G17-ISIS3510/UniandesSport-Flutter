@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
-import '../../../auth/domain/models/user_profile.dart';
+import '../../../auth/domain/entities/user_profile.dart';
 import '../../data/services/gemini_smart_recommendation_service.dart';
 import '../../domain/models/smart_recommendation.dart';
 import '../pages/create_casual_event_page.dart';

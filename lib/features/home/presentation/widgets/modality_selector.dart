@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_theme.dart';
-import '../../../home/domain/entities/event_modality.dart';
+import '../../../home/domain/models/event_modality.dart';
 
 class ModalitySelector extends StatelessWidget {
   final EventModality? selectedModality;

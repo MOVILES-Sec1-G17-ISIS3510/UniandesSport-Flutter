@@ -6,7 +6,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/services/notification_service.dart';
 import '../../../auth/domain/entities/user_profile.dart';
 import '../../data/events_repository.dart';
-import '../../domain/entities/event_modality.dart';
+import '../../domain/models/event_modality.dart';
 import 'event_creation_result_page.dart';
 
 class CreateCasualEventPage extends StatefulWidget {
