@@ -1,22 +1,10 @@
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
-LatLng demoCoachLatLngFor(String? coachId) {
-  switch (coachId) {
-    case 'coach_1':
-      return const LatLng(4.7110, -74.0721);
-    case 'coach_2':
-      return const LatLng(4.7090, -74.0650);
-    case 'coach_3':
-      return const LatLng(4.7165, -74.0780);
-    default:
-      return const LatLng(4.710989, -74.072090);
-  }
-}
 /// Puntos de demostración en Bogotá, Colombia (zonas aproximadas, solo para demo).
 const List<LatLng> kBogotaDemoCoachLocations = [
   LatLng(4.6682, -74.0533), // Chapinero / Zona Rosa
   LatLng(4.6495, -74.0634),
-  LatLng(4.6956, -74.0309), // Usaquén
+  LatLng(4.6956, -74.0309), // Usaquen
   LatLng(4.5981, -74.0758), // La Candelaria
   LatLng(4.6483, -74.0959), // Teusaquillo
   LatLng(4.7020, -74.1090), // Salitre
@@ -26,12 +14,22 @@ const List<LatLng> kBogotaDemoCoachLocations = [
 
 /// Ubicación de ejemplo estable para un coach (determinística por id).
 LatLng demoCoachLatLngFor(String? coachId) {
+  switch (coachId) {
+    case 'coach_1':
+      return const LatLng(4.7110, -74.0721);
+    case 'coach_2':
+      return const LatLng(4.7090, -74.0650);
+    case 'coach_3':
+      return const LatLng(4.7165, -74.0780);
+  }
+
   if (coachId == null || coachId.isEmpty) {
     return kBogotaDemoCoachLocations.first;
   }
-  var h = 0;
-  for (final c in coachId.codeUnits) {
-    h = (h * 31 + c) & 0x7fffffff;
+
+  var hash = 0;
+  for (final unit in coachId.codeUnits) {
+    hash = (hash * 31 + unit) & 0x7fffffff;
   }
-  return kBogotaDemoCoachLocations[h % kBogotaDemoCoachLocations.length];
+  return kBogotaDemoCoachLocations[hash % kBogotaDemoCoachLocations.length];
 }

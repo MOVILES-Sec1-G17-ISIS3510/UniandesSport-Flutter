@@ -393,17 +393,6 @@ class _ProfilePageState extends State<ProfilePage> {
                           )
                         : const Icon(Icons.logout),
                     label: Text(_isSigningOut ? 'Signing out...' : 'Sign out'),
-                    onPressed: () async {
-                      await context.read<AuthController>().signOut();
-                      if (!mounted) return;
-                      Navigator.of(
-                        context,
-                        rootNavigator: true,
-                      ).popUntil((route) => route.isFirst);
-                    },
-
-                    icon: const Icon(Icons.logout),
-                    label: const Text('Sign out'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.red,
                       foregroundColor: Colors.white,

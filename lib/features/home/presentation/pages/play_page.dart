@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../auth/domain/entities/user_profile.dart';
-import '../../domain/entities/sport_event.dart';
+import '../../domain/models/sport_event.dart';
 import '../viewmodels/play_view_model.dart';
 import '../widgets/action_buttons_section.dart';
 import '../widgets/event_card.dart';

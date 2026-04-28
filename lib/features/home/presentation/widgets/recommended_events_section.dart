@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_sports.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../data/events_repository.dart';
-import '../../domain/entities/sport_event.dart';
+import '../../domain/models/sport_event.dart' as model;
 
 class RecommendedEventsSection extends StatefulWidget {
   final String userId;
@@ -17,7 +17,7 @@ class RecommendedEventsSection extends StatefulWidget {
 
 class _RecommendedEventsSectionState extends State<RecommendedEventsSection> {
   final EventsRepository _repository = EventsRepository.instance;
-  late Future<List<SportEvent>> _future;
+  late Future<List<model.SportEvent>> _future;
 
   @override
   void initState() {
@@ -39,7 +39,7 @@ class _RecommendedEventsSectionState extends State<RecommendedEventsSection> {
     });
   }
 
-  Future<void> _openEventDetails(SportEvent event) async {
+  Future<void> _openEventDetails(model.SportEvent event) async {
     bool isJoining = false;
     final colorScheme = Theme.of(context).colorScheme;
 
@@ -167,7 +167,7 @@ class _RecommendedEventsSectionState extends State<RecommendedEventsSection> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<List<SportEvent>>(
+    return FutureBuilder<List<model.SportEvent>>(
       future: _future,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
