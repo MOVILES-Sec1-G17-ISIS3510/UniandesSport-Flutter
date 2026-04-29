@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:uniandessport_flutter/features/home/data/services/gemini_availability_service.dart';
-import 'package:uniandessport_flutter/features/home/domain/models/time_slot.dart';
+import 'package:uniandessport_flutter/features/home/services/gemini_availability_service.dart';
+import 'package:uniandessport_flutter/features/home/models/time_slot.dart';
 
 void main() {
   group('GeminiAvailabilityService.parseTimeSlotsJson', () {
