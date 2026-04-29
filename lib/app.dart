@@ -2,19 +2,19 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'core/theme/app_theme.dart';
-import 'core/theme/theme_controller.dart';
-import 'features/auth/data/auth_repository.dart';
-import 'features/auth/domain/entities/user_profile.dart';
-import 'features/auth/presentation/viewmodels/auth_view_model.dart';
-import 'features/auth/presentation/pages/auth_gate.dart';
-import 'features/home/data/events_repository.dart';
-import 'features/home/presentation/viewmodels/play_view_model.dart';
-import 'core/services/notification_service.dart';
+import 'core/constants/app_theme.dart';
+import 'core/utils/theme_controller.dart';
+import 'features/auth/services/auth_repository.dart';
+import 'features/auth/models/user_profile.dart';
+import 'features/auth/viewmodels/auth_view_model.dart';
+import 'features/auth/views/auth_gate.dart';
+import 'features/play/services/events_repository.dart';
+import 'features/play/viewmodels/play_view_model.dart';
+import 'core/network/notification_service.dart';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:uniandessport_flutter/features/coach/presentation/viewmodels/coaches_view_model.dart';
-import 'package:uniandessport_flutter/features/home/data/coach_repository.dart';
+import 'package:uniandessport_flutter/features/coach/viewmodels/coaches_view_model.dart';
+import 'package:uniandessport_flutter/features/coach/services/coach_repository.dart';
 
 /// Root widget de la aplicacion.
 ///
