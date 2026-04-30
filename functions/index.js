@@ -1,6 +1,6 @@
 const functions = require('firebase-functions/v1');
 const admin = require('firebase-admin');
-// Carga diferida de Gemini dentro de dailyMatchmaker para evitar fallo global al iniciar.
+// Motor deterministico para recomendaciones diarias (sin IA generativa).
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -9,8 +9,6 @@ const SMART_RECOMMENDATION_COLLECTION = 'smart_recommendations';
 const SMART_MATCH_LOG_COLLECTION = 'smart_match_logs';
 const USERS_COLLECTION = 'users';
 const EVENTS_COLLECTION = 'events';
-const GEMINI_MODEL = 'gemini-2.5-flash';
-const GEMINI_API_KEY = 'AIzaSyDdC2I3Y62cVLYu60G7q4TFJSFQWsnv5Uo';
 
 const BQ_COLLECTION = 'business_metrics';
 const BQ3_USER_COLLECTION = 'bq3_user_sport_counts';
@@ -1801,47 +1799,155 @@ function toPlainDate(input) {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
-function buildSmartMatchPrompt(userProfile, freeSlots, todayEvents) {
-    return `
-Eres un motor de Smart Matchmaking de UniandesSport y copywriter personalizado.
-Contexto clave: el usuario es estudiante universitario (ej. Ingenieria de Software, 8vo semestre).
-Usa jerga de la Universidad de los Andes (ej. "hueco", "edificio ML", "entregas") cuando tenga sentido.
+function toMinutes(hhmm) {
+    const text = String(hhmm || '').trim();
+    const match = text.match(/^(\d{1,2}):(\d{2})$/);
+    if (!match) return null;
 
-Datos del usuario:
-${JSON.stringify(userProfile, null, 2)}
+    const hour = Number(match[1]);
+    const minute = Number(match[2]);
+    if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
 
-Bloques libres del usuario:
-${JSON.stringify(freeSlots, null, 2)}
-
-Eventos deportivos disponibles hoy:
-${JSON.stringify(todayEvents, null, 2)}
-
-Tu tarea:
-1) Evalua si conviene recomendar que se una a un evento existente o que cree uno nuevo.
-2) Si recomiendas JOIN, devuelve un evento_id valido de la lista de hoy.
-3) Si recomiendas CREATE, devuelve un borrador con deporte, hora_inicio y lugar.
-4) Redacta ui_title, ui_body y cta_text como copywriter empatico y persuasivo.
-
-Responde SOLO JSON ESTRICTO con esta estructura:
-{
-  "tipo_recomendacion": "join" | "create",
-  "evento_id": "string o null",
-  "borrador_evento": {"deporte":"", "hora_inicio":"", "lugar":""},
-  "ui_title": "",
-  "ui_body": "",
-  "cta_text": ""
-}
-`;
+    return (hour * 60) + minute;
 }
 
-function sanitizeGeminiJson(text) {
-    const raw = String(text || '').trim();
-    if (!raw.startsWith('```')) return raw;
-    return raw
-        .split('\n')
-        .filter((line) => !line.trim().startsWith('```'))
-        .join('\n')
-        .trim();
+function normalizeDay(value) {
+    return String(value || '')
+        .trim()
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+}
+
+function dayNameEs(weekday) {
+    switch (weekday) {
+    case 1:
+        return 'lunes';
+    case 2:
+        return 'martes';
+    case 3:
+        return 'miercoles';
+    case 4:
+        return 'jueves';
+    case 5:
+        return 'viernes';
+    case 6:
+        return 'sabado';
+    case 0:
+    default:
+        return 'domingo';
+    }
+}
+
+function isSlotForToday(slot, now) {
+    const day = normalizeDay(slot && slot.dia);
+    if (!day) return true;
+    return day === dayNameEs(now.getDay());
+}
+
+function eventStartMinutes(event) {
+    const ts = event && event.scheduledAt;
+    if (!ts || typeof ts.toDate !== 'function') return null;
+    const date = ts.toDate();
+    return (date.getHours() * 60) + date.getMinutes();
+}
+
+function formatHourFromTimestamp(timestampValue) {
+  if (!timestampValue || typeof timestampValue.toDate !== 'function') return '';
+  const date = timestampValue.toDate();
+  const hh = String(date.getHours()).padStart(2, '0');
+  const mm = String(date.getMinutes()).padStart(2, '0');
+  return `${hh}:${mm}`;
+}
+
+function isEventFull(event) {
+    const maxParticipants = Number(event && event.maxParticipants || 0);
+    const currentParticipants = Number(event && event.currentParticipants || 0);
+    if (!Number.isFinite(maxParticipants) || maxParticipants <= 0) return false;
+    return currentParticipants >= maxParticipants;
+}
+
+function eventFitsAnySlot(event, slots) {
+    const start = eventStartMinutes(event);
+    if (start == null) return false;
+    const end = start + 60;
+
+    return slots.some((slot) => {
+        const slotStart = toMinutes(slot && slot.hora_inicio);
+        const slotEnd = toMinutes(slot && slot.hora_fin);
+        if (slotStart == null || slotEnd == null) return false;
+        return start >= slotStart && end <= slotEnd;
+    });
+}
+
+function pickPreferredSlot(freeSlots, now) {
+    const todaysSlots = freeSlots.filter((slot) => isSlotForToday(slot, now));
+    const slotPool = todaysSlots.length > 0 ? todaysSlots : freeSlots;
+    if (slotPool.length === 0) return null;
+
+    return slotPool.slice().sort((a, b) => {
+        const left = toMinutes(a && a.hora_inicio);
+        const right = toMinutes(b && b.hora_inicio);
+        if (left == null && right == null) return 0;
+        if (left == null) return 1;
+        if (right == null) return -1;
+        return left - right;
+    })[0];
+}
+
+function buildRulesBasedSmartRecommendation(userProfile, freeSlots, todayEvents, now) {
+    const favoriteSport = normalizeSport(userProfile && userProfile.mainSport);
+    const todaysSlots = freeSlots.filter((slot) => isSlotForToday(slot, now));
+    const slotPool = todaysSlots.length > 0 ? todaysSlots : freeSlots;
+
+    const activeEvents = todayEvents
+        .filter((event) => !isEventFull(event))
+        .sort((a, b) => {
+            const left = eventStartMinutes(a);
+            const right = eventStartMinutes(b);
+            if (left == null && right == null) return 0;
+            if (left == null) return 1;
+            if (right == null) return -1;
+            return left - right;
+        });
+
+    const sportMatchedEvents = favoriteSport
+        ? activeEvents.filter((event) => normalizeSport(event.sport) === favoriteSport)
+        : activeEvents;
+
+    const candidates = sportMatchedEvents.length > 0 ? sportMatchedEvents : activeEvents;
+
+    const joinCandidate = candidates.find((event) => eventFitsAnySlot(event, slotPool));
+    if (joinCandidate) {
+        const hour = String(joinCandidate.hora_inicio || '').trim();
+        return {
+            tipo_recomendacion: 'join',
+            evento_id: joinCandidate.id,
+            borrador_evento: null,
+            ui_title: joinCandidate.title || 'A great event fits your schedule today',
+            ui_body: `You have a free slot${hour ? ` around ${hour}` : ''}. This ${joinCandidate.sport || 'sports'} event aligns with your availability.`,
+            cta_text: 'View event',
+        };
+    }
+
+    const preferredSlot = pickPreferredSlot(freeSlots, now);
+    const hour = preferredSlot && preferredSlot.hora_inicio ? String(preferredSlot.hora_inicio).trim() : '18:00';
+    const location = preferredSlot && preferredSlot.lugar ? String(preferredSlot.lugar).trim() : 'Campus';
+    const fallbackSport = favoriteSport || normalizeSport(activeEvents[0] && activeEvents[0].sport) || 'futbol';
+
+    return {
+        tipo_recomendacion: 'create',
+        evento_id: null,
+        borrador_evento: {
+            deporte: fallbackSport,
+            hora_inicio: hour,
+            lugar: location,
+        },
+        ui_title: 'You have a good window to create a match',
+        ui_body: `It looks like you have a useful gap around ${hour}. Create a ${fallbackSport} match and invite people who are also free.`,
+        cta_text: 'Create event',
+    };
 }
 
 function collectFcmTokens(userData) {
@@ -1871,53 +1977,13 @@ function collectFcmTokens(userData) {
 }
 
 function buildFallbackSmartRecommendation(userProfile, freeSlots, todayEvents) {
-    const firstSlot = Array.isArray(freeSlots) && freeSlots.length > 0 ? freeSlots[0] : null;
-    const firstEvent = Array.isArray(todayEvents) && todayEvents.length > 0 ? todayEvents[0] : null;
-    const sport = String((userProfile && userProfile.mainSport) || (firstEvent && firstEvent.sport) || 'futbol').trim() || 'futbol';
-    const hour = firstSlot && firstSlot.hora_inicio ? String(firstSlot.hora_inicio).trim() : '18:00';
-    const location = (firstSlot && firstSlot.lugar) ? String(firstSlot.lugar).trim() : 'Campus';
-
-    if (firstEvent) {
-        return {
-            tipo_recomendacion: 'join',
-            evento_id: firstEvent.id,
-            borrador_evento: null,
-            ui_title: `Your best match today: ${firstEvent.title || 'available event'}`,
-            ui_body: `You have a free slot around ${hour}. Joining this event could fit your day without affecting your other plans.`,
-            cta_text: 'View event',
-        };
-    }
-
-    return {
-        tipo_recomendacion: 'create',
-        evento_id: null,
-        borrador_evento: {
-            deporte: sport,
-            hora_inicio: hour,
-            lugar: location,
-        },
-        ui_title: 'You have a good window to create a match',
-        ui_body: `It looks like you have a useful gap around ${hour}. Create a quick match and invite people who are also free.`,
-        cta_text: 'Create event',
-    };
+    return buildRulesBasedSmartRecommendation(userProfile, freeSlots, todayEvents, new Date());
 }
 
 exports.dailyMatchmaker = functions.pubsub
     .schedule('every day 07:30')
     .timeZone('America/Bogota')
     .onRun(async () => {
-        let GoogleGenerativeAI;
-        try {
-            ({GoogleGenerativeAI} = require('@google/generative-ai'));
-        } catch (error) {
-            console.error('[dailyMatchmaker] Missing module @google/generative-ai. Run npm install in functions/.', error);
-            return null;
-        }
-
-        const apiKey = process.env.GEMINI_API_KEY || GEMINI_API_KEY;
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({model: GEMINI_MODEL});
-
         const now = new Date();
         const today = toPlainDate(now);
         const nowTs = admin.firestore.Timestamp.now();
@@ -1939,29 +2005,11 @@ exports.dailyMatchmaker = functions.pubsub
                 sport: event.sport || '',
                 modality: event.modality || '',
                 location: event.location || '',
+                hora_inicio: formatHourFromTimestamp(event.scheduledAt),
                 scheduledAt: event.scheduledAt || null,
                 maxParticipants: Number(event.maxParticipants || 0),
                 currentParticipants: Array.isArray(event.participants) ? event.participants.length : 0,
             }));
-
-        const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-        const generateWithRetry = async (prompt, attempts = 3) => {
-            let lastError;
-            for (let i = 0; i < attempts; i++) {
-                try {
-                    return await model.generateContent(prompt);
-                } catch (error) {
-                    lastError = error;
-                    const status = Number(error && error.status ? error.status : 0);
-                    const retryable = status === 503 || status === 429 || String(error && error.message || '').includes('Service Unavailable');
-                    if (!retryable || i === attempts - 1) {
-                        throw error;
-                    }
-                    await sleep(750 * (i + 1));
-                }
-            }
-            throw lastError;
-        };
 
         for (const userDoc of usersSnap.docs) {
             const userData = userDoc.data() || {};
@@ -1970,36 +2018,19 @@ exports.dailyMatchmaker = functions.pubsub
             const freeSlots = Array.isArray(userData.free_time_slots) ? userData.free_time_slots : [];
             if (freeSlots.length === 0) continue;
 
-            const prompt = buildSmartMatchPrompt(
-                {
-                    uid: userDoc.id,
-                    fullName: userData.fullName || '',
-                    program: userData.program || '',
-                    semester: userData.semester || null,
-                },
-                freeSlots,
-                eventsToday,
-            );
-
             try {
-                const response = await generateWithRetry(prompt);
-                const text = response.response && response.response.text ? response.response.text() : '';
-                const cleaned = sanitizeGeminiJson(text);
-                const payload = JSON.parse(cleaned);
-
                 const recommendation = {
-                    tipo_recomendacion: payload.tipo_recomendacion === 'create' ? 'create' : 'join',
-                    evento_id: payload.evento_id || null,
-                    borrador_evento: payload.borrador_evento || {
-                        deporte: '',
-                        hora_inicio: '',
-                        lugar: '',
-                    },
-                    ui_title: String(payload.ui_title || ''),
-                    ui_body: String(payload.ui_body || ''),
-                    cta_text: String(payload.cta_text || ''),
+                    ...buildRulesBasedSmartRecommendation(
+                        {
+                            uid: userDoc.id,
+                            mainSport: userData.mainSport || null,
+                        },
+                        freeSlots,
+                        eventsToday,
+                        now,
+                    ),
                     generatedAt: nowTs,
-                    source: 'dailyMatchmaker',
+                    source: 'dailyMatchmaker_rules',
                 };
 
                 await db.collection(SMART_RECOMMENDATION_COLLECTION)
@@ -2050,7 +2081,7 @@ exports.dailyMatchmaker = functions.pubsub
                 const fallbackRecommendation = {
                     ...fallback,
                     generatedAt: nowTs,
-                    source: 'dailyMatchmaker_fallback',
+                    source: 'dailyMatchmaker_rules_fallback',
                 };
 
                 await db.collection(SMART_RECOMMENDATION_COLLECTION)

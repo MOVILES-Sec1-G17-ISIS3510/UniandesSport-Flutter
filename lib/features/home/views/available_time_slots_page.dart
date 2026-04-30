@@ -329,6 +329,8 @@ class _AvailableTimeSlotsPageState extends State<AvailableTimeSlotsPage> {
                     const SizedBox(height: 8),
                     Text(
                       'Add slots manually or use the microphone so AI can generate them for you.',
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                     const SizedBox(height: 16),
@@ -352,6 +354,8 @@ class _AvailableTimeSlotsPageState extends State<AvailableTimeSlotsPage> {
                                     (slot) => InputChip(
                                       label: Text(
                                         '${slot.dia} ${slot.horaInicio}-${slot.horaFin}',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
                                       ),
                                       onDeleted: () => _deleteSlot(slot),
                                     ),
