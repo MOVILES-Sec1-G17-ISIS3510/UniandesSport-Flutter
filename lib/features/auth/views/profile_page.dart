@@ -156,6 +156,8 @@ class _ProfilePageState extends State<ProfilePage> {
                           children: [
                             Text(
                               widget.profile.fullName.toUpperCase(),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
                               style: Theme.of(context).textTheme.headlineSmall
                                   ?.copyWith(fontWeight: FontWeight.bold),
                             ),
@@ -163,11 +165,15 @@ class _ProfilePageState extends State<ProfilePage> {
                             Text(
                               widget.profile.university ??
                                   'University not specified',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: Theme.of(context).textTheme.bodyMedium,
                             ),
                             const SizedBox(height: 4),
                             Text(
                               '${widget.profile.semester ?? 0}th Semester - ${widget.profile.role.label}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: Theme.of(context).textTheme.bodySmall,
                             ),
                           ],

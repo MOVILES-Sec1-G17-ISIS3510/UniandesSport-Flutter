@@ -70,12 +70,10 @@ class PlayViewModel extends ChangeNotifier {
 
   // ─── Estado de My Scheduled ───────────────────────────────────────────────
 
-  bool _showMyScheduled = false;
   bool _isLoadingMyScheduled = false;
   List<SportEvent> _myScheduledEvents = [];
   String? _myScheduledError;
 
-  bool get showMyScheduled => _showMyScheduled;
   bool get isLoadingMyScheduled => _isLoadingMyScheduled;
   List<SportEvent> get myScheduledEvents => List.unmodifiable(_myScheduledEvents);
   String? get myScheduledError => _myScheduledError;
@@ -162,15 +160,6 @@ class PlayViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> toggleMyScheduled() async {
-    _showMyScheduled = !_showMyScheduled;
-    notifyListeners();
-
-    if (_showMyScheduled) {
-      await loadMyScheduled();
-    }
-  }
-
   Future<void> loadMyScheduled({bool forceRefresh = false}) async {
     if (_isLoadingMyScheduled) return;
     if (!forceRefresh && _myScheduledEvents.isNotEmpty) return;
@@ -193,9 +182,7 @@ class PlayViewModel extends ChangeNotifier {
   Future<bool> leaveScheduledEvent(SportEvent event) async {
     try {
       await _repo.leaveEvent(eventId: event.id, userId: _profile.uid);
-      if (_showMyScheduled) {
-        await loadMyScheduled(forceRefresh: true);
-      }
+      await loadMyScheduled(forceRefresh: true);
       return true;
     } catch (_) {
       return false;
@@ -224,9 +211,7 @@ class PlayViewModel extends ChangeNotifier {
     // Si tuvo éxito, refresca el listado para mostrar el contador actualizado.
     if (success) {
       await search();
-      if (_showMyScheduled) {
-        await loadMyScheduled(forceRefresh: true);
-      }
+      await loadMyScheduled(forceRefresh: true);
     }
 
     _joiningEventId = null;

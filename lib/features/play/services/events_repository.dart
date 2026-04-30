@@ -34,7 +34,8 @@ class EventsRepository {
   /// el repositorio y no conozca detalles de infraestructura.
   final FirebaseFunctions _functions = FirebaseFunctions.instance;
 
-  /// Buscar eventos por deporte, modalidad y estado
+  /// Buscar eventos por deporte, modalidad y estado.
+  /// Solo devuelve eventos cuya fecha de inicio sea futura respecto a ahora.
   Future<List<SportEvent>> searchEvents({
     required String sport,
     required EventModality modality,
@@ -54,6 +55,8 @@ class EventsRepository {
     // 2. Consulta simplificada para evitar problemas de índices compuestos.
     try {
       final normalizedSport = AppSports.normalizeSportKey(sport);
+      final now = DateTime.now();
+
       final snapshot = await _firestore
           .collection('events')
           .where('sport', isEqualTo: normalizedSport)
@@ -66,6 +69,8 @@ class EventsRepository {
               .where(
                 (event) => event.modality == modality && event.status == status,
               )
+              // Filtrar: solo eventos que comienzan a partir de ahora
+              .where((event) => event.scheduledAt.isAfter(now))
               .toList()
             ..sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
 
