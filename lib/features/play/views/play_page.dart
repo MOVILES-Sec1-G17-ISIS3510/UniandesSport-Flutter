@@ -19,8 +19,20 @@ class PlayPage extends StatelessWidget {
 
   const PlayPage({super.key, required this.profile, this.onGoHome});
 
-  Future<void> _handleSearch(PlayViewModel vm) async {
+  Future<void> _handleSearch(BuildContext context, PlayViewModel vm) async {
     await vm.search();
+    
+    // Si hay un error temprano (ej. no hay red) y no pasamos a los resultados,
+    // mostramos un SnackBar para no dejar al usuario sin feedback.
+    if (vm.searchError != null && !vm.hasSearched && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(vm.searchError!),
+          backgroundColor: Colors.red.shade800,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   Future<void> _handleJoinEvent(
@@ -176,7 +188,7 @@ class PlayPage extends StatelessWidget {
                 ActionButtonsSection(
                   canSearch: vm.canSearch,
                   canCreate: vm.canCreate,
-                  onSearchPressed: () => _handleSearch(vm),
+                  onSearchPressed: () => _handleSearch(context, vm),
                   onCreatePressed: () => _openCreateForm(context, vm),
                 ),
                 const SizedBox(height: 32),
