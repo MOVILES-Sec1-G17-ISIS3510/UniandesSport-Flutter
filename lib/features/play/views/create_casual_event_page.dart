@@ -1,11 +1,15 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_sports.dart';
 import '../../../core/constants/app_theme.dart';
 import '../../../core/network/notification_service.dart';
 import '../../auth/models/user_profile.dart';
 import '../services/events_repository.dart';
+import '../viewmodels/play_view_model.dart';
 import '../models/event_modality.dart';
 import 'event_creation_result_page.dart';
 
@@ -32,6 +36,8 @@ class _CreateCasualEventPageState extends State<CreateCasualEventPage> {
   final _descriptionController = TextEditingController();
   final _maxParticipantsController = TextEditingController(text: '10');
   final _repository = EventsRepository.instance;
+
+  static final RegExp _hourFormatRegex = RegExp(r'^(?:[0-9]|[0-1]\d|2[0-3]):[0-5]\d$');
 
   DateTime? _scheduledAt;
   bool _isSubmitting = false;
@@ -72,16 +78,29 @@ class _CreateCasualEventPageState extends State<CreateCasualEventPage> {
     }
 
     if (draftHour.isNotEmpty) {
-      _hourController.text = draftHour;
-      _scheduledAt = _scheduledAtFromHour(draftHour);
+      final normalizedDraftHour = _normalizeHourText(draftHour) ?? draftHour;
+      _hourController.text = normalizedDraftHour;
+      _scheduledAt = _scheduledAtFromHour(normalizedDraftHour);
     }
   }
 
-  DateTime? _scheduledAtFromHour(String hourText) {
-    final regex = RegExp(r'^([01]\\d|2[0-3]):[0-5]\\d$');
-    if (!regex.hasMatch(hourText)) return null;
+  String? _normalizeHourText(String hourText) {
+    final raw = hourText.trim();
+    if (!_hourFormatRegex.hasMatch(raw)) return null;
 
-    final parts = hourText.split(':');
+    final parts = raw.split(':');
+    if (parts.length != 2) return null;
+
+    final hour = parts[0].padLeft(2, '0');
+    final minute = parts[1];
+    return '$hour:$minute';
+  }
+
+  DateTime? _scheduledAtFromHour(String hourText) {
+    final normalized = _normalizeHourText(hourText);
+    if (normalized == null) return null;
+
+    final parts = normalized.split(':');
     final hour = int.parse(parts[0]);
     final minute = int.parse(parts[1]);
     final now = DateTime.now();
@@ -137,8 +156,15 @@ class _CreateCasualEventPageState extends State<CreateCasualEventPage> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
-    if (_scheduledAt == null && _hourController.text.trim().isNotEmpty) {
-      _scheduledAt = _scheduledAtFromHour(_hourController.text.trim());
+    final rawHour = _hourController.text.trim();
+    final normalizedHour = rawHour.isEmpty ? '' : (_normalizeHourText(rawHour) ?? rawHour);
+    if (normalizedHour.isNotEmpty && normalizedHour != rawHour) {
+      _hourController.text = normalizedHour;
+      _hourController.selection = TextSelection.collapsed(offset: normalizedHour.length);
+    }
+
+    if (_scheduledAt == null && normalizedHour.isNotEmpty) {
+      _scheduledAt = _scheduledAtFromHour(normalizedHour);
     }
 
     if (_scheduledAt == null) {
@@ -188,6 +214,13 @@ class _CreateCasualEventPageState extends State<CreateCasualEventPage> {
       } catch (e) {
         debugPrint(
           '[CreateCasualEventPage] Error mostrando notificacion local: $e',
+        );
+      }
+
+      if (mounted) {
+        // Refresca el schedule usando la cache local recién escrita.
+        unawaited(
+          context.read<PlayViewModel>().loadMyScheduled(forceRefresh: true),
         );
       }
 
@@ -288,15 +321,23 @@ class _CreateCasualEventPageState extends State<CreateCasualEventPage> {
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: _hourController,
-                  decoration: const InputDecoration(labelText: 'Start hour (HH:MM)'),
+                  decoration: const InputDecoration(labelText: 'Start hour (H:MM or HH:MM)'),
                   validator: (value) {
                     final raw = (value ?? '').trim();
                     if (raw.isEmpty) return null;
-                    final regex = RegExp(r'^([01]\\d|2[0-3]):[0-5]\\d$');
-                    if (!regex.hasMatch(raw)) {
-                      return 'Use HH:MM';
+                    if (!_hourFormatRegex.hasMatch(raw)) {
+                      return 'Use H:MM or HH:MM';
                     }
                     return null;
+                  },
+                  onChanged: (value) {
+                    final normalized = _normalizeHourText(value);
+                    if (normalized != null && normalized != value.trim()) {
+                      _hourController.value = TextEditingValue(
+                        text: normalized,
+                        selection: TextSelection.collapsed(offset: normalized.length),
+                      );
+                    }
                   },
                 ),
                 const SizedBox(height: 12),

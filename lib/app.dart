@@ -1,17 +1,17 @@
-import 'package:firebase_core/firebase_core.dart';
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'core/constants/app_theme.dart';
+import 'core/network/notification_service.dart';
 import 'core/utils/theme_controller.dart';
-import 'features/auth/services/auth_repository.dart';
 import 'features/auth/models/user_profile.dart';
+import 'features/auth/services/auth_repository.dart';
 import 'features/auth/viewmodels/auth_view_model.dart';
 import 'features/auth/views/auth_gate.dart';
 import 'features/play/services/events_repository.dart';
 import 'features/play/viewmodels/play_view_model.dart';
-import 'core/network/notification_service.dart';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:uniandessport_flutter/features/coach/viewmodels/coaches_view_model.dart';
 import 'package:uniandessport_flutter/features/coach/services/coach_repository.dart';
@@ -30,7 +30,6 @@ class UniandesSportsApp extends StatefulWidget {
 }
 
 class _UniandesSportsAppState extends State<UniandesSportsApp> {
-  late final Future<void> _appInitFuture;
   late final ThemeController _themeController;
 
   @override
@@ -40,9 +39,11 @@ class _UniandesSportsAppState extends State<UniandesSportsApp> {
     _themeController = ThemeController();
     _themeController.startMonitoring();
 
-    _appInitFuture = Firebase.initializeApp().then((_) {
-      return NotificationService.instance.initialize();
-    });
+    // Firebase ya se inicializa en main.dart. Aquí solo arrancamos notificaciones
+    // sin bloquear el render inicial de la app.
+    unawaited(NotificationService.instance.initialize().catchError((error) {
+      debugPrint('[UniandesSportsApp] Notification init error: $error');
+    }));
   }
 
   @override
@@ -59,122 +60,50 @@ class _UniandesSportsAppState extends State<UniandesSportsApp> {
         builder: (context) {
           final themeController = context.watch<ThemeController>();
 
-          return FutureBuilder<void>(
-            future: _appInitFuture,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState != ConnectionState.done) {
-                return MaterialApp(
-                  debugShowCheckedModeBanner: false,
-                  theme: AppTheme.light,
-                  darkTheme: AppTheme.dark,
-                  themeMode: themeController.themeMode,
-                  home: const _SplashLoadingPage(),
-                );
-              }
-
-              if (snapshot.hasError) {
-                return MaterialApp(
-                  debugShowCheckedModeBanner: false,
-                  theme: AppTheme.light,
-                  darkTheme: AppTheme.dark,
-                  themeMode: themeController.themeMode,
-                  home: _FirebaseErrorPage(error: snapshot.error.toString()),
-                );
-              }
-
-              return MultiProvider(
-                providers: [
-                  // ── Capa de datos ─────────────────────────────────────────────
-                  // AuthRepository: instancia normal (1 por árbol, pero no Singleton
-                  // porque podría necesitar distintas instancias en tests).
-                  ChangeNotifierProvider(
-                    create: (_) => CoachesViewModel(
-                      CoachRepositoryImpl(
-                        firestore: FirebaseFirestore.instance,
-                      ),
-                    )..loadCoaches(),
+          return MultiProvider(
+            providers: [
+              // ── Capa de datos ─────────────────────────────────────────────
+              ChangeNotifierProvider(
+                create: (_) => CoachesViewModel(
+                  CoachRepositoryImpl(
+                    firestore: FirebaseFirestore.instance,
                   ),
-                  Provider<AuthRepository>(create: (_) => AuthRepository()),
-                  // EventsRepository: Singleton — se comparte la MISMA instancia
-                  // en toda la app (PlayPage, HomePage, etc.) sin recrearla.
-                  Provider<EventsRepository>(
-                    create: (_) => EventsRepository.instance,
-                  ),
+                )..loadCoaches(),
+              ),
+              Provider<AuthRepository>(create: (_) => AuthRepository()),
+              Provider<EventsRepository>(
+                create: (_) => EventsRepository.instance,
+              ),
 
-                  // ── ViewModels (MVVM) ─────────────────────────────────────────
-                  // AuthViewModel depende de AuthRepository → ProxyProvider.
-                  ChangeNotifierProxyProvider<AuthRepository, AuthViewModel>(
-                    create: (context) =>
-                        AuthViewModel(context.read<AuthRepository>()),
-                    update: (context, repository, controller) =>
-                        controller ?? AuthViewModel(repository),
-                  ),
-                  // PlayViewModel depende de EventsRepository y del perfil del usuario.
-                  // El perfil se inyecta más abajo desde AppShell cuando ya existe sesión.
-                  // Aquí se provisiona con un perfil vacío que AppShell sobreescribe.
-                  ChangeNotifierProxyProvider<EventsRepository, PlayViewModel>(
-                    create: (context) => PlayViewModel(
-                      repository: context.read<EventsRepository>(),
+              // ── ViewModels (MVVM) ─────────────────────────────────────────
+              ChangeNotifierProxyProvider<AuthRepository, AuthViewModel>(
+                create: (context) => AuthViewModel(context.read<AuthRepository>()),
+                update: (context, repository, controller) =>
+                    controller ?? AuthViewModel(repository),
+              ),
+              ChangeNotifierProxyProvider<EventsRepository, PlayViewModel>(
+                create: (context) => PlayViewModel(
+                  repository: context.read<EventsRepository>(),
+                  profile: UserProfile.empty(),
+                ),
+                update: (context, repo, vm) =>
+                    vm ??
+                    PlayViewModel(
+                      repository: repo,
                       profile: UserProfile.empty(),
                     ),
-                    update: (context, repo, vm) =>
-                        vm ??
-                        PlayViewModel(
-                          repository: repo,
-                          profile: UserProfile.empty(),
-                        ),
-                  ),
-                ],
-                child: MaterialApp(
-                  debugShowCheckedModeBanner: false,
-                  title: 'Uniandes Sports',
-                  theme: AppTheme.light,
-                  darkTheme: AppTheme.dark,
-                  themeMode: themeController.themeMode,
-                  home: const AuthGate(),
-                ),
-              );
-            },
+              ),
+            ],
+            child: MaterialApp(
+              debugShowCheckedModeBanner: false,
+              title: 'Uniandes Sports',
+              theme: AppTheme.light,
+              darkTheme: AppTheme.dark,
+              themeMode: themeController.themeMode,
+              home: const AuthGate(),
+            ),
           );
         },
-      ),
-    );
-  }
-}
-
-class _SplashLoadingPage extends StatelessWidget {
-  const _SplashLoadingPage();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(body: Center(child: CircularProgressIndicator()));
-  }
-}
-
-class _FirebaseErrorPage extends StatelessWidget {
-  const _FirebaseErrorPage({required this.error});
-
-  final String error;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Error inicializando Firebase',
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-              const SizedBox(height: 12),
-              Text(error),
-            ],
-          ),
-        ),
       ),
     );
   }

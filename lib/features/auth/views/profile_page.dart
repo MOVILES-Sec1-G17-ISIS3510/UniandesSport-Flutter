@@ -7,7 +7,7 @@ import '../../../core/constants/app_field_limits.dart';
 import '../services/auth_repository.dart';
 import '../models/user_profile.dart';
 import '../models/user_role.dart';
-import '../viewmodels/auth_controller.dart';
+import '../viewmodels/auth_view_model.dart';
 import '../../home/views/available_time_slots_page.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -417,9 +417,11 @@ class _ProfilePageState extends State<ProfilePage> {
     setState(() => _isSigningOut = true);
 
     try {
-      await context.read<AuthController>().signOut();
+      await context.read<AuthViewModel>().signOut();
       if (!mounted) return;
 
+      // Quitamos el stack de navegación interno; AuthGate reaccionará al cambio
+      // de FirebaseAuth y mostrará LoginPage.
       Navigator.of(context).popUntil((route) => route.isFirst);
     } catch (e) {
       if (!mounted) return;
