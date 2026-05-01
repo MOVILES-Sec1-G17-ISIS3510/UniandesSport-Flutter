@@ -132,7 +132,7 @@ class PlayViewModel extends ChangeNotifier {
 
     final connectivityResult = await Connectivity().checkConnectivity();
     if (connectivityResult.contains(ConnectivityResult.none)) {
-      _searchError = "Necesitas conexión a internet para buscar eventos";
+      _searchError = "You need an internet connection to search for events";
       notifyListeners();
       return;
     }
@@ -152,7 +152,7 @@ class PlayViewModel extends ChangeNotifier {
     } catch (e) {
       final errorStr = e.toString().toLowerCase();
       if (errorStr.contains('unavailable') || errorStr.contains('network') || errorStr.contains('socket')) {
-        _searchError = "Se perdió la conexión durante la búsqueda";
+        _searchError = "Connection lost during search";
       } else {
         _searchError = e.toString();
       }
