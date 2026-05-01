@@ -26,6 +26,20 @@ class TimeslotRepository {
     });
   }
 
+  Future<void> updateTimeslot(TimeslotModel timeslot) async {
+    // 1. Guardar en Hive (sobrescribe por ID)
+    hiveService.saveTimeslot(timeslot);
+
+    // 2. Insertar en sync_queue de SQLite para el Sync Engine
+    await databaseHelper.insert('sync_queue', {
+      'event_id': timeslot.id,
+      'action': 'UPDATE_TIMESLOT',
+      'status': 'pending',
+      'retry_count': 0,
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+    });
+  }
+
   Future<void> deleteTimeslot(String id) async {
     // 1. Eliminar de Hive
     hiveService.deleteTimeslot(id);
