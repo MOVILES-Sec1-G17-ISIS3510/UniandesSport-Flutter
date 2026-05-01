@@ -452,21 +452,25 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<void> _handleSignOut() async {
     setState(() => _isSigningOut = true);
-
     try {
       await context.read<AuthViewModel>().signOut();
-      if (!mounted) return;
-
-      // Quitamos el stack de navegación interno; AuthGate reaccionará al cambio
-      // de FirebaseAuth y mostrará LoginPage.
-      Navigator.of(context).popUntil((route) => route.isFirst);
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not sign out: $e')),
-      );
-    } finally {
       if (mounted) {
+        // Redirige al login usando pushAndRemoveUntil
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const AuthGate()),
+          (route) => false,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        final errorStr = e.toString().toLowerCase();
+        final displayError = errorStr.contains('network') || errorStr.contains('unavailable') || errorStr.contains('socket')
+            ? 'Network error. Check your connection.'
+            : 'Authentication failed. Please try again.';
+            
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error closing session: $displayError')),
+        );
         setState(() => _isSigningOut = false);
       }
     }

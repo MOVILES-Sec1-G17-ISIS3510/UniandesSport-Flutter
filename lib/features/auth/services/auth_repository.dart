@@ -166,7 +166,17 @@ class AuthRepository {
     }
 
     if (error is FirebaseException) {
-      return error.message ?? 'Firebase error.';
+      if (error.code == 'unavailable' || error.code == 'network-request-failed') {
+        return 'Network error. Check your connection.';
+      }
+      // Evitar retornar error.message directamente si puede estar en español,
+      // pero como fallback genérico en inglés:
+      return 'Authentication failed. Please try again.';
+    }
+
+    final errorStr = error.toString().toLowerCase();
+    if (errorStr.contains('network') || errorStr.contains('socket') || errorStr.contains('unavailable')) {
+      return 'Network error. Check your connection.';
     }
 
     return 'An unexpected error occurred.';
