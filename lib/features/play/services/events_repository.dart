@@ -70,7 +70,7 @@ class EventsRepository {
           .collection('events')
           .where('sport', isEqualTo: normalizedSport)
           .where('status', isEqualTo: status)
-          .get();
+          .get(const GetOptions(source: Source.server));
 
       final events =
           snapshot.docs

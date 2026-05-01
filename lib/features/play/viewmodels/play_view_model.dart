@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 
 import '../../../core/constants/app_sports.dart';
 import '../services/events_repository.dart';
@@ -126,10 +127,15 @@ class PlayViewModel extends ChangeNotifier {
 
   // ─── Búsqueda de eventos ──────────────────────────────────────────────────
 
-  /// Ejecuta la búsqueda en Firestore y almacena los resultados.
-  /// Notifica a la View en cada cambio de estado (cargando, error, éxito).
   Future<void> search() async {
     if (!canSearch) return;
+
+    final connectivityResult = await Connectivity().checkConnectivity();
+    if (connectivityResult.contains(ConnectivityResult.none)) {
+      _searchError = "Necesitas conexión a internet para buscar eventos";
+      notifyListeners();
+      return;
+    }
 
     _hasSearched = true;
     _isSearching = true;
@@ -144,7 +150,12 @@ class PlayViewModel extends ChangeNotifier {
       );
       _searchResults = results;
     } catch (e) {
-      _searchError = e.toString();
+      final errorStr = e.toString().toLowerCase();
+      if (errorStr.contains('unavailable') || errorStr.contains('network') || errorStr.contains('socket')) {
+        _searchError = "Se perdió la conexión durante la búsqueda";
+      } else {
+        _searchError = e.toString();
+      }
     } finally {
       _isSearching = false;
       notifyListeners();

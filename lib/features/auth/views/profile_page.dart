@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_sports.dart';
 import '../../../core/constants/app_field_limits.dart';
+import '../../../core/theme/theme_viewmodel.dart';
 import '../services/auth_repository.dart';
 import '../models/user_profile.dart';
 import '../models/user_role.dart';
@@ -72,6 +73,8 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   Widget build(BuildContext context) {
+    final themeViewModel = context.watch<ThemeViewModel>();
+    
     final selectedMainSportKey = _mainSportController.text.trim().isEmpty
         ? null
         : AppSports.normalizeSportKey(_mainSportController.text);
@@ -384,6 +387,40 @@ class _ProfilePageState extends State<ProfilePage> {
                         ),
                       );
                     },
+                  ),
+                  const SizedBox(height: 32),
+                  const Text(
+                    'App Theme',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<ThemeMode>(
+                    value: themeViewModel.currentTheme,
+                    items: const [
+                      DropdownMenuItem(
+                        value: ThemeMode.system,
+                        child: Text('System'),
+                      ),
+                      DropdownMenuItem(
+                        value: ThemeMode.light,
+                        child: Text('Light'),
+                      ),
+                      DropdownMenuItem(
+                        value: ThemeMode.dark,
+                        child: Text('Dark'),
+                      ),
+                    ],
+                    onChanged: (mode) {
+                      if (mode != null) {
+                        themeViewModel.changeTheme(mode);
+                      }
+                    },
+                    decoration: InputDecoration(
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      prefixIcon: const Icon(Icons.brightness_6),
+                    ),
                   ),
                   const SizedBox(height: 32),
                   ElevatedButton.icon(
