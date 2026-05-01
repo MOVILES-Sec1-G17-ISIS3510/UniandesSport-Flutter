@@ -1,9 +1,13 @@
+import 'dart:convert';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import '../../../core/local_storage/database_helper.dart';
 import '../../../core/network/analytics_service.dart';
+import '../../../core/network/sync_engine_service.dart';
 import '../../../core/constants/app_sports.dart';
 import '../models/event_modality.dart';
 import '../models/sport_event.dart';
@@ -21,12 +25,17 @@ import '../../home/models/time_slot.dart';
 /// Uso:  `final repo = EventsRepository.instance;`
 class EventsRepository {
   // Constructor privado: nadie fuera de esta clase puede hacer `EventsRepository()`.
-  EventsRepository._internal() : _firestore = FirebaseFirestore.instance;
+  EventsRepository._internal()
+      : _firestore = FirebaseFirestore.instance,
+        _dbHelper = DatabaseHelper(),
+        _syncEngine = SyncEngineService();
 
   /// Única instancia global de la clase (Singleton eager).
   static final EventsRepository instance = EventsRepository._internal();
 
   final FirebaseFirestore _firestore;
+  final DatabaseHelper _dbHelper;
+  final SyncEngineService _syncEngine;
 
   /// Puerta de acceso a Cloud Functions callable usadas por BQ3/BQ4.
   ///
@@ -354,10 +363,12 @@ class EventsRepository {
   }) async {
     try {
       final now = DateTime.now();
+      final eventId = _firestore.collection('events').doc().id;
 
       final event = SportEvent(
-        id: '', // Se asigna al crear
+        id: eventId,
         createdBy: createdBy,
+        creatorSemester: creatorSemester,
         title: title,
         sport: sport,
         modality: modality,
@@ -365,21 +376,36 @@ class EventsRepository {
         location: location,
         scheduledAt: scheduledAt,
         maxParticipants: maxParticipants,
-        participants: [createdBy], // El creador es automáticamente participante
+        participants: [createdBy],
         status: 'active',
         createdAt: now,
         updatedAt: now,
       );
 
-      final eventJson = event.toJson();
-      eventJson['metadata'] = {'creatorSemester': creatorSemester};
+      // 1) Guardado local primero (SQLite)
+      await _dbHelper.transaction((txn) async {
+        await txn.insert(
+          'play_events',
+          event.toLocalMap(isSynced: false),
+        );
 
-      final docRef = await _firestore.collection('events').add(eventJson);
+        // 2) Encolamos la sincronización para cuando haya conectividad.
+        await txn.insert('sync_queue', {
+          'event_id': eventId,
+          'action': 'create_play_event',
+          'status': 'pending',
+          'retry_count': 0,
+          'timestamp': DateTime.now().millisecondsSinceEpoch,
+        });
+      });
+
+      // 3) Intento inmediato de sync en background si hay conexión.
+      Future.microtask(() => _syncEngine.processQueue());
 
       // Registro de analitica no bloqueante para no afectar la UX.
       AnalyticsService.instance.logCreateSportEvent(sportCategory: sport);
 
-      return docRef.id;
+      return eventId;
     } catch (e) {
       throw Exception('Error creating event: $e');
     }
@@ -433,15 +459,43 @@ class EventsRepository {
   /// Obtener eventos en los que participa un usuario
   Future<List<SportEvent>> getUserParticipatingEvents(String userId) async {
     try {
+      final localRows = await _dbHelper.query('play_events', orderBy: 'scheduled_at ASC');
+      if (localRows.isNotEmpty) {
+        final localEvents = localRows
+            .map((row) => SportEvent.fromLocalMap(row))
+            .where(
+              (event) =>
+                  event.createdBy == userId || event.participants.contains(userId),
+            )
+            .toList();
+
+        if (localEvents.isNotEmpty) {
+          return localEvents;
+        }
+      }
+
       final snapshot = await _firestore
           .collection('events')
           .where('participants', arrayContains: userId)
           .get();
 
-      return snapshot.docs.map((doc) => SportEvent.fromFirestore(doc)).toList();
+      final remoteEvents = snapshot.docs
+          .map((doc) => SportEvent.fromFirestore(doc))
+          .toList();
+
+      if (remoteEvents.isNotEmpty) {
+        await _cachePlayEvents(remoteEvents);
+      }
+
+      return remoteEvents;
     } catch (e) {
       throw Exception('Error getting participating events: $e');
     }
+  }
+
+  Future<void> _cachePlayEvents(List<SportEvent> events) async {
+    final rows = events.map((event) => event.toLocalMap(isSynced: true)).toList();
+    await _dbHelper.batchInsert('play_events', rows, replaceOnConflict: true);
   }
 
   /// Actualizar estado de un evento

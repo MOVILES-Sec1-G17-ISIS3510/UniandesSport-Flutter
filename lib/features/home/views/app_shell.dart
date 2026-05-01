@@ -18,8 +18,13 @@ import '../widgets/smart_recommendation_section.dart';
 
 class AppShell extends StatefulWidget {
   final UserProfile profile;
+  final bool listenToProfileUpdates;
 
-  const AppShell({super.key, required this.profile});
+  const AppShell({
+    super.key,
+    required this.profile,
+    this.listenToProfileUpdates = true,
+  });
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -47,7 +52,9 @@ class _AppShellState extends State<AppShell> {
   void initState() {
     super.initState();
     _profile = widget.profile;
-    _setupProfileListener();
+    if (widget.listenToProfileUpdates) {
+      _setupProfileListener();
+    }
     _startPlayIconRotation();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -73,6 +80,8 @@ class _AppShellState extends State<AppShell> {
   }
 
   void _setupProfileListener() {
+    if (!widget.listenToProfileUpdates) return;
+
     final repository = context.read<AuthRepository>();
     _profileSubscription?.cancel();
     _profileSubscription = repository.userProfileChanges(_profile.uid).listen((
