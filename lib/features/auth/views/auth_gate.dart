@@ -108,14 +108,14 @@ class _NoInternetScreen extends StatelessWidget {
                 const Icon(Icons.wifi_off, size: 72),
                 const SizedBox(height: 16),
                 Text(
-                  'Necesitas conectarte a internet para poder abrir la aplicación e iniciar sesión',
+                  'You need an internet connection to open the app and sign in',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 const SizedBox(height: 20),
                 ElevatedButton(
                   onPressed: onRetry,
-                  child: const Text('Reintentar'),
+                  child: const Text('Retry'),
                 ),
               ],
             ),
