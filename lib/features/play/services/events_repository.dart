@@ -215,7 +215,8 @@ class EventsRepository {
           .where(
             (event) =>
                 event.createdBy != userId &&
-                !event.participants.contains(userId),
+                !event.participants.contains(userId) &&
+                event.scheduledAt.isAfter(DateTime.now()),
           )
           .toList();
 
@@ -244,7 +245,9 @@ class EventsRepository {
         .map(SportEvent.fromFirestore)
         .where(
           (event) =>
-              event.createdBy != userId && !event.participants.contains(userId),
+              event.createdBy != userId && 
+              !event.participants.contains(userId) &&
+              event.scheduledAt.isAfter(DateTime.now()),
         )
         .toList();
 
@@ -276,7 +279,10 @@ class EventsRepository {
       '[Recommendations] Any-active fallback docs=${snapshot.docs.length}',
     );
 
-    final events = snapshot.docs.map(SportEvent.fromFirestore).toList();
+    final events = snapshot.docs
+        .map(SportEvent.fromFirestore)
+        .where((event) => event.scheduledAt.isAfter(DateTime.now()))
+        .toList();
     events.sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
     return events;
   }
