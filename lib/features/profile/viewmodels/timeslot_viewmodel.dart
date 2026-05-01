@@ -43,6 +43,31 @@ class TimeslotViewModel extends ChangeNotifier {
     }
   }
 
+  Future<void> updateTimeslot(TimeslotModel timeslot) async {
+    _setLoading(true);
+    // 1. UI Optimista: Actualizar estado en memoria
+    final index = _timeslots.indexWhere((t) => t.id == timeslot.id);
+    TimeslotModel? oldTimeslot;
+    if (index != -1) {
+      oldTimeslot = _timeslots[index];
+      _timeslots[index] = timeslot;
+    }
+
+    try {
+      // 2. Persistir localmente en disco
+      await _repository.updateTimeslot(timeslot);
+    } catch (e) {
+      // Revertir UI
+      if (index != -1 && oldTimeslot != null) {
+        _timeslots[index] = oldTimeslot;
+      }
+      debugPrint("Error actualizando timeslot: $e");
+    } finally {
+      // OBLIGATORIO: Garantizar que la UI se libere inmediatamente
+      _setLoading(false);
+    }
+  }
+
   Future<void> removeTimeslot(String id) async {
     _setLoading(true);
     // 1. UI Optimista: Actualizar estado en memoria inmediatamente
