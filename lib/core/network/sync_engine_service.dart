@@ -110,6 +110,19 @@ class SyncEngineService {
           } catch (_) {
             success = false;
           }
+        } else if (action == 'leave_play_event') {
+          try {
+            success = await _leavePlayEventInFirestore(eventId);
+          } on FirebaseException catch (fe) {
+            if (fe.code == 'permission-denied' || fe.code == 'unauthenticated' || fe.code == 'invalid-argument' || fe.code == 'not-found') {
+              permanentFailure = true;
+              success = false;
+            } else {
+              success = false;
+            }
+          } catch (_) {
+            success = false;
+          }
         } else {
           success = false;
         }
@@ -118,7 +131,7 @@ class SyncEngineService {
           await _dbHelper.delete('sync_queue', 'id = ?', [id]);
 
           if (eventId != null) {
-            if (action == 'create_play_event') {
+            if (action == 'create_play_event' || action == 'leave_play_event') {
               await _dbHelper.update(
                 'play_events',
                 {'is_synced': 1},
@@ -206,6 +219,19 @@ class SyncEngineService {
     };
 
     await _firestore.collection('events').doc(eventId).set(payload, SetOptions(merge: true));
+    return true;
+  }
+
+  Future<bool> _leavePlayEventInFirestore(String? eventId) async {
+    if (eventId == null) return false;
+    final userUid = _auth.currentUser?.uid;
+    if (userUid == null) return false;
+
+    await _firestore.collection('events').doc(eventId).update({
+      'participants': FieldValue.arrayRemove([userUid]),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+    
     return true;
   }
 

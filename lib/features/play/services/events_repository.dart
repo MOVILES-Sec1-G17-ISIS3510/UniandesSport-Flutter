@@ -432,17 +432,46 @@ class EventsRepository {
     }
   }
 
-  /// Abandonar un evento (remover usuario de participantes)
+  /// Abandonar un evento (remover usuario de participantes) de forma Offline-First
   Future<void> leaveEvent({
     required String eventId,
     required String userId,
   }) async {
     try {
-      await _firestore.collection('events').doc(eventId).update({
-        'participants': FieldValue.arrayRemove([userId]),
-        'updatedAt': Timestamp.now(),
+      await _dbHelper.transaction((txn) async {
+        // 1. Actualizar caché local si existe
+        final rows = await txn.query('play_events', where: 'id = ?', whereArgs: [eventId]);
+        if (rows.isNotEmpty) {
+          final event = rows.first;
+          final participantsJson = event['participants_json'] as String?;
+          if (participantsJson != null) {
+            final List<dynamic> participantsList = jsonDecode(participantsJson);
+            participantsList.remove(userId);
+            
+            await txn.update(
+              'play_events',
+              {'participants_json': jsonEncode(participantsList), 'is_synced': 0},
+              where: 'id = ?',
+              whereArgs: [eventId],
+            );
+          }
+        }
+
+        // 2. Encolar la acción en sync_queue
+        await txn.insert('sync_queue', {
+          'event_id': eventId,
+          'action': 'leave_play_event',
+          'payload': null,
+          'status': 'pending',
+          'timestamp': DateTime.now().millisecondsSinceEpoch,
+          'retry_count': 0,
+        });
       });
+
+      // 3. Procesar cola
+      await _syncEngine.processQueue();
     } catch (e) {
+      debugPrint('[leaveEvent] Fallo al encolar o procesar salida: $e');
       throw Exception('Error leaving event: $e');
     }
   }
@@ -475,9 +504,10 @@ class EventsRepository {
             )
             .toList();
 
-        if (localEvents.isNotEmpty) {
-          return localEvents;
-        }
+        // Si ya hay caché local, confiamos en ella (incluso si está vacía porque el usuario
+        // acaba de abandonar todos sus eventos). Evitamos el fallback a Firestore para
+        // prevenir condiciones de carrera con el Sync Engine.
+        return localEvents;
       }
 
       final snapshot = await _firestore
