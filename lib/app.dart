@@ -5,7 +5,7 @@ import 'package:provider/provider.dart';
 
 import 'core/constants/app_theme.dart';
 import 'core/network/notification_service.dart';
-import 'core/utils/theme_controller.dart';
+import 'core/theme/theme_viewmodel.dart';
 import 'features/auth/models/user_profile.dart';
 import 'features/auth/services/auth_repository.dart';
 import 'features/auth/viewmodels/auth_view_model.dart';
@@ -30,14 +30,9 @@ class UniandesSportsApp extends StatefulWidget {
 }
 
 class _UniandesSportsAppState extends State<UniandesSportsApp> {
-  late final ThemeController _themeController;
-
   @override
   void initState() {
     super.initState();
-
-    _themeController = ThemeController();
-    _themeController.startMonitoring();
 
     // Firebase ya se inicializa en main.dart. Aquí solo arrancamos notificaciones
     // sin bloquear el render inicial de la app.
@@ -47,61 +42,55 @@ class _UniandesSportsAppState extends State<UniandesSportsApp> {
   }
 
   @override
-  void dispose() {
-    _themeController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider.value(
-      value: _themeController,
+    return MultiProvider(
+      providers: [
+        // ── Capa de estado global ───────────────────────────────────────────
+        ChangeNotifierProvider(create: (_) => ThemeViewModel()),
+        
+        // ── Capa de datos ─────────────────────────────────────────────
+        ChangeNotifierProvider(
+          create: (_) => CoachesViewModel(
+            CoachRepositoryImpl(
+              firestore: FirebaseFirestore.instance,
+            ),
+          )..loadCoaches(),
+        ),
+        Provider<AuthRepository>(create: (_) => AuthRepository()),
+        Provider<EventsRepository>(
+          create: (_) => EventsRepository.instance,
+        ),
+
+        // ── ViewModels (MVVM) ─────────────────────────────────────────
+        ChangeNotifierProxyProvider<AuthRepository, AuthViewModel>(
+          create: (context) => AuthViewModel(context.read<AuthRepository>()),
+          update: (context, repository, controller) =>
+              controller ?? AuthViewModel(repository),
+        ),
+        ChangeNotifierProxyProvider<EventsRepository, PlayViewModel>(
+          create: (context) => PlayViewModel(
+            repository: context.read<EventsRepository>(),
+            profile: UserProfile.empty(),
+          ),
+          update: (context, repo, vm) =>
+              vm ??
+              PlayViewModel(
+                repository: repo,
+                profile: UserProfile.empty(),
+              ),
+        ),
+      ],
       child: Builder(
         builder: (context) {
-          final themeController = context.watch<ThemeController>();
+          final themeViewModel = context.watch<ThemeViewModel>();
 
-          return MultiProvider(
-            providers: [
-              // ── Capa de datos ─────────────────────────────────────────────
-              ChangeNotifierProvider(
-                create: (_) => CoachesViewModel(
-                  CoachRepositoryImpl(
-                    firestore: FirebaseFirestore.instance,
-                  ),
-                )..loadCoaches(),
-              ),
-              Provider<AuthRepository>(create: (_) => AuthRepository()),
-              Provider<EventsRepository>(
-                create: (_) => EventsRepository.instance,
-              ),
-
-              // ── ViewModels (MVVM) ─────────────────────────────────────────
-              ChangeNotifierProxyProvider<AuthRepository, AuthViewModel>(
-                create: (context) => AuthViewModel(context.read<AuthRepository>()),
-                update: (context, repository, controller) =>
-                    controller ?? AuthViewModel(repository),
-              ),
-              ChangeNotifierProxyProvider<EventsRepository, PlayViewModel>(
-                create: (context) => PlayViewModel(
-                  repository: context.read<EventsRepository>(),
-                  profile: UserProfile.empty(),
-                ),
-                update: (context, repo, vm) =>
-                    vm ??
-                    PlayViewModel(
-                      repository: repo,
-                      profile: UserProfile.empty(),
-                    ),
-              ),
-            ],
-            child: MaterialApp(
-              debugShowCheckedModeBanner: false,
-              title: 'Uniandes Sports',
-              theme: AppTheme.light,
-              darkTheme: AppTheme.dark,
-              themeMode: themeController.themeMode,
-              home: const AuthGate(),
-            ),
+          return MaterialApp(
+            debugShowCheckedModeBanner: false,
+            title: 'Uniandes Sports',
+            theme: AppTheme.light,
+            darkTheme: AppTheme.dark,
+            themeMode: themeViewModel.currentTheme,
+            home: const AuthGate(),
           );
         },
       ),
