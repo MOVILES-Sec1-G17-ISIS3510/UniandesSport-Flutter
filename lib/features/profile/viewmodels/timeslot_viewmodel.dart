@@ -8,6 +8,9 @@ class TimeslotViewModel extends ChangeNotifier {
   List<TimeslotModel> _timeslots = [];
   List<TimeslotModel> get timeslots => _timeslots;
 
+  bool _isLoading = false;
+  bool get isLoading => _isLoading;
+
   TimeslotViewModel(this._repository) {
     loadTimeslots();
   }
@@ -17,38 +20,46 @@ class TimeslotViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  void _setLoading(bool value) {
+    _isLoading = value;
+    notifyListeners();
+  }
+
   Future<void> addTimeslot(TimeslotModel timeslot) async {
+    _setLoading(true);
     // 1. UI Optimista: Actualizar estado en memoria inmediatamente
     _timeslots.add(timeslot);
-    notifyListeners();
 
     try {
       // 2. Persistir en Hive y encolar en SQLite (SyncEngine)
       await _repository.addTimeslot(timeslot);
     } catch (e) {
-      // En caso de error, podríamos revertir la UI
+      // Revertir UI si falla localmente la escritura en caché o db
       _timeslots.remove(timeslot);
-      notifyListeners();
       debugPrint("Error agregando timeslot: $e");
+    } finally {
+      // Garantizar que la UI se libere inmediatamente
+      _setLoading(false);
     }
   }
 
   Future<void> removeTimeslot(String id) async {
+    _setLoading(true);
     // 1. UI Optimista: Actualizar estado en memoria inmediatamente
     final index = _timeslots.indexWhere((t) => t.id == id);
     if (index != -1) {
       final removedTimeslot = _timeslots.removeAt(index);
-      notifyListeners();
 
       try {
         // 2. Eliminar de Hive y encolar en SQLite (SyncEngine)
         await _repository.deleteTimeslot(id);
       } catch (e) {
-        // Revertir UI si falla localmente
+        // Revertir UI si falla localmente la escritura en caché o db
         _timeslots.insert(index, removedTimeslot);
-        notifyListeners();
         debugPrint("Error eliminando timeslot: $e");
       }
     }
+    // Garantizar que la UI se libere inmediatamente
+    _setLoading(false);
   }
 }
