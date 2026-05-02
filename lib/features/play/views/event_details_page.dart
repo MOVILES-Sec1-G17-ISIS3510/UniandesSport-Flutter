@@ -54,20 +54,32 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
               children: [
                 Text(
                   event.title,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.headlineSmall,
                 ),
                 const SizedBox(height: 8),
                 Text(
                   '${AppSports.formatSportLabel(event.sport)} • ${event.modality.label}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 8),
-                Text('Location: ${event.location}'),
+                Text(
+                  'Location: ${event.location}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 const SizedBox(height: 8),
                 Text('Date: ${event.scheduledAt}'),
                 const SizedBox(height: 8),
                 Text('Participants: ${event.currentParticipants}/${event.maxParticipants}'),
                 const SizedBox(height: 14),
-                Text(event.description),
+                Text(
+                  event.description,
+                  maxLines: 10,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ],
             ),
           );

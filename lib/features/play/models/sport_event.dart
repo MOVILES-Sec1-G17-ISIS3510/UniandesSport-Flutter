@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'event_modality.dart';
@@ -16,6 +18,7 @@ class SportEvent {
   final String status; // 'active', 'completed', 'cancelled'
   final DateTime createdAt;
   final DateTime updatedAt;
+  final int? creatorSemester;
 
   SportEvent({
     required this.id,
@@ -31,6 +34,7 @@ class SportEvent {
     required this.status,
     required this.createdAt,
     required this.updatedAt,
+    this.creatorSemester,
   });
 
   // Getter para participantes actuales
@@ -44,7 +48,7 @@ class SportEvent {
 
   // Convertir a JSON para Firestore
   Map<String, dynamic> toJson() {
-    return {
+    final json = <String, dynamic>{
       'createdBy': createdBy,
       'title': title,
       'sport': sport,
@@ -58,11 +62,63 @@ class SportEvent {
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
     };
+
+    if (creatorSemester != null) {
+      json['metadata'] = {'creatorSemester': creatorSemester};
+    }
+
+    return json;
+  }
+
+  Map<String, Object?> toLocalMap({bool isSynced = false}) {
+    return {
+      'id': id,
+      'created_by': createdBy,
+      'creator_semester': creatorSemester,
+      'title': title,
+      'sport': sport,
+      'modality': modality.code,
+      'description': description,
+      'location': location,
+      'scheduled_at': scheduledAt.toIso8601String(),
+      'max_participants': maxParticipants,
+      'participants_json': jsonEncode(participants),
+      'status': status,
+      'created_at': createdAt.toIso8601String(),
+      'updated_at': updatedAt.toIso8601String(),
+      'is_synced': isSynced ? 1 : 0,
+    };
+  }
+
+  factory SportEvent.fromLocalMap(Map<String, Object?> map) {
+    final participantsRaw = map['participants_json']?.toString() ?? '[]';
+    final participantsDecoded = jsonDecode(participantsRaw);
+
+    return SportEvent(
+      id: map['id']?.toString() ?? '',
+      createdBy: map['created_by']?.toString() ?? '',
+      creatorSemester: map['creator_semester'] as int?,
+      title: map['title']?.toString() ?? '',
+      sport: map['sport']?.toString() ?? '',
+      modality: EventModality.fromCode(map['modality']?.toString() ?? 'casual'),
+      description: map['description']?.toString() ?? '',
+      location: map['location']?.toString() ?? '',
+      scheduledAt: DateTime.tryParse(map['scheduled_at']?.toString() ?? '') ?? DateTime.now(),
+      maxParticipants: int.tryParse(map['max_participants']?.toString() ?? '') ?? 0,
+      participants: participantsDecoded is List
+          ? participantsDecoded.map((e) => e.toString()).toList()
+          : <String>[],
+      status: map['status']?.toString() ?? 'active',
+      createdAt: DateTime.tryParse(map['created_at']?.toString() ?? '') ?? DateTime.now(),
+      updatedAt: DateTime.tryParse(map['updated_at']?.toString() ?? '') ?? DateTime.now(),
+    );
   }
 
   // Crear desde documento Firestore
   factory SportEvent.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
+    final metadata = data['metadata'];
+    final creatorSemester = metadata is Map ? metadata['creatorSemester'] as int? : null;
 
     return SportEvent(
       id: doc.id,
@@ -78,6 +134,7 @@ class SportEvent {
       status: data['status'] ?? 'active',
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      creatorSemester: creatorSemester,
     );
   }
 
@@ -96,6 +153,7 @@ class SportEvent {
     String? status,
     DateTime? createdAt,
     DateTime? updatedAt,
+    int? creatorSemester,
   }) {
     return SportEvent(
       id: id ?? this.id,
@@ -111,8 +169,8 @@ class SportEvent {
       status: status ?? this.status,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      creatorSemester: creatorSemester ?? this.creatorSemester,
     );
   }
 }
-
 

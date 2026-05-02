@@ -4,10 +4,11 @@ import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_sports.dart';
 import '../../../core/constants/app_field_limits.dart';
+import '../../../core/theme/theme_viewmodel.dart';
 import '../services/auth_repository.dart';
 import '../models/user_profile.dart';
 import '../models/user_role.dart';
-import '../viewmodels/auth_controller.dart';
+import '../viewmodels/auth_view_model.dart';
 import '../../home/views/available_time_slots_page.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -72,6 +73,8 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   Widget build(BuildContext context) {
+    final themeViewModel = context.watch<ThemeViewModel>();
+    
     final selectedMainSportKey = _mainSportController.text.trim().isEmpty
         ? null
         : AppSports.normalizeSportKey(_mainSportController.text);
@@ -156,6 +159,8 @@ class _ProfilePageState extends State<ProfilePage> {
                           children: [
                             Text(
                               widget.profile.fullName.toUpperCase(),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
                               style: Theme.of(context).textTheme.headlineSmall
                                   ?.copyWith(fontWeight: FontWeight.bold),
                             ),
@@ -163,11 +168,15 @@ class _ProfilePageState extends State<ProfilePage> {
                             Text(
                               widget.profile.university ??
                                   'University not specified',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: Theme.of(context).textTheme.bodyMedium,
                             ),
                             const SizedBox(height: 4),
                             Text(
                               '${widget.profile.semester ?? 0}th Semester - ${widget.profile.role.label}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: Theme.of(context).textTheme.bodySmall,
                             ),
                           ],
@@ -380,6 +389,40 @@ class _ProfilePageState extends State<ProfilePage> {
                     },
                   ),
                   const SizedBox(height: 32),
+                  const Text(
+                    'App Theme',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<ThemeMode>(
+                    value: themeViewModel.currentTheme,
+                    items: const [
+                      DropdownMenuItem(
+                        value: ThemeMode.system,
+                        child: Text('System'),
+                      ),
+                      DropdownMenuItem(
+                        value: ThemeMode.light,
+                        child: Text('Light'),
+                      ),
+                      DropdownMenuItem(
+                        value: ThemeMode.dark,
+                        child: Text('Dark'),
+                      ),
+                    ],
+                    onChanged: (mode) {
+                      if (mode != null) {
+                        themeViewModel.changeTheme(mode);
+                      }
+                    },
+                    decoration: InputDecoration(
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      prefixIcon: const Icon(Icons.brightness_6),
+                    ),
+                  ),
+                  const SizedBox(height: 32),
                   ElevatedButton.icon(
                     onPressed: _isSigningOut ? null : _handleSignOut,
                     icon: _isSigningOut
@@ -409,19 +452,25 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<void> _handleSignOut() async {
     setState(() => _isSigningOut = true);
-
     try {
-      await context.read<AuthController>().signOut();
-      if (!mounted) return;
-
-      Navigator.of(context).popUntil((route) => route.isFirst);
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not sign out: $e')),
-      );
-    } finally {
+      await context.read<AuthViewModel>().signOut();
       if (mounted) {
+        // Redirige al login usando pushAndRemoveUntil
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const AuthGate()),
+          (route) => false,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        final errorStr = e.toString().toLowerCase();
+        final displayError = errorStr.contains('network') || errorStr.contains('unavailable') || errorStr.contains('socket')
+            ? 'Network error. Check your connection.'
+            : 'Authentication failed. Please try again.';
+            
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error closing session: $displayError')),
+        );
         setState(() => _isSigningOut = false);
       }
     }

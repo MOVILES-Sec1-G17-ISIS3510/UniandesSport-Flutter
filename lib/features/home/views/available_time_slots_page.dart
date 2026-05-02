@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import '../../../core/local_storage/database_helper.dart';
 import '../models/time_slot.dart';
 import '../services/voice_slots_extractor.dart';
 
@@ -79,14 +80,26 @@ class _AvailableTimeSlotsPageState extends State<AvailableTimeSlotsPage> {
     setState(() => _isSaving = true);
 
     try {
-      await FirebaseFirestore.instance.collection('users').doc(widget.userId).set({
+      // 1. Guardado Optimista: Disparamos a la caché de Firestore (fuego y olvido, SIN await)
+      FirebaseFirestore.instance.collection('users').doc(widget.userId).set({
         'free_time_slots': _slots.map((slot) => slot.toJson()).toList(),
       }, SetOptions(merge: true));
+
+      // 2. Encolar en la base de datos local para el Sync Engine
+      final dbHelper = DatabaseHelper();
+      await dbHelper.insert('sync_queue', {
+        'event_id': widget.userId,
+        'action': 'SAVE_ALL_TIMESLOTS',
+        'status': 'pending',
+        'retry_count': 0,
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+      });
 
       _showMessage('Time slots saved.');
     } catch (e) {
       _showMessage('Could not save time slots: $e');
     } finally {
+      // 3. OBLIGATORIO: Liberar la UI de inmediato en el finally
       if (mounted) setState(() => _isSaving = false);
     }
   }
@@ -329,6 +342,8 @@ class _AvailableTimeSlotsPageState extends State<AvailableTimeSlotsPage> {
                     const SizedBox(height: 8),
                     Text(
                       'Add slots manually or use the microphone so AI can generate them for you.',
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                     const SizedBox(height: 16),
@@ -352,6 +367,8 @@ class _AvailableTimeSlotsPageState extends State<AvailableTimeSlotsPage> {
                                     (slot) => InputChip(
                                       label: Text(
                                         '${slot.dia} ${slot.horaInicio}-${slot.horaFin}',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
                                       ),
                                       onDeleted: () => _deleteSlot(slot),
                                     ),

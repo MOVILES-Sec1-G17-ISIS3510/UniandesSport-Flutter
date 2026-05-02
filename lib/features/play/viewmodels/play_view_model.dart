@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 
 import '../../../core/constants/app_sports.dart';
 import '../services/events_repository.dart';
@@ -70,12 +71,10 @@ class PlayViewModel extends ChangeNotifier {
 
   // ─── Estado de My Scheduled ───────────────────────────────────────────────
 
-  bool _showMyScheduled = false;
   bool _isLoadingMyScheduled = false;
   List<SportEvent> _myScheduledEvents = [];
   String? _myScheduledError;
 
-  bool get showMyScheduled => _showMyScheduled;
   bool get isLoadingMyScheduled => _isLoadingMyScheduled;
   List<SportEvent> get myScheduledEvents => List.unmodifiable(_myScheduledEvents);
   String? get myScheduledError => _myScheduledError;
@@ -128,10 +127,15 @@ class PlayViewModel extends ChangeNotifier {
 
   // ─── Búsqueda de eventos ──────────────────────────────────────────────────
 
-  /// Ejecuta la búsqueda en Firestore y almacena los resultados.
-  /// Notifica a la View en cada cambio de estado (cargando, error, éxito).
   Future<void> search() async {
     if (!canSearch) return;
+
+    final connectivityResult = await Connectivity().checkConnectivity();
+    if (connectivityResult.contains(ConnectivityResult.none)) {
+      _searchError = "You need an internet connection to search for events";
+      notifyListeners();
+      return;
+    }
 
     _hasSearched = true;
     _isSearching = true;
@@ -146,7 +150,12 @@ class PlayViewModel extends ChangeNotifier {
       );
       _searchResults = results;
     } catch (e) {
-      _searchError = e.toString();
+      final errorStr = e.toString().toLowerCase();
+      if (errorStr.contains('unavailable') || errorStr.contains('network') || errorStr.contains('socket')) {
+        _searchError = "Connection lost during search";
+      } else {
+        _searchError = e.toString();
+      }
     } finally {
       _isSearching = false;
       notifyListeners();
@@ -160,15 +169,6 @@ class PlayViewModel extends ChangeNotifier {
     _searchError = null;
     _joiningEventId = null;
     notifyListeners();
-  }
-
-  Future<void> toggleMyScheduled() async {
-    _showMyScheduled = !_showMyScheduled;
-    notifyListeners();
-
-    if (_showMyScheduled) {
-      await loadMyScheduled();
-    }
   }
 
   Future<void> loadMyScheduled({bool forceRefresh = false}) async {
@@ -193,9 +193,7 @@ class PlayViewModel extends ChangeNotifier {
   Future<bool> leaveScheduledEvent(SportEvent event) async {
     try {
       await _repo.leaveEvent(eventId: event.id, userId: _profile.uid);
-      if (_showMyScheduled) {
-        await loadMyScheduled(forceRefresh: true);
-      }
+      await loadMyScheduled(forceRefresh: true);
       return true;
     } catch (_) {
       return false;
@@ -224,9 +222,7 @@ class PlayViewModel extends ChangeNotifier {
     // Si tuvo éxito, refresca el listado para mostrar el contador actualizado.
     if (success) {
       await search();
-      if (_showMyScheduled) {
-        await loadMyScheduled(forceRefresh: true);
-      }
+      await loadMyScheduled(forceRefresh: true);
     }
 
     _joiningEventId = null;
