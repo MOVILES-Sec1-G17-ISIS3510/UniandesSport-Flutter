@@ -10,6 +10,7 @@ import '../models/user_profile.dart';
 import '../models/user_role.dart';
 import '../viewmodels/auth_view_model.dart';
 import '../../home/views/available_time_slots_page.dart';
+import 'auth_gate.dart';
 
 class ProfilePage extends StatefulWidget {
   final UserProfile profile;
@@ -457,7 +458,7 @@ class _ProfilePageState extends State<ProfilePage> {
       if (mounted) {
         // Redirige al login usando pushAndRemoveUntil
         Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const AuthGate()),
+          MaterialPageRoute(builder: (_) => AuthGate()),
           (route) => false,
         );
       }

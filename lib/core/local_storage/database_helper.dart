@@ -14,7 +14,7 @@ class DatabaseHelper {
   DatabaseHelper._internal();
 
   static const String _dbName = 'uniandes_sport.db';
-  static const int _dbVersion = 2;
+  static const int _dbVersion = 3;
 
   Database? _database;
 
@@ -74,6 +74,7 @@ class DatabaseHelper {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         event_id TEXT,
         action TEXT,
+        payload TEXT,
         status TEXT,
         retry_count INTEGER,
         timestamp INTEGER
@@ -102,6 +103,10 @@ class DatabaseHelper {
           is_synced INTEGER NOT NULL
         )
       ''');
+    }
+
+    if (oldVersion < 3) {
+      await db.execute('ALTER TABLE sync_queue ADD COLUMN payload TEXT');
     }
   }
 
