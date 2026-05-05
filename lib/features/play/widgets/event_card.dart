@@ -36,14 +36,21 @@ class _EventCardState extends State<EventCard> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     // Manejar deportes personalizados con color gris e ícono de add
     final sportStyle = AppSports.sportKeys.contains(widget.sport)
         ? AppSports.getSport(widget.sport)
         : SportStyle(
             name: widget.sport.substring(0, 1).toUpperCase() + widget.sport.substring(1),
-            color: Colors.grey[600]!,
+            color: isDark ? Colors.grey[400]! : Colors.grey[600]!,
             icon: Icons.add_circle_outline,
           );
+
+    final surfaceColor = Theme.of(context).colorScheme.surface;
+    final borderColor = _isExpanded
+        ? sportStyle.color
+        : (isDark ? const Color(0xFF243147) : const Color(0xFFE6EBF2));
 
     return InkWell(
       onTap: () => setState(() => _isExpanded = !_isExpanded),
@@ -52,16 +59,16 @@ class _EventCardState extends State<EventCard> {
         duration: const Duration(milliseconds: 300),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: surfaceColor,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: _isExpanded ? sportStyle.color : const Color(0xFFE6EBF2),
+            color: borderColor,
             width: _isExpanded ? 2 : 1,
           ),
           boxShadow: _isExpanded
               ? [
                   BoxShadow(
-                    color: sportStyle.color.withValues(alpha: 0.2),
+                    color: sportStyle.color.withValues(alpha: isDark ? 0.3 : 0.2),
                     blurRadius: 12,
                     offset: const Offset(0, 4),
                   ),
@@ -132,7 +139,7 @@ class _EventCardState extends State<EventCard> {
                   _isExpanded
                       ? Icons.keyboard_arrow_up
                       : Icons.keyboard_arrow_down,
-                  color: AppTheme.navy,
+                  color: Theme.of(context).colorScheme.onSurface,
                 ),
               ],
             ),
@@ -166,19 +173,19 @@ class _EventCardState extends State<EventCard> {
                     ),
               ),
               const SizedBox(height: 8),
-              Text(
-                widget.description?.isNotEmpty == true
-                    ? widget.description!
-                    : 'No description available',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: widget.description?.isNotEmpty == true
-                      ? null
-                      : Colors.grey[600],
-                  fontStyle: widget.description?.isNotEmpty == true
-                      ? null
-                      : FontStyle.italic,
-                ),
-              ),
+               Text(
+                 widget.description?.isNotEmpty == true
+                     ? widget.description!
+                     : 'No description available',
+                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                   color: widget.description?.isNotEmpty == true
+                       ? null
+                       : Theme.of(context).colorScheme.onSurfaceVariant,
+                   fontStyle: widget.description?.isNotEmpty == true
+                       ? null
+                       : FontStyle.italic,
+                 ),
+               ),
             ],
 
             // Botón de acción (solo cuando está expandido)
@@ -223,9 +230,17 @@ class _EventMetadata extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final iconColor = isDark
+        ? Theme.of(context).colorScheme.onSurfaceVariant
+        : Colors.grey[600];
+    final textColor = isDark
+        ? Theme.of(context).colorScheme.onSurfaceVariant
+        : Colors.grey[700];
+
     return Row(
       children: [
-        Icon(icon, size: 16, color: Colors.grey[600]),
+        Icon(icon, size: 16, color: iconColor),
         const SizedBox(width: 6),
         Expanded(
           child: Text(
@@ -233,7 +248,7 @@ class _EventMetadata extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Colors.grey[700],
+                  color: textColor,
                 ),
           ),
         ),

@@ -79,6 +79,7 @@ class SyncEngineService {
         final int id = task['id'] as int;
         final String? eventId = task['event_id'] as String?;
         final String? action = task['action'] as String?;
+        final String? payload = task['payload'] as String?;
         final int retryCount = (task['retry_count'] as int?) ?? 0;
 
         bool success = false;
@@ -110,13 +111,28 @@ class SyncEngineService {
           } catch (_) {
             success = false;
           }
-        } else if (action == 'leave_play_event') {
+        } else if (action == 'leave_play_event' || action == 'LEAVE_EVENT') {
           try {
-            success = await _leavePlayEventInFirestore(eventId);
+            success = await _leavePlayEventInFirestore(_resolveEventId(eventId, payload));
           } on FirebaseException catch (fe) {
             if (fe.code == 'permission-denied' || fe.code == 'unauthenticated' || fe.code == 'invalid-argument' || fe.code == 'not-found') {
               permanentFailure = true;
               success = false;
+            } else {
+              success = false;
+            }
+          } catch (_) {
+            success = false;
+          }
+        } else if (action == 'CANCEL_EVENT') {
+          try {
+            success = await _cancelPlayEventInFirestore(_resolveEventId(eventId, payload));
+          } on FirebaseException catch (fe) {
+            if (fe.code == 'permission-denied' || fe.code == 'unauthenticated' || fe.code == 'invalid-argument') {
+              permanentFailure = true;
+              success = false;
+            } else if (fe.code == 'not-found') {
+              success = true;
             } else {
               success = false;
             }
@@ -130,22 +146,23 @@ class SyncEngineService {
         if (success) {
           await _dbHelper.delete('sync_queue', 'id = ?', [id]);
 
-          if (eventId != null) {
-            if (action == 'create_play_event' || action == 'leave_play_event') {
-              await _dbHelper.update(
-                'play_events',
-                {'is_synced': 1},
-                'id = ?',
-                [eventId],
-              );
-            } else {
-              await _dbHelper.update(
-                'events',
-                {'isSynced': 1},
-                'id = ?',
-                [eventId],
-              );
-            }
+          if (eventId != null && action == 'create_play_event') {
+            await _dbHelper.update(
+              'play_events',
+              {'is_synced': 1},
+              'id = ?',
+              [eventId],
+            );
+          } else if (eventId != null && action == 'create') {
+            await _dbHelper.update(
+              'events',
+              {'isSynced': 1},
+              'id = ?',
+              [eventId],
+            );
+          } else if (eventId != null && action == 'CANCEL_EVENT') {
+            await _dbHelper.delete('play_events', 'id = ?', [eventId]);
+            await _dbHelper.delete('events', 'id = ?', [eventId]);
           }
         } else {
           if (permanentFailure) {
@@ -231,33 +248,9 @@ class SyncEngineService {
       'participants': FieldValue.arrayRemove([userUid]),
       'updatedAt': FieldValue.serverTimestamp(),
     });
-    
+
     return true;
   }
 
-  Future<bool> _uploadSimpleEventToFirestore(String? eventId) async {
-    if (eventId == null) return false;
-
-    final rows = await _dbHelper.query('events', where: 'id = ?', whereArgs: [eventId]);
-    if (rows.isEmpty) return false;
-
-    final event = rows.first;
-    final payload = {
-      'clientId': event['id'],
-      'title': event['title'],
-      'date': event['date'],
-      'updatedAt': FieldValue.serverTimestamp(),
-      'ownerUid': _auth.currentUser?.uid,
-    };
-
-    await _firestore.collection('events').doc(event['id'] as String).set(payload, SetOptions(merge: true));
-    return true;
-  }
-
-  void dispose() {
-    _connectivitySub?.cancel();
-    _connectivitySub = null;
-    _periodicSyncTimer?.cancel();
-    _periodicSyncTimer = null;
-  }
-}
+  Future<bool> _cancelPlayEventInFirestore(String? eventId) async {
+    if
