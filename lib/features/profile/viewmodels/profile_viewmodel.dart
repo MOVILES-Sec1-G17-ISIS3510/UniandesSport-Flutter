@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 
 import '../../auth/models/user_profile.dart';
 import '../services/profile_repository.dart';
@@ -95,6 +96,20 @@ class ProfileViewModel extends ChangeNotifier {
         photoUrl: downloadUrl,
       );
 
+      // Limpieza de caché: eliminar la URL anterior si existía
+      final oldUrl = _profile?.photoUrl;
+      if (oldUrl != null && oldUrl.isNotEmpty) {
+        try {
+          debugPrint('[ProfileViewModel:Cache] 🗑️ Removing old cache: $oldUrl');
+          await DefaultCacheManager().removeFile(oldUrl);
+          debugPrint('[ProfileViewModel:Cache] ✅ Old cache removed successfully');
+        } catch (e) {
+          debugPrint('[ProfileViewModel:Cache] ⚠️ Failed to remove old cache: $e');
+        }
+      } else {
+        debugPrint('[ProfileViewModel:Cache] ℹ️ No previous cache to clean');
+      }
+
       // 5. Actualizar el perfil local
       if (_profile != null) {
         _profile = UserProfile(
@@ -110,9 +125,20 @@ class ProfileViewModel extends ChangeNotifier {
           photoUrl: downloadUrl, // URL actualizada
           createdAt: _profile!.createdAt,
         );
+        debugPrint('[ProfileViewModel:Cache] 📸 Profile updated with new photoUrl');
+      }
+
+      // Precargar la nueva imagen en cache para mostrarla inmediatamente
+      try {
+        debugPrint('[ProfileViewModel:Cache] 📥 Pre-caching new image: $downloadUrl');
+        final cachedFile = await DefaultCacheManager().getSingleFile(downloadUrl);
+        debugPrint('[ProfileViewModel:Cache] ✅ Pre-cached successfully (${cachedFile.lengthSync()} bytes)');
+      } catch (e) {
+        debugPrint('[ProfileViewModel:Cache] ⚠️ Pre-cache failed (non-critical): $e');
       }
 
       _errorMessage = null;
+      debugPrint('[ProfileViewModel] ✅ Profile picture change completed successfully');
     } catch (e) {
       _errorMessage = 'Error changing profile picture: ${e.toString()}';
       debugPrint(_errorMessage);
@@ -133,4 +159,3 @@ class ProfileViewModel extends ChangeNotifier {
     notifyListeners();
   }
 }
-
