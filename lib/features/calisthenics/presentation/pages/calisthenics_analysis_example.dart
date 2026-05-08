@@ -1,6 +1,7 @@
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../services/calisthenics_ai_service.dart';
 import '../../models/calisthenics_result_model.dart';
@@ -76,6 +77,24 @@ class _CalisthenicsAnalysisExampleScreenState
     } catch (e) {
       _showError('Failed to capture image: $e');
       setState(() => _isAnalyzing = false);
+    }
+  }
+
+  Future<void> _pickFromGallery() async {
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+      
+      if (image != null) {
+        setState(() => _isAnalyzing = true);
+        final bytes = await image.readAsBytes();
+        await _analyzeWithRetry(bytes);
+      }
+    } catch (e) {
+      _showError('Failed to pick image: $e');
+      if (mounted) {
+        setState(() => _isAnalyzing = false);
+      }
     }
   }
 
@@ -212,6 +231,11 @@ class _CalisthenicsAnalysisExampleScreenState
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
+                  ElevatedButton.icon(
+                    onPressed: _isAnalyzing ? null : _pickFromGallery,
+                    icon: const Icon(Icons.photo_library),
+                    label: const Text('Gallery'),
+                  ),
                   ElevatedButton.icon(
                     onPressed: _loadLastAnalysis,
                     icon: const Icon(Icons.history),

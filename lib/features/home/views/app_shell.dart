@@ -601,20 +601,20 @@ class _CalisthenicsAssistantCard extends StatelessWidget {
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
             gradient: const LinearGradient(
-              colors: [Color(0xFFFF512F), Color(0xFFF09819)],
+              colors: [Color(0xFFE67E22), Color(0xFFF39C12)], // Softer, less saturated orange
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
             borderRadius: BorderRadius.circular(24),
             boxShadow: const [
               BoxShadow(
-                color: Color(0x77FF512F),
-                blurRadius: 24,
-                spreadRadius: 2,
-                offset: Offset(0, 12),
+                color: Color(0x44E67E22),
+                blurRadius: 16,
+                spreadRadius: 1,
+                offset: Offset(0, 8),
               ),
             ],
-            border: Border.all(color: const Color(0x88FFFFFF), width: 1.5),
+            border: Border.all(color: const Color(0x66FFFFFF), width: 1.0),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
