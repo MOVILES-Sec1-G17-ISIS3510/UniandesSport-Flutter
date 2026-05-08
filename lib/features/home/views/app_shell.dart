@@ -667,7 +667,6 @@ class _CalisthenicsAssistantCard extends StatelessWidget {
                 children: const [
                   _PillChip(label: 'Instant feedback'),
                   _PillChip(label: 'Camera analysis'),
-                  _PillChip(label: 'English results'),
                 ],
               ),
               const SizedBox(height: 18),
