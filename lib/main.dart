@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'features/calisthenics/services/calisthenics_ai_service.dart';
 import 'features/profile/services/timeslot_hive_service.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import 'app.dart';
 import 'core/network/sync_engine_service.dart';
@@ -22,7 +24,9 @@ void main() async {
 
   // Inicializamos el SyncEngine para que empiece a escuchar cambios de conectividad
   // y pueda procesar la cola de sincronización.
+  await dotenv.load(fileName: ".env");
   SyncEngineService().initialize();
-
+  final service = CalisthenicsAIService();
+  await service.initialize();
   runApp(const UniandesSportsApp());
 }
