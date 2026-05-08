@@ -132,9 +132,11 @@ class DatabaseHelper {
         String? where,
         List<Object?>? whereArgs,
         String? orderBy,
+        int? limit,
+        int? offset,
       }) async {
     final db = await database;
-    return await db.query(table, where: where, whereArgs: whereArgs, orderBy: orderBy);
+    return await db.query(table, where: where, whereArgs: whereArgs, orderBy: orderBy, limit: limit, offset: offset);
   }
 
   /// Ejecuta una transacción y reexpone la API de sqflite para operaciones atómicas.
