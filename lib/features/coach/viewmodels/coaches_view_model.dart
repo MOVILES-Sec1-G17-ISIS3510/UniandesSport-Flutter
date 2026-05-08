@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:uniandessport_flutter/core/network/analytics_service.dart';
 import 'package:uniandessport_flutter/features/coach/services/coach_cache_service.dart';
@@ -59,8 +60,11 @@ class CoachesViewModel extends ChangeNotifier {
       _isOffline = newIsOffline;
       notifyListeners();
 
-      // Si acaba de recuperar conexión, sincronizar reviews pendientes
+      // Si acaba de recuperar conexión, sincronizar reviews pendientes.
+      // Marcamos el instante de reconexión ANTES de sincronizar para que
+      // el servicio pueda calcular el delta por review (BQ #2).
       if (wasOffline && !_isOffline) {
+        await PendingReviewsService.instance.notifyReconnect();
         await _syncPendingReviews();
       }
     });
@@ -86,22 +90,40 @@ class CoachesViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Estrategia de caching #5 del libro: CACHE THEN NETWORK
+  /// (stale-while-revalidate).
+  ///
+  /// Fase 1: si hay cache local válido (TTL no expirado), se muestra al
+  /// instante para que la UI responda en 0ms aunque la red tarde.
+  /// Fase 2: en paralelo se pide la versión fresca a Firestore. Cuando
+  /// llega, sobrescribe la lista visible y se persiste al cache para la
+  /// próxima apertura.
   Future<void> loadCoaches() async {
-    _isLoading = true;
     _error = null;
+
+    // ── Fase 1 — STALE: pinta cache si lo hay ──────────────────────────
+    await _restoreCachedStateIfAvailable();
+    final hadCachedData = _allCoaches.isNotEmpty;
+
+    // Si había cache, oculta spinner; si no, mantiene el spinner de
+    // primera carga para no dejar la pantalla vacía.
+    _isLoading = !hadCachedData;
     notifyListeners();
 
+    // ── Fase 2 — REVALIDATE: refresca contra Firestore ─────────────────
     try {
       _allCoaches = await _repository.getCoaches();
       _applyFilters();
       try {
         await loadCoachOfTheMonth();
       } catch (_) {
-        // If ranking queries fail, keep the coach list and fall back later.
+        // Si las queries de ranking fallan, conservamos el coach destacado
+        // que vino del cache (si lo había) y seguimos.
       }
       await _cacheCurrentState();
     } catch (e) {
-      await _restoreCachedStateIfAvailable();
+      // Si la red falla pero ya estábamos pintando cache, seguimos así.
+      // Solo reportamos error si no había NADA para mostrar.
       if (_allCoaches.isEmpty) {
         _error = e.toString();
       }
@@ -127,7 +149,10 @@ class CoachesViewModel extends ChangeNotifier {
 
     final validCoaches = _allCoaches.where((c) => c.id != null).toList();
 
-    // Ejecutar todas las queries en paralelo en vez de secuencialmente
+    // ── Step 1 (main) — queries Firestore en paralelo ───────────────────
+    // I/O bound: `await` libera el main thread durante la espera de red,
+    // así que NO necesita isolate. Future.wait dispara N requests
+    // concurrentemente.
     final futures = validCoaches.map((coach) {
       return FirebaseFirestore.instance
           .collection('profesores')
@@ -146,9 +171,12 @@ class CoachesViewModel extends ChangeNotifier {
 
     final snapshots = await Future.wait(futures);
 
-    double bestScore = -1;
-    Coach? best;
-
+    // ── Step 2 (main) — extraer datos serializables ─────────────────────
+    // Los QuerySnapshot/DocumentSnapshot de Firestore tienen referencias
+    // internas al cliente que NO son enviables a otro isolate. Por eso
+    // colapsamos los datos relevantes en un List<Map> plano antes del
+    // compute().
+    final coachData = <Map<String, dynamic>>[];
     for (int i = 0; i < validCoaches.length; i++) {
       final coach = validCoaches[i];
       final reviews = snapshots[i].docs;
@@ -164,21 +192,29 @@ class CoachesViewModel extends ChangeNotifier {
         avgRating = totalRating / reviews.length;
       }
 
-      final overallRating = (coach.rating ?? 0).toDouble();
-      final verified = (coach.verified == true) ? 3.0 : 0.0;
-      final score =
-          (avgRating * 2) +
-          (reviewCount * 0.5) +
-          (overallRating * 1) +
-          verified;
-
-      if (score > bestScore) {
-        bestScore = score;
-        best = coach;
-      }
+      coachData.add({
+        'coachId': coach.id!,
+        'reviewCount': reviewCount,
+        'avgRating': avgRating,
+        'overallRating': (coach.rating ?? 0).toDouble(),
+        'verified': coach.verified == true,
+      });
     }
 
-    _coachOfTheMonth = best;
+    // ── Step 3 (isolate) — scoring en thread paralelo ───────────────────
+    // CPU bound: el algoritmo escala O(N) con coaches y O(M) con reviews
+    // por coach, así que crece como N*M. Para catálogos grandes bloquearía
+    // el main thread y causaría GUI lags. compute() lo mueve a un isolate
+    // dedicado, dejando el main libre para pintar UI.
+    final bestId = await compute(_scoreCoachesIsolate, coachData);
+
+    // ── Step 4 (main) — mapear el id ganador a su Coach ─────────────────
+    if (bestId != null) {
+      _coachOfTheMonth = validCoaches.firstWhere(
+        (c) => c.id == bestId,
+        orElse: () => validCoaches.first,
+      );
+    }
   }
 
   /// Stores the latest successful coach snapshot for offline fallback.
@@ -255,10 +291,14 @@ class CoachesViewModel extends ChangeNotifier {
           .toList();
     }
 
-    // Filtro por rating mínimo
-    filtered = filtered
-        .where((coach) => (coach.rating ?? 0) >= _minRating)
-        .toList();
+    // Filtro por rating mínimo. Los coaches sin reviews (totalReviews == 0)
+    // NO se filtran por rating: rating 0 significa "sin calificar todavía",
+    // no "mala calificación". Solo se aplica el umbral cuando ya hay reviews.
+    filtered = filtered.where((coach) {
+      final reviews = coach.totalReviews ?? 0;
+      if (reviews == 0) return true;
+      return (coach.rating ?? 0) >= _minRating;
+    }).toList();
 
     // Filtro por precio máximo
     filtered = filtered.where((coach) {
@@ -282,4 +322,44 @@ class CoachesViewModel extends ChangeNotifier {
     _connectivitySubscription?.cancel();
     super.dispose();
   }
+}
+
+/// Scoring algorithm para Coach of the Month, ejecutado en un isolate
+/// separado vía `compute()`.
+///
+/// Top-level a propósito: `compute()` exige funciones top-level o
+/// estáticas porque las funciones miembro de una clase capturan `this`
+/// y los objetos con referencias no pueden serializarse para enviarse
+/// entre isolates.
+///
+/// Fórmula de scoring (idéntica a la versión single-thread previa):
+///   score = avgRating * 2
+///         + reviewCount * 0.5
+///         + overallRating * 1
+///         + (verified ? 3 : 0)
+///
+/// Devuelve el `coachId` del coach con mayor score, o `null` si la
+/// lista llega vacía.
+String? _scoreCoachesIsolate(List<Map<String, dynamic>> coachData) {
+  double bestScore = -1;
+  String? bestId;
+
+  for (final entry in coachData) {
+    final reviewCount = (entry['reviewCount'] as num).toDouble();
+    final avgRating = (entry['avgRating'] as num).toDouble();
+    final overallRating = (entry['overallRating'] as num).toDouble();
+    final verified = (entry['verified'] as bool) ? 3.0 : 0.0;
+
+    final score = (avgRating * 2) +
+        (reviewCount * 0.5) +
+        (overallRating * 1) +
+        verified;
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestId = entry['coachId'] as String;
+    }
+  }
+
+  return bestId;
 }

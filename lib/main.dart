@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'features/coach/services/favorite_coaches_service.dart';
 import 'features/profile/services/timeslot_hive_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 
@@ -15,6 +16,7 @@ void main() async {
 
   await Hive.initFlutter();
   await TimeslotHiveService().init();
+  await FavoriteCoachesService.instance.init();
 
 
   // Inicializar Firebase antes de usar Firestore en SyncEngineService

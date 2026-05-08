@@ -9,6 +9,7 @@ import '../services/auth_repository.dart';
 import '../models/user_profile.dart';
 import '../models/user_role.dart';
 import '../viewmodels/auth_view_model.dart';
+import 'auth_gate.dart';
 import '../../home/views/available_time_slots_page.dart';
 
 class ProfilePage extends StatefulWidget {

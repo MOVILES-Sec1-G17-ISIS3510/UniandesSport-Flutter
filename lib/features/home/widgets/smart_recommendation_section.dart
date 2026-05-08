@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../../auth/models/user_profile.dart';
-import '../services/smart_recommendation_service.dart';
+import '../services/gemini_smart_recommendation_service.dart';
 import '../models/smart_recommendation.dart';
 import '../../play/views/create_casual_event_page.dart';
 import '../../play/views/event_details_page.dart';
@@ -22,8 +22,8 @@ class SmartRecommendationSection extends StatefulWidget {
 }
 
 class _SmartRecommendationSectionState extends State<SmartRecommendationSection> {
-  final SmartRecommendationService _service =
-      SmartRecommendationService();
+  final GeminiSmartRecommendationService _service =
+      GeminiSmartRecommendationService();
 
   bool _isGenerating = false;
   String? _generationError;
