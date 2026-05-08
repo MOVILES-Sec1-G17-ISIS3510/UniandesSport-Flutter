@@ -124,18 +124,7 @@ class HomePage extends StatelessWidget {
             ),
             const SizedBox(height: 32),
 
-            // Quick Activity section
-            Text(
-              'QUICK ACTIVITY',
-              style: Theme.of(
-                context,
-              ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Analyze your form in real time. (Limit: 1 per day)',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
+            // Calisthenics Assistant Card
             const SizedBox(height: 16),
 
             _CalisthenicsAssistantCard(
@@ -177,19 +166,20 @@ class _CalisthenicsAssistantCard extends StatelessWidget {
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
             gradient: const LinearGradient(
-              colors: [Color(0xFFFF8C00), Color(0xFFFF5722)],
+              colors: [Color(0xFFFF512F), Color(0xFFF09819)], // Striking Orange-Red to Yellow
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
             borderRadius: BorderRadius.circular(24),
             boxShadow: const [
               BoxShadow(
-                color: Color(0x55FF5722),
-                blurRadius: 22,
+                color: Color(0x77FF512F),
+                blurRadius: 24,
+                spreadRadius: 2,
                 offset: Offset(0, 12),
               ),
             ],
-            border: Border.all(color: const Color(0x66FFFFFF)),
+            border: Border.all(color: const Color(0x88FFFFFF), width: 1.5),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
