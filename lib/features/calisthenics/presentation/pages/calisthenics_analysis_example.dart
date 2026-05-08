@@ -12,6 +12,7 @@ import '../../models/calisthenics_result_model.dart';
 ///
 /// Este archivo es un EJEMPLO de cómo usar CalisthenicsAIService.
 /// Puedes adaptarlo según tu arquitectura de app (MVVM, BLoC, etc).
+class CalisthenicsAnalysisExampleScreen extends StatefulWidget {
   final bool startWithGallery;
   final bool viewOnlyMode;
   
