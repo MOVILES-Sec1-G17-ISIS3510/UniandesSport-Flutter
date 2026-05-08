@@ -8,6 +8,8 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
+import '../../../core/local_storage/preferences_service.dart';
+
 import '../models/calisthenics_result_model.dart';
 
 // Debug logging
@@ -131,6 +133,19 @@ All fields are required. Arrays must have at least 2 elements.''';
     _log('Starting exercise analysis');
 
     try {
+      // Check daily limit
+      final prefs = PreferencesService();
+      final lastDate = await prefs.getLastCalisthenicsAnalysisDate();
+      if (lastDate != null) {
+        final now = DateTime.now();
+        if (lastDate.year == now.year && lastDate.month == now.month && lastDate.day == now.day) {
+          throw const CalisthenicsAIServiceException(
+            'Daily limit reached. You can only perform one analysis per day.',
+            isNetworkError: false,
+          );
+        }
+      }
+
       // 1. Guardar imagen en local files
       final imagePath = await _saveImageLocally(imageBytes);
       _log('Image saved to: $imagePath');
@@ -157,9 +172,10 @@ All fields are required. Arrays must have at least 2 elements.''';
       final result = _parseGeminiResponse(rawText);
       _log('Successfully parsed response');
 
-      // 5. Guardar en Hive
+      // 5. Guardar en Hive y actualizar preferencias
       await _saveToHive(result);
-      _log('Result saved to Hive');
+      await prefs.saveLastCalisthenicsAnalysisDate(DateTime.now());
+      _log('Result saved to Hive and daily limit updated');
 
       return result;
     } on CalisthenicsAIServiceException {
@@ -206,6 +222,21 @@ All fields are required. Arrays must have at least 2 elements.''';
     }
   }
 
+  /// Obtiene el archivo de imagen del último análisis
+  Future<File?> getLastImageFile() async {
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      final file = File('${appDir.path}/latest_calisthenics_image.jpg');
+      if (await file.exists()) {
+        return file;
+      }
+      return null;
+    } catch (e) {
+      _log('Error getting last image file: $e');
+      return null;
+    }
+  }
+
   /// Limpia todos los análisis guardados en Hive.
   Future<void> clearAllAnalyses() async {
     try {
@@ -221,9 +252,8 @@ All fields are required. Arrays must have at least 2 elements.''';
   /// Guarda una imagen capturada en el directorio temporal de la app.
   Future<String> _saveImageLocally(List<int> imageBytes) async {
     try {
-      final appDir = await getTemporaryDirectory();
-      final fileName =
-          'exercise_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final appDir = await getApplicationDocumentsDirectory();
+      final fileName = 'latest_calisthenics_image.jpg';
       final file = File('${appDir.path}/$fileName');
 
       await file.writeAsBytes(imageBytes);
@@ -310,7 +340,7 @@ All fields are required. Arrays must have at least 2 elements.''';
   Future<void> _saveToHive(CalisthenicsResultModel result) async {
     try {
       final box = Hive.box<CalisthenicsResultModel>(_boxName);
-      final key = DateTime.now().millisecondsSinceEpoch.toString();
+      const key = 'latest';
       await box.put(key, result);
       _log('Result stored in Hive with key: $key');
     } catch (e) {
