@@ -1,4 +1,6 @@
 
+import 'dart:io';
+
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -10,12 +12,13 @@ import '../../models/calisthenics_result_model.dart';
 ///
 /// Este archivo es un EJEMPLO de cómo usar CalisthenicsAIService.
 /// Puedes adaptarlo según tu arquitectura de app (MVVM, BLoC, etc).
-class CalisthenicsAnalysisExampleScreen extends StatefulWidget {
   final bool startWithGallery;
+  final bool viewOnlyMode;
   
   const CalisthenicsAnalysisExampleScreen({
     super.key, 
     this.startWithGallery = false,
+    this.viewOnlyMode = false,
   });
 
   @override
@@ -38,14 +41,19 @@ class _CalisthenicsAnalysisExampleScreenState
   @override
   void initState() {
     super.initState();
-    _initializeService();
-    _initializeCamera();
-    
-    if (widget.startWithGallery) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _pickFromGallery();
-      });
-    }
+    _initializeService().then((_) {
+      if (widget.viewOnlyMode) {
+        _loadLastAnalysis();
+      } else {
+        _initializeCamera();
+        
+        if (widget.startWithGallery) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _pickFromGallery();
+          });
+        }
+      }
+    });
   }
 
   Future<void> _initializeService() async {
@@ -153,6 +161,10 @@ class _CalisthenicsAnalysisExampleScreenState
   }
 
   void _clearResult() {
+    if (widget.viewOnlyMode) {
+      Navigator.of(context).pop();
+      return;
+    }
     setState(() {
       _analysisResult = null;
       _errorMessage = null;
@@ -269,13 +281,35 @@ class _CalisthenicsAnalysisExampleScreenState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Local Image
+          FutureBuilder<File?>(
+            future: _service.getLastImageFile(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.done && snapshot.data != null) {
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 16),
+                  width: double.infinity,
+                  height: 200,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    image: DecorationImage(
+                      image: FileImage(snapshot.data!),
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                );
+              }
+              return const SizedBox.shrink();
+            },
+          ),
+
           // Exercise name and score
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.blue.shade50,
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.blue.shade200),
+              border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -284,6 +318,7 @@ class _CalisthenicsAnalysisExampleScreenState
                   result.detectedExercise,
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                         fontWeight: FontWeight.bold,
+                        color: Theme.of(context).colorScheme.onSurface,
                       ),
                 ),
                 const SizedBox(height: 8),
@@ -342,7 +377,9 @@ class _CalisthenicsAnalysisExampleScreenState
             _buildListSection(
               title: '⚠️ Risk Areas',
               items: result.riskAreas,
-              backgroundColor: Colors.red.shade50,
+              backgroundColor: Theme.of(context).colorScheme.errorContainer,
+              borderColor: Theme.of(context).colorScheme.onErrorContainer.withValues(alpha: 0.2),
+              textColor: Theme.of(context).colorScheme.onErrorContainer,
             ),
           const SizedBox(height: 16),
 
@@ -351,7 +388,9 @@ class _CalisthenicsAnalysisExampleScreenState
             _buildListSection(
               title: '💡 Tips',
               items: result.tips,
-              backgroundColor: Colors.green.shade50,
+              backgroundColor: Colors.green.withValues(alpha: 0.1),
+              borderColor: Colors.green.withValues(alpha: 0.2),
+              textColor: Theme.of(context).colorScheme.onSurface,
             ),
           const SizedBox(height: 16),
 
@@ -360,7 +399,9 @@ class _CalisthenicsAnalysisExampleScreenState
             _buildListSection(
               title: '📋 Recommendations',
               items: result.recommendations,
-              backgroundColor: Colors.orange.shade50,
+              backgroundColor: Colors.orange.withValues(alpha: 0.1),
+              borderColor: Colors.orange.withValues(alpha: 0.2),
+              textColor: Theme.of(context).colorScheme.onSurface,
             ),
           const SizedBox(height: 16),
 
@@ -369,7 +410,9 @@ class _CalisthenicsAnalysisExampleScreenState
             _buildListSection(
               title: '🔄 Similar Exercises',
               items: result.similarExercises,
-              backgroundColor: Colors.purple.shade50,
+              backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+              borderColor: Theme.of(context).colorScheme.outlineVariant,
+              textColor: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           const SizedBox(height: 32),
 
@@ -438,19 +481,22 @@ class _CalisthenicsAnalysisExampleScreenState
           title,
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.bold,
+                color: Theme.of(context).colorScheme.onSurface,
               ),
         ),
         const SizedBox(height: 8),
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: Colors.grey.shade50,
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.grey.shade200),
+            border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
           ),
           child: Text(
             content,
-            style: Theme.of(context).textTheme.bodyMedium,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
         ),
       ],
@@ -461,6 +507,8 @@ class _CalisthenicsAnalysisExampleScreenState
     required String title,
     required List<String> items,
     required Color backgroundColor,
+    required Color borderColor,
+    required Color textColor,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -469,6 +517,7 @@ class _CalisthenicsAnalysisExampleScreenState
           title,
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.bold,
+                color: Theme.of(context).colorScheme.onSurface,
               ),
         ),
         const SizedBox(height: 8),
@@ -477,7 +526,7 @@ class _CalisthenicsAnalysisExampleScreenState
           decoration: BoxDecoration(
             color: backgroundColor,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.grey.shade300),
+            border: Border.all(color: borderColor),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -487,7 +536,9 @@ class _CalisthenicsAnalysisExampleScreenState
                     padding: const EdgeInsets.only(bottom: 8),
                     child: Text(
                       '• $item',
-                      style: Theme.of(context).textTheme.bodyMedium,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: textColor,
+                      ),
                     ),
                   ),
                 )
