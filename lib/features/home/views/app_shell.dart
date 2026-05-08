@@ -15,7 +15,7 @@ import '../../play/viewmodels/play_view_model.dart';
 import '../../play/widgets/play_nav_item.dart';
 import '../widgets/recommended_events_section.dart';
 import '../widgets/smart_recommendation_section.dart';
-import '../../calisthenics/presentation/pages/calisthenics_analysis_example.dart';
+import '../../calisthenics/presentation/pages/calisthenics_landing.dart';
 
 class AppShell extends StatefulWidget {
   final UserProfile profile;
@@ -385,49 +385,14 @@ class _HomePageWrapper extends StatelessWidget {
                 const SizedBox(height: 16),
                 RecommendedEventsSection(userId: profile.uid),
                 const SizedBox(height: 32),
-                Text(
-                  'QUICK ACTIVITY',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold),
-                ),
-                Text(
-                  'Based on your profile and schedule',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                const SizedBox(height: 16),
-                _ActivityCard(
-                  icon: '🏃',
-                  title: '30-min Interval Run',
-                  location: 'Campus Track • 400m away',
-                  duration: '30 min',
-                  match: 'Matches your running goal',
-                  matchColor: Colors.green,
-                ),
-                const SizedBox(height: 12),
-                _ActivityCard(
-                  icon: '🏋️',
-                  title: 'Calisthenics Challenge',
-                  location: 'Trending in your community',
-                  duration: '20 min',
-                  match: '12 participants today',
-                  matchColor: Colors.orange,
+                _CalisthenicsAssistantCard(
                   onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (context) => const CalisthenicsAnalysisExampleScreen(),
+                        builder: (context) => const CalisthenicsLandingScreen(),
                       ),
                     );
                   },
-                ),
-                const SizedBox(height: 12),
-                _ActivityCard(
-                  icon: '⚽',
-                  title: '5v5 Soccer – 1 spot left!',
-                  location: 'La Caneca • Starts in 10 min',
-                  duration: '45 min',
-                  match: 'Join now',
-                  matchColor: const Color(0xFF0C8E8B),
                 ),
                 const SizedBox(height: 32),
               ],
@@ -614,6 +579,164 @@ class _ActivityCard extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CalisthenicsAssistantCard extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _CalisthenicsAssistantCard({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(24),
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFFFF512F), Color(0xFFF09819)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x77FF512F),
+                blurRadius: 24,
+                spreadRadius: 2,
+                offset: Offset(0, 12),
+              ),
+            ],
+            border: Border.all(color: const Color(0x88FFFFFF), width: 1.5),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.16),
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: const Icon(
+                      Icons.fitness_center,
+                      color: Colors.white,
+                      size: 30,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Calisthenics AI Coach',
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Analyze your posture with AI! (Only 1 per day)',
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: Colors.white.withValues(alpha: 0.92),
+                            height: 1.35,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: const [
+                  _PillChip(label: 'Instant feedback'),
+                  _PillChip(label: 'Camera analysis'),
+                  _PillChip(label: 'English results'),
+                ],
+              ),
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 14,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.18),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.auto_awesome,
+                            color: Colors.white,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Open assistant',
+                            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Icon(Icons.chevron_right, color: Colors.white, size: 30),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PillChip extends StatelessWidget {
+  final String label;
+
+  const _PillChip({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+          color: Colors.white,
+          fontWeight: FontWeight.w600,
         ),
       ),
     );
