@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'calisthenics_analysis_example.dart';
 import '../../services/calisthenics_ai_service.dart';
-import '../../../core/local_storage/preferences_service.dart';
+import '../../../../core/local_storage/preferences_service.dart';
 
 class CalisthenicsLandingScreen extends StatefulWidget {
   const CalisthenicsLandingScreen({super.key});
