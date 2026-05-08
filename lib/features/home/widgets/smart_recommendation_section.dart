@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../../auth/models/user_profile.dart';
-import '../services/smart_recommendation_service.dart';
+import '../services/gemini_smart_recommendation_service.dart';
 import '../models/smart_recommendation.dart';
 import '../../play/views/create_casual_event_page.dart';
 import '../../play/views/event_details_page.dart';
@@ -11,19 +11,17 @@ import 'smart_recommendation_card.dart';
 class SmartRecommendationSection extends StatefulWidget {
   final UserProfile profile;
 
-  const SmartRecommendationSection({
-    super.key,
-    required this.profile,
-  });
+  const SmartRecommendationSection({super.key, required this.profile});
 
   @override
   State<SmartRecommendationSection> createState() =>
       _SmartRecommendationSectionState();
 }
 
-class _SmartRecommendationSectionState extends State<SmartRecommendationSection> {
-  final SmartRecommendationService _service =
-      SmartRecommendationService();
+class _SmartRecommendationSectionState
+    extends State<SmartRecommendationSection> {
+  final GeminiSmartRecommendationService _service =
+      GeminiSmartRecommendationService();
 
   bool _isGenerating = false;
   String? _generationError;
@@ -71,8 +69,9 @@ class _SmartRecommendationSectionState extends State<SmartRecommendationSection>
     });
 
     try {
-      final recommendation =
-          await _service.generateAndStoreForUser(widget.profile.uid);
+      final recommendation = await _service.generateAndStoreForUser(
+        widget.profile.uid,
+      );
 
       if (!mounted) return;
       if (recommendation == null) {
@@ -142,9 +141,7 @@ class _SmartRecommendationSectionState extends State<SmartRecommendationSection>
       }
 
       Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => EventDetailsPage(eventId: eventId),
-        ),
+        MaterialPageRoute(builder: (_) => EventDetailsPage(eventId: eventId)),
       );
       return;
     }
@@ -152,7 +149,9 @@ class _SmartRecommendationSectionState extends State<SmartRecommendationSection>
     final draft = recommendation.eventDraft;
     if (draft == null || draft.deporte.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('This recommendation has no draft event.')),
+        const SnackBar(
+          content: Text('This recommendation has no draft event.'),
+        ),
       );
       return;
     }
@@ -261,9 +260,9 @@ class _SmartRecommendationEmptyState extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               generationError!,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: colorScheme.error,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: colorScheme.error),
             ),
           ],
           const SizedBox(height: 10),
@@ -290,9 +289,7 @@ class _SmartRecommendationEmptyState extends StatelessWidget {
 Map<String, dynamic>? _asStringDynamicMap(Object? value) {
   if (value is Map<String, dynamic>) return value;
   if (value is Map) {
-    return value.map(
-      (key, val) => MapEntry(key.toString(), val),
-    );
+    return value.map((key, val) => MapEntry(key.toString(), val));
   }
   return null;
 }
