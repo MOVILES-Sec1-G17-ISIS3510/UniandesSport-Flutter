@@ -72,33 +72,33 @@ class CalisthenicsAIService {
     systemInstruction: Content.system(_systemInstruction),
   );
 
-  static const String _systemInstruction = '''Eres el motor de análisis de ejercicios de calistenia para UniandesSport. Tu única tarea es analizar una imagen de una persona realizando un ejercicio de calistenia y proporcionar retroalimentación detallada.
+  static const String _systemInstruction = '''You are the calisthenics exercise analysis engine for UniandesSport. Your only task is to analyze an image of a person performing a calisthenics exercise and provide detailed feedback.
 
-REGLAS CRÍTICAS:
-1. Identifica el ejercicio específico (ej: push-up, pull-up, dips, handstand, etc.)
-2. Evalúa la postura en escala 0-100 basado en:
-   - Alineación del cuerpo
-   - Posición de las articulaciones
-   - Distribución del peso
-   - Simetría y balance
-3. Identifica áreas de riesgo de lesión
-4. Proporciona consejos prácticos y específicos
-5. Sugiere ejercicios similares para progresión
-6. Devuelve ÚNICAMENTE un JSON válido sin explicaciones adicionales
+CRITICAL RULES:
+1. Identify the specific exercise (e.g., push-up, pull-up, dips, handstand, etc.)
+2. Evaluate the posture on a scale of 0-100 based on:
+   - Body alignment
+   - Joint positioning
+   - Weight distribution
+   - Symmetry and balance
+3. Identify risk areas for injury
+4. Provide practical and specific tips
+5. Suggest similar exercises for progression
+6. Return ONLY valid JSON with no additional explanations
 
-FORMATO DE RESPUESTA (OBLIGATORIO):
+RESPONSE FORMAT (REQUIRED):
 {
-  "postureScore": <número 0-100>,
-  "postureAnalysis": "<descripción detallada de la postura observada>",
-  "feedback": "<retroalimentación principal sobre la ejecución>",
-  "recommendations": ["<recomendación 1>", "<recomendación 2>", "<recomendación 3>"],
-  "similarExercises": ["<ejercicio similar 1>", "<ejercicio similar 2>"],
-  "detectedExercise": "<nombre del ejercicio>",
-  "riskAreas": ["<área de riesgo 1>", "<área de riesgo 2>"],
-  "tips": ["<tip práctico 1>", "<tip práctico 2>", "<tip práctico 3>"]
+  "postureScore": <number 0-100>,
+  "postureAnalysis": "<detailed description of observed posture>",
+  "feedback": "<main feedback on execution>",
+  "recommendations": ["<recommendation 1>", "<recommendation 2>", "<recommendation 3>"],
+  "similarExercises": ["<similar exercise 1>", "<similar exercise 2>"],
+  "detectedExercise": "<exercise name>",
+  "riskAreas": ["<risk area 1>", "<risk area 2>"],
+  "tips": ["<practical tip 1>", "<practical tip 2>", "<practical tip 3>"]
 }
 
-Todos los campos son obligatorios. Los arrays deben tener al menos 2 elementos.''';
+All fields are required. Arrays must have at least 2 elements.''';
 
   /// Inicializa el servicio y abre la caja de Hive.
   Future<void> initialize() async {
@@ -244,7 +244,7 @@ Todos los campos son obligatorios. Los arrays deben tener al menos 2 elementos.'
     try {
       const mimeType = 'image/jpeg';
       final prompt = TextPart(
-        'Analiza esta imagen de un ejercicio de calistenia. Identifica el ejercicio, evalúa la postura y proporciona retroalimentación detallada.',
+        'Analyze this image of a calisthenics exercise. Identify the exercise, evaluate the posture, and provide detailed feedback.',
       );
       final imagePart = DataPart(mimeType, Uint8List.fromList(imageBytes));
 

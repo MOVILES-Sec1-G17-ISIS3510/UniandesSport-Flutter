@@ -133,7 +133,7 @@ class HomePage extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              'Tap the calisthenics assistant to analyze your form in real time',
+              'Analyze your form in real time. (Limit: 1 per day)',
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 16),
@@ -177,14 +177,14 @@ class _CalisthenicsAssistantCard extends StatelessWidget {
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
             gradient: const LinearGradient(
-              colors: [Color(0xFF0C8E8B), Color(0xFF083C3A)],
+              colors: [Color(0xFFFF8C00), Color(0xFFFF5722)],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
             borderRadius: BorderRadius.circular(24),
             boxShadow: const [
               BoxShadow(
-                color: Color(0x330C8E8B),
+                color: Color(0x55FF5722),
                 blurRadius: 22,
                 offset: Offset(0, 12),
               ),
@@ -224,7 +224,7 @@ class _CalisthenicsAssistantCard extends StatelessWidget {
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          'Open the assistant for real-time form analysis, feedback, and progression tips.',
+                          'Analyze your posture with AI! (Only 1 per day)',
                           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                             color: Colors.white.withValues(alpha: 0.92),
                             height: 1.35,
