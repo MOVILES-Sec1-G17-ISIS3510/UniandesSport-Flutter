@@ -11,7 +11,12 @@ import '../../models/calisthenics_result_model.dart';
 /// Este archivo es un EJEMPLO de cómo usar CalisthenicsAIService.
 /// Puedes adaptarlo según tu arquitectura de app (MVVM, BLoC, etc).
 class CalisthenicsAnalysisExampleScreen extends StatefulWidget {
-  const CalisthenicsAnalysisExampleScreen({super.key});
+  final bool startWithGallery;
+  
+  const CalisthenicsAnalysisExampleScreen({
+    super.key, 
+    this.startWithGallery = false,
+  });
 
   @override
   State<CalisthenicsAnalysisExampleScreen> createState() =>
@@ -35,6 +40,12 @@ class _CalisthenicsAnalysisExampleScreenState
     super.initState();
     _initializeService();
     _initializeCamera();
+    
+    if (widget.startWithGallery) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _pickFromGallery();
+      });
+    }
   }
 
   Future<void> _initializeService() async {
