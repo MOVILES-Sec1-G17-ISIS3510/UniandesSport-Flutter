@@ -59,12 +59,10 @@ class EventRepository {
 
   /// Obtiene eventos paginados filtrando los pasados y ordenando ascendentemente.
   Future<List<EventModel>> getEventsPaginated({required int page, required int limit}) async {
-    // Si la DB está vacía o es la primera vez, aseguramos que haya caché L2.
+    // Si es la primera página, siempre refrescamos la caché desde Firestore
+    // para asegurar que tenemos los eventos más recientes del backend.
     if (page == 1) {
-      final total = await _dbHelper.query('events', limit: 1);
-      if (total.isEmpty) {
-        await _cacheEventsFromFirestore(pageSize: 100);
-      }
+      await _cacheEventsFromFirestore(pageSize: 100);
     }
 
     final nowIso = DateTime.now().toIso8601String();
