@@ -57,6 +57,7 @@ class ThemeController extends ChangeNotifier with WidgetsBindingObserver {
   /// Starts battery polling and camera sampling, then applies theme rules.
   ///
   /// Safe to call multiple times; monitoring starts only once per dependency.
+  /// NOTE: Camera sensor temporarily disabled for performance testing of Retos module.
   Future<void> startMonitoring() async {
     if (_isDisposed) {
       return;
@@ -71,9 +72,10 @@ class ThemeController extends ChangeNotifier with WidgetsBindingObserver {
       _monitoringStarted = true;
     }
 
-    if (_cameraController == null) {
-      await _startCameraMonitoring();
-    }
+    // Camera sensor monitoring disabled temporarily - uncomment when needed
+    // if (_cameraController == null) {
+    //   await _startCameraMonitoring();
+    // }
 
     _applyThemePreference();
   }
@@ -91,6 +93,8 @@ class ThemeController extends ChangeNotifier with WidgetsBindingObserver {
   /// Initializes front camera and starts image streaming for light estimation.
   ///
   /// Includes defensive checks for unsupported targets and concurrent starts.
+  /// NOTA: Desactivado temporalmente para testing de rendimiento del módulo Retos.
+  /// Descomentar startCameraMonitoring() en startMonitoring() cuando sea necesario.
   Future<void> _startCameraMonitoring() async {
     if (_isDisposed ||
         kIsWeb ||
@@ -99,7 +103,13 @@ class ThemeController extends ChangeNotifier with WidgetsBindingObserver {
       return;
     }
 
-    _isCameraInitializing = true;
+    debugPrint(
+      'ThemeController: Camera monitoring disabled for performance testing.',
+    );
+    return; // DISABLED FOR PERFORMANCE TESTING
+
+    // Original implementation below - uncomment when camera sensor is needed
+    // _isCameraInitializing = true;
 
     final isMobileTarget =
         defaultTargetPlatform == TargetPlatform.android ||

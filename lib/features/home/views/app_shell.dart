@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../../auth/services/auth_repository.dart';
 import '../../auth/models/user_profile.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../challenges/views/retos_page.dart';
 import '../../play/views/play_page.dart';
 import 'social_page.dart';
@@ -210,7 +211,10 @@ class _AppShellState extends State<AppShell> {
           },
         );
       case 1:
-        return RetosPage(profile: _profile);
+        return RetosPage(
+          profile: _profile,
+          challengeDocs: <QueryDocumentSnapshot<Map<String, dynamic>>>[],
+        );
       case 2:
         return PlayPage(
           profile: _profile,
