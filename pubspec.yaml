@@ -63,11 +63,13 @@ dependencies:
   pedometer: ^4.0.2
   sqflite: ^2.2.8
   path: ^1.8.4
+  path_provider: ^2.1.2
   hive: ^2.2.3
   hive_flutter: ^1.1.0
   cached_network_image: ^3.3.1
   flutter_image_compress: ^2.4.0
   flutter_cache_manager: ^3.4.1
+  flutter_dotenv: ^6.0.1
 
 dev_dependencies:
   flutter_test:
@@ -123,3 +125,5 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+  assets:
+    - .env

@@ -446,6 +446,12 @@
       "languageVersion": "3.0"
     },
     {
+      "name": "flutter_dotenv",
+      "rootUri": "file:///C:/Users/USUARIO/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_dotenv-6.0.1",
+      "packageUri": "lib/",
+      "languageVersion": "2.12"
+    },
+    {
       "name": "flutter_image_compress",
       "rootUri": "file:///C:/Users/USUARIO/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_image_compress-2.4.0",
       "packageUri": "lib/",
