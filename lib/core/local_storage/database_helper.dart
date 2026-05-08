@@ -14,7 +14,7 @@ class DatabaseHelper {
   DatabaseHelper._internal();
 
   static const String _dbName = 'uniandes_sport.db';
-  static const int _dbVersion = 2;
+  static const int _dbVersion = 6;
 
   Database? _database;
 
@@ -74,9 +74,35 @@ class DatabaseHelper {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         event_id TEXT,
         action TEXT,
+        payload TEXT,
         status TEXT,
         retry_count INTEGER,
         timestamp INTEGER
+      )
+    ''');
+
+    // Tabla `challenge_snapshots` para guardar capturas locales del módulo Retos.
+    // Se usa para demostrar almacenamiento relacional con consultas y reemplazo por ID.
+    await db.execute('''
+      CREATE TABLE challenge_snapshots(
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        sport TEXT NOT NULL,
+        progress REAL NOT NULL,
+        notes TEXT,
+        tracking_mode TEXT,
+        step_goal INTEGER,
+        rating_average REAL,
+        participants_count INTEGER,
+        goal_label TEXT,
+        description TEXT,
+        difficulty TEXT,
+        reward TEXT,
+        created_by TEXT,
+        end_date TEXT,
+        status TEXT,
+        updated_at TEXT NOT NULL,
+        is_synced INTEGER NOT NULL
       )
     ''');
   }
@@ -103,33 +129,138 @@ class DatabaseHelper {
         )
       ''');
     }
+
+    if (oldVersion < 3) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS challenge_snapshots(
+          id TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          sport TEXT NOT NULL,
+          progress REAL NOT NULL,
+          notes TEXT,
+          updated_at TEXT NOT NULL,
+          is_synced INTEGER NOT NULL
+        )
+      ''');
+    }
+
+    if (oldVersion < 4) {
+      await _addColumnIfMissing(
+        db,
+        'challenge_snapshots',
+        'tracking_mode',
+        'TEXT',
+      );
+      await _addColumnIfMissing(
+        db,
+        'challenge_snapshots',
+        'rating_average',
+        'REAL',
+      );
+      await _addColumnIfMissing(
+        db,
+        'challenge_snapshots',
+        'participants_count',
+        'INTEGER',
+      );
+      await _addColumnIfMissing(
+        db,
+        'challenge_snapshots',
+        'goal_label',
+        'TEXT',
+      );
+      await _addColumnIfMissing(
+        db,
+        'challenge_snapshots',
+        'description',
+        'TEXT',
+      );
+      await _addColumnIfMissing(db, 'challenge_snapshots', 'end_date', 'TEXT');
+      await _addColumnIfMissing(db, 'challenge_snapshots', 'status', 'TEXT');
+    }
+
+    if (oldVersion < 5) {
+      await _addColumnIfMissing(
+        db,
+        'challenge_snapshots',
+        'step_goal',
+        'INTEGER',
+      );
+      await _addColumnIfMissing(
+        db,
+        'challenge_snapshots',
+        'difficulty',
+        'TEXT',
+      );
+      await _addColumnIfMissing(db, 'challenge_snapshots', 'reward', 'TEXT');
+      await _addColumnIfMissing(
+        db,
+        'challenge_snapshots',
+        'created_by',
+        'TEXT',
+      );
+    }
+
+    if (oldVersion < 6) {
+      await _addColumnIfMissing(db, 'sync_queue', 'payload', 'TEXT');
+    }
+  }
+
+  Future<void> _addColumnIfMissing(
+    Database db,
+    String table,
+    String column,
+    String columnType,
+  ) async {
+    try {
+      await db.execute('ALTER TABLE $table ADD COLUMN $column $columnType');
+    } catch (_) {
+      // Si la columna ya existe, SQLite lanza error y continuamos sin romper la app.
+    }
   }
 
   /// Métodos utilitarios para uso por repositorios y servicios.
-  Future<int> insert(String table, Map<String, Object?> values, {ConflictAlgorithm? conflictAlgorithm}) async {
+  Future<int> insert(
+    String table,
+    Map<String, Object?> values, {
+    ConflictAlgorithm? conflictAlgorithm,
+  }) async {
     final db = await database;
     return await db.insert(table, values, conflictAlgorithm: conflictAlgorithm);
   }
 
-  Future<int> update(String table, Map<String, Object?> values, String where,
-      List<Object?> whereArgs) async {
+  Future<int> update(
+    String table,
+    Map<String, Object?> values,
+    String where,
+    List<Object?> whereArgs,
+  ) async {
     final db = await database;
     return await db.update(table, values, where: where, whereArgs: whereArgs);
   }
 
-  Future<int> delete(String table, String where, List<Object?> whereArgs) async {
+  Future<int> delete(
+    String table,
+    String where,
+    List<Object?> whereArgs,
+  ) async {
     final db = await database;
     return await db.delete(table, where: where, whereArgs: whereArgs);
   }
 
   Future<List<Map<String, Object?>>> query(
-      String table, {
-        String? where,
-        List<Object?>? whereArgs,
-        String? orderBy,
-      }) async {
+    String table, {
+    String? where,
+    List<Object?>? whereArgs,
+    String? orderBy,
+  }) async {
     final db = await database;
-    return await db.query(table, where: where, whereArgs: whereArgs, orderBy: orderBy);
+    return await db.query(
+      table,
+      where: where,
+      whereArgs: whereArgs,
+      orderBy: orderBy,
+    );
   }
 
   /// Ejecuta una transacción y reexpone la API de sqflite para operaciones atómicas.
@@ -139,7 +270,11 @@ class DatabaseHelper {
   }
 
   /// Inserta múltiples filas usando Batch y opcionalmente reemplaza en conflicto.
-  Future<void> batchInsert(String table, List<Map<String, Object?>> rows, {bool replaceOnConflict = true}) async {
+  Future<void> batchInsert(
+    String table,
+    List<Map<String, Object?>> rows, {
+    bool replaceOnConflict = true,
+  }) async {
     final db = await database;
     final batch = db.batch();
 
