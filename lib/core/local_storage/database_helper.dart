@@ -14,7 +14,7 @@ class DatabaseHelper {
   DatabaseHelper._internal();
 
   static const String _dbName = 'uniandes_sport.db';
-  static const int _dbVersion = 2;
+  static const int _dbVersion = 3;
 
   Database? _database;
 
@@ -74,6 +74,7 @@ class DatabaseHelper {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         event_id TEXT,
         action TEXT,
+        payload TEXT,
         status TEXT,
         retry_count INTEGER,
         timestamp INTEGER
@@ -103,6 +104,10 @@ class DatabaseHelper {
         )
       ''');
     }
+
+    if (oldVersion < 3) {
+      await db.execute('ALTER TABLE sync_queue ADD COLUMN payload TEXT');
+    }
   }
 
   /// Métodos utilitarios para uso por repositorios y servicios.
@@ -127,9 +132,11 @@ class DatabaseHelper {
         String? where,
         List<Object?>? whereArgs,
         String? orderBy,
+        int? limit,
+        int? offset,
       }) async {
     final db = await database;
-    return await db.query(table, where: where, whereArgs: whereArgs, orderBy: orderBy);
+    return await db.query(table, where: where, whereArgs: whereArgs, orderBy: orderBy, limit: limit, offset: offset);
   }
 
   /// Ejecuta una transacción y reexpone la API de sqflite para operaciones atómicas.
