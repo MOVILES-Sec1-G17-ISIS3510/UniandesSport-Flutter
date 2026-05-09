@@ -1,6 +1,13 @@
 import 'package:flutter/material.dart';
+<<<<<<< HEAD
 import 'package:uniandessport_flutter/core/network/analytics_service.dart';
 import 'package:uniandessport_flutter/features/coach/models/coach_model.dart';
+=======
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:uniandessport_flutter/core/network/analytics_service.dart';
+import 'package:uniandessport_flutter/features/coach/models/coach_model.dart';
+import 'package:uniandessport_flutter/features/coach/services/favorite_coaches_service.dart';
+>>>>>>> aac6a6346603852f5f806105d16c150fd5feea31
 import 'package:uniandessport_flutter/features/coach/widgets/coach_dialog.dart';
 import 'package:uniandessport_flutter/features/coach/views/coach_map_page.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -177,6 +184,40 @@ class CoachCard extends StatelessWidget {
                 icon: const Icon(Icons.map_outlined),
               ),
               const SizedBox(width: 8),
+<<<<<<< HEAD
+=======
+              // Favorito (Hive box reactivo): ValueListenableBuilder se
+              // resuscribe al box `favorite_coaches` y el icono cambia
+              // automáticamente cuando se hace toggle, sin setState.
+              ValueListenableBuilder<Box<bool>>(
+                valueListenable:
+                    FavoriteCoachesService.instance.listenable(),
+                builder: (context, box, _) {
+                  final coachId = coach.id;
+                  final isFav =
+                      coachId != null && box.containsKey(coachId);
+                  return IconButton(
+                    style: IconButton.styleFrom(
+                      backgroundColor: colorScheme.surfaceContainerHighest,
+                      foregroundColor: isFav
+                          ? Colors.red
+                          : colorScheme.onSurfaceVariant,
+                    ),
+                    icon: Icon(
+                      isFav ? Icons.favorite : Icons.favorite_border,
+                    ),
+                    tooltip: isFav
+                        ? 'Remove from favorites'
+                        : 'Add to favorites',
+                    onPressed: coachId == null
+                        ? null
+                        : () => FavoriteCoachesService.instance
+                            .toggle(coachId),
+                  );
+                },
+              ),
+              const SizedBox(width: 8),
+>>>>>>> aac6a6346603852f5f806105d16c150fd5feea31
               Container(
                 decoration: BoxDecoration(
                   color: colorScheme.tertiaryContainer,

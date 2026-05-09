@@ -14,7 +14,7 @@ class DatabaseHelper {
   DatabaseHelper._internal();
 
   static const String _dbName = 'uniandes_sport.db';
-  static const int _dbVersion = 3;
+  static const int _dbVersion = 6;
 
   Database? _database;
 
@@ -81,29 +81,23 @@ class DatabaseHelper {
       )
     ''');
 
-    // Tabla `challenge_snapshots` para guardar capturas locales del módulo Retos.
-    // Se usa para demostrar almacenamiento relacional con consultas y reemplazo por ID.
+    // Tabla `coaches_cache` para almacenamiento offline-first y caché con TTL
+    // de la lista de coaches y del coach destacado del mes.
     await db.execute('''
-      CREATE TABLE challenge_snapshots(
+      CREATE TABLE coaches_cache(
         id TEXT PRIMARY KEY,
-        title TEXT NOT NULL,
-        sport TEXT NOT NULL,
-        progress REAL NOT NULL,
-        notes TEXT,
-        tracking_mode TEXT,
-        step_goal INTEGER,
-        rating_average REAL,
-        participants_count INTEGER,
-        goal_label TEXT,
-        description TEXT,
-        difficulty TEXT,
-        reward TEXT,
-        created_by TEXT,
-        end_date TEXT,
-        status TEXT,
-        updated_at TEXT NOT NULL,
-        is_synced INTEGER NOT NULL
+        data TEXT NOT NULL,
+        is_coach_of_month INTEGER NOT NULL DEFAULT 0,
+        cached_at INTEGER NOT NULL
       )
+    ''');
+
+    // Índice en is_coach_of_month: la query del coach destacado filtra
+    // por esta columna (`WHERE is_coach_of_month = 1`). Sin índice SQLite
+    // hace full table scan; con índice usa un B-tree para hit directo.
+    await db.execute('''
+      CREATE INDEX idx_coaches_cache_coach_of_month
+        ON coaches_cache(is_coach_of_month)
     ''');
   }
 
@@ -129,9 +123,92 @@ class DatabaseHelper {
         )
       ''');
     }
-
     if (oldVersion < 3) {
-      await db.execute('ALTER TABLE sync_queue ADD COLUMN payload TEXT');
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS challenge_snapshots(
+          id TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          sport TEXT NOT NULL,
+          progress REAL NOT NULL,
+          notes TEXT,
+          updated_at TEXT NOT NULL,
+          is_synced INTEGER NOT NULL
+        )
+      ''');
+    }
+
+    if (oldVersion < 4) {
+      await _addColumnIfMissing(
+        db,
+        'challenge_snapshots',
+        'tracking_mode',
+        'TEXT',
+      );
+      await _addColumnIfMissing(
+        db,
+        'challenge_snapshots',
+        'rating_average',
+        'REAL',
+      );
+      await _addColumnIfMissing(
+        db,
+        'challenge_snapshots',
+        'participants_count',
+        'INTEGER',
+      );
+      await _addColumnIfMissing(
+        db,
+        'challenge_snapshots',
+        'goal_label',
+        'TEXT',
+      );
+      await _addColumnIfMissing(
+        db,
+        'challenge_snapshots',
+        'description',
+        'TEXT',
+      );
+      await _addColumnIfMissing(db, 'challenge_snapshots', 'end_date', 'TEXT');
+      await _addColumnIfMissing(db, 'challenge_snapshots', 'status', 'TEXT');
+    }
+
+    if (oldVersion < 5) {
+      await _addColumnIfMissing(
+        db,
+        'challenge_snapshots',
+        'step_goal',
+        'INTEGER',
+      );
+      await _addColumnIfMissing(
+        db,
+        'challenge_snapshots',
+        'difficulty',
+        'TEXT',
+      );
+      await _addColumnIfMissing(db, 'challenge_snapshots', 'reward', 'TEXT');
+      await _addColumnIfMissing(
+        db,
+        'challenge_snapshots',
+        'created_by',
+        'TEXT',
+      );
+    }
+
+    if (oldVersion < 6) {
+      await _addColumnIfMissing(db, 'sync_queue', 'payload', 'TEXT');
+    }
+  }
+
+  Future<void> _addColumnIfMissing(
+    Database db,
+    String table,
+    String column,
+    String columnType,
+  ) async {
+    try {
+      await db.execute('ALTER TABLE $table ADD COLUMN $column $columnType');
+    } catch (_) {
+      // Si la columna ya existe, SQLite lanza error; ignoramos y continuamos.
     }
   }
 
@@ -165,15 +242,22 @@ class DatabaseHelper {
   }
 
   Future<List<Map<String, Object?>>> query(
-      String table, {
-        String? where,
-        List<Object?>? whereArgs,
-        String? orderBy,
-        int? limit,
-        int? offset,
-      }) async {
+    String table, {
+    String? where,
+    List<Object?>? whereArgs,
+    String? orderBy,
+    int? limit,
+    int? offset,
+  }) async {
     final db = await database;
-    return await db.query(table, where: where, whereArgs: whereArgs, orderBy: orderBy, limit: limit, offset: offset);
+    return await db.query(
+      table,
+      where: where,
+      whereArgs: whereArgs,
+      orderBy: orderBy,
+      limit: limit,
+      offset: offset,
+    );
   }
 
   /// Ejecuta una transacción y reexpone la API de sqflite para operaciones atómicas.

@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'features/calisthenics/services/calisthenics_ai_service.dart';
-import 'features/calisthenics/models/calisthenics_result_model.dart';
+import 'features/coach/services/favorite_coaches_service.dart';
 import 'features/profile/services/timeslot_hive_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import 'app.dart';
 import 'core/network/sync_engine_service.dart';
+import 'features/calisthenics/models/calisthenics_result_model.dart';
+import 'features/calisthenics/services/calisthenics_ai_service.dart';
 
 /// Entry point de la app.
 ///
@@ -19,7 +20,7 @@ void main() async {
   await Hive.initFlutter();
   Hive.registerAdapter(CalisthenicsResultModelAdapter());
   await TimeslotHiveService().init();
-
+  await FavoriteCoachesService.instance.init();
 
   // Inicializar Firebase antes de usar Firestore en SyncEngineService
   await Firebase.initializeApp();
