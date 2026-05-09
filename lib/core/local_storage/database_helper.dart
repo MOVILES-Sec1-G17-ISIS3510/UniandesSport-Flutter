@@ -14,7 +14,7 @@ class DatabaseHelper {
   DatabaseHelper._internal();
 
   static const String _dbName = 'uniandes_sport.db';
-  static const int _dbVersion = 6;
+  static const int _dbVersion = 7;
 
   Database? _database;
 
@@ -93,6 +93,7 @@ class DatabaseHelper {
         tracking_mode TEXT,
         step_goal INTEGER,
         rating_average REAL,
+        rating_count INTEGER,
         participants_count INTEGER,
         goal_label TEXT,
         description TEXT,
@@ -101,6 +102,21 @@ class DatabaseHelper {
         created_by TEXT,
         end_date TEXT,
         status TEXT,
+        updated_at TEXT NOT NULL,
+        is_synced INTEGER NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE challenge_reviews(
+        id TEXT PRIMARY KEY,
+        challenge_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        user_name TEXT NOT NULL,
+        rating INTEGER NOT NULL,
+        comment TEXT NOT NULL,
+        image_path TEXT,
+        image_url TEXT,
         updated_at TEXT NOT NULL,
         is_synced INTEGER NOT NULL
       )
@@ -203,6 +219,29 @@ class DatabaseHelper {
 
     if (oldVersion < 6) {
       await _addColumnIfMissing(db, 'sync_queue', 'payload', 'TEXT');
+    }
+
+    if (oldVersion < 7) {
+      await _addColumnIfMissing(
+        db,
+        'challenge_snapshots',
+        'rating_count',
+        'INTEGER',
+      );
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS challenge_reviews(
+          id TEXT PRIMARY KEY,
+          challenge_id TEXT NOT NULL,
+          user_id TEXT NOT NULL,
+          user_name TEXT NOT NULL,
+          rating INTEGER NOT NULL,
+          comment TEXT NOT NULL,
+          image_path TEXT,
+          image_url TEXT,
+          updated_at TEXT NOT NULL,
+          is_synced INTEGER NOT NULL
+        )
+      ''');
     }
   }
 

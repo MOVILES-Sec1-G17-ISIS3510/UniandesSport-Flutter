@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
 import 'package:path/path.dart' as path;
 import 'package:sqflite/sqflite.dart';
@@ -38,6 +37,7 @@ class RetosLocalStorageService {
     String? trackingMode,
     int? stepGoal,
     double? ratingAverage,
+    int? ratingCount,
     int? participantsCount,
     String? goalLabel,
     String? description,
@@ -57,6 +57,7 @@ class RetosLocalStorageService {
       'tracking_mode': trackingMode,
       'step_goal': stepGoal,
       'rating_average': ratingAverage,
+      'rating_count': ratingCount,
       'participants_count': participantsCount,
       'goal_label': goalLabel,
       'description': description,
@@ -152,6 +153,7 @@ class RetosLocalStorageService {
         trackingMode: (data['trackingMode'] as String?)?.trim(),
         stepGoal: (data['stepGoal'] as num?)?.toInt(),
         ratingAverage: (data['ratingAverage'] as num?)?.toDouble(),
+        ratingCount: (data['ratingCount'] as num?)?.toInt(),
         participantsCount:
             (data['participantsCount'] as num?)?.toInt() ??
             (data['participants'] is List
@@ -175,6 +177,68 @@ class RetosLocalStorageService {
       'challenge_snapshots',
       orderBy: 'updated_at DESC',
     );
+  }
+
+  Future<void> saveChallengeReviewSnapshot({
+    required String challengeId,
+    required String userId,
+    required String userName,
+    required int rating,
+    required String comment,
+    String? imagePath,
+    String? imageUrl,
+    DateTime? updatedAt,
+    bool isSynced = false,
+  }) async {
+    await _databaseHelper.insert('challenge_reviews', {
+      'id': '${challengeId}_$userId',
+      'challenge_id': challengeId,
+      'user_id': userId,
+      'user_name': userName,
+      'rating': rating,
+      'comment': comment,
+      'image_path': imagePath,
+      'image_url': imageUrl,
+      'updated_at': (updatedAt ?? DateTime.now()).toIso8601String(),
+      'is_synced': isSynced ? 1 : 0,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<List<Map<String, Object?>>> loadChallengeReviewsFromSqlite(
+    String challengeId,
+  ) {
+    return _databaseHelper.query(
+      'challenge_reviews',
+      where: 'challenge_id = ?',
+      whereArgs: [challengeId],
+      orderBy: 'updated_at DESC',
+    );
+  }
+
+  Future<void> cacheChallengeReviewsFromFirestore({
+    required String challengeId,
+    required List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+  }) async {
+    for (final doc in docs) {
+      final data = doc.data();
+      final userId = (data['userId'] as String?)?.trim().isNotEmpty == true
+          ? data['userId'] as String
+          : doc.id;
+      final updatedAt = (data['updatedAt'] as Timestamp?)?.toDate();
+
+      await saveChallengeReviewSnapshot(
+        challengeId: challengeId,
+        userId: userId,
+        userName: (data['userName'] as String?)?.trim().isNotEmpty == true
+            ? data['userName'] as String
+            : 'Anonymous',
+        rating: ((data['rating'] as num?)?.toInt() ?? 0).clamp(0, 5),
+        comment: (data['comment'] as String?)?.trim() ?? '',
+        imageUrl: (data['imageUrl'] as String?)?.trim(),
+        updatedAt: updatedAt,
+        isSynced: true,
+      );
+    }
   }
 
   double _extractProgress(Map<String, dynamic> data) {

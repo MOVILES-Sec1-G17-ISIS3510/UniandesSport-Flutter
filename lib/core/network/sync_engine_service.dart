@@ -514,6 +514,16 @@ class SyncEngineService {
       });
     });
 
+    await _dbHelper.update(
+      'challenge_reviews',
+      {
+        'is_synced': 1,
+        if (uploadedImageUrl != null) 'image_url': uploadedImageUrl,
+      },
+      'challenge_id = ? AND user_id = ?',
+      [challengeId, userId],
+    );
+
     return true;
   }
 
