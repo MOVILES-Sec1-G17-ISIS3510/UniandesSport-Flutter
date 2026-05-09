@@ -432,6 +432,35 @@ class EventsRepository {
     }
   }
 
+  /// Cancelar un evento como dueño (borra el evento completo de forma local-first).
+  Future<void> cancelEvent({
+    required String eventId,
+    required String userId,
+  }) async {
+    try {
+      await _dbHelper.transaction((txn) async {
+        // Borrado local inmediato: el evento desaparece de la UI sin esperar red.
+        await txn.delete('play_events', where: 'id = ?', whereArgs: [eventId]);
+        await txn.delete('events', where: 'id = ?', whereArgs: [eventId]);
+
+        // Encolamos el borrado remoto para sincronización eventual.
+        await txn.insert('sync_queue', {
+          'event_id': eventId,
+          'action': 'CANCEL_EVENT',
+          'payload': jsonEncode({'eventId': eventId, 'userId': userId}),
+          'status': 'pending',
+          'timestamp': DateTime.now().millisecondsSinceEpoch,
+          'retry_count': 0,
+        });
+      });
+
+      Future.microtask(() => _syncEngine.processQueue());
+    } catch (e) {
+      debugPrint('[cancelEvent] Fallo al guardar cancelación local: $e');
+      throw Exception('Error canceling event: $e');
+    }
+  }
+
   /// Abandonar un evento (remover usuario de participantes) de forma Offline-First
   Future<void> leaveEvent({
     required String eventId,
@@ -439,39 +468,25 @@ class EventsRepository {
   }) async {
     try {
       await _dbHelper.transaction((txn) async {
-        // 1. Actualizar caché local si existe
-        final rows = await txn.query('play_events', where: 'id = ?', whereArgs: [eventId]);
-        if (rows.isNotEmpty) {
-          final event = rows.first;
-          final participantsJson = event['participants_json'] as String?;
-          if (participantsJson != null) {
-            final List<dynamic> participantsList = jsonDecode(participantsJson);
-            participantsList.remove(userId);
-            
-            await txn.update(
-              'play_events',
-              {'participants_json': jsonEncode(participantsList), 'is_synced': 0},
-              where: 'id = ?',
-              whereArgs: [eventId],
-            );
-          }
-        }
+        // 1. Borramos el evento de la caché local para reflejar la UI optimista.
+        await txn.delete('play_events', where: 'id = ?', whereArgs: [eventId]);
+        await txn.delete('events', where: 'id = ?', whereArgs: [eventId]);
 
-        // 2. Encolar la acción en sync_queue
+        // 2. Encolamos la acción para sincronización eventual.
         await txn.insert('sync_queue', {
           'event_id': eventId,
-          'action': 'leave_play_event',
-          'payload': null,
+          'action': 'LEAVE_EVENT',
+          'payload': jsonEncode({'eventId': eventId}),
           'status': 'pending',
           'timestamp': DateTime.now().millisecondsSinceEpoch,
           'retry_count': 0,
         });
       });
 
-      // 3. Procesar cola
-      await _syncEngine.processQueue();
+      // 3. Disparamos el sync en segundo plano sin bloquear la UI.
+      Future.microtask(() => _syncEngine.processQueue());
     } catch (e) {
-      debugPrint('[leaveEvent] Fallo al encolar o procesar salida: $e');
+      debugPrint('[leaveEvent] Fallo al guardar salida local: $e');
       throw Exception('Error leaving event: $e');
     }
   }
