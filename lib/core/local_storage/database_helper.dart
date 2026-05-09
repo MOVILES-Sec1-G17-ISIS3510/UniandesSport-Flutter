@@ -81,11 +81,12 @@ class DatabaseHelper {
       )
     ''');
 
-    // Tabla `challenge_snapshots` para guardar capturas locales del módulo Retos.
-    // Se usa para demostrar almacenamiento relacional con consultas y reemplazo por ID.
+    // Tabla `coaches_cache` para almacenamiento offline-first y caché con TTL
+    // de la lista de coaches y del coach destacado del mes.
     await db.execute('''
-      CREATE TABLE challenge_snapshots(
+      CREATE TABLE coaches_cache(
         id TEXT PRIMARY KEY,
+<<<<<<< HEAD
         title TEXT NOT NULL,
         sport TEXT NOT NULL,
         progress REAL NOT NULL,
@@ -120,6 +121,20 @@ class DatabaseHelper {
         updated_at TEXT NOT NULL,
         is_synced INTEGER NOT NULL
       )
+=======
+        data TEXT NOT NULL,
+        is_coach_of_month INTEGER NOT NULL DEFAULT 0,
+        cached_at INTEGER NOT NULL
+      )
+    ''');
+
+    // Índice en is_coach_of_month: la query del coach destacado filtra
+    // por esta columna (`WHERE is_coach_of_month = 1`). Sin índice SQLite
+    // hace full table scan; con índice usa un B-tree para hit directo.
+    await db.execute('''
+      CREATE INDEX idx_coaches_cache_coach_of_month
+        ON coaches_cache(is_coach_of_month)
+>>>>>>> 1d8ff5875b3fd8a861d63beca74efefb3aa0ad52
     ''');
   }
 
@@ -145,7 +160,6 @@ class DatabaseHelper {
         )
       ''');
     }
-
     if (oldVersion < 3) {
       await db.execute('''
         CREATE TABLE IF NOT EXISTS challenge_snapshots(
@@ -255,6 +269,21 @@ class DatabaseHelper {
       await db.execute('ALTER TABLE $table ADD COLUMN $column $columnType');
     } catch (_) {
       // Si la columna ya existe, SQLite lanza error y continuamos sin romper la app.
+        CREATE TABLE IF NOT EXISTS coaches_cache(
+          id TEXT PRIMARY KEY,
+          data TEXT NOT NULL,
+          is_coach_of_month INTEGER NOT NULL DEFAULT 0,
+          cached_at INTEGER NOT NULL
+        )
+      ''');
+    }
+    if (oldVersion < 4) {
+      // Índice retroactivo para installs que ya tenían coaches_cache
+      // en v3 sin índice.
+      await db.execute('''
+        CREATE INDEX IF NOT EXISTS idx_coaches_cache_coach_of_month
+          ON coaches_cache(is_coach_of_month)
+      ''');
     }
   }
 
