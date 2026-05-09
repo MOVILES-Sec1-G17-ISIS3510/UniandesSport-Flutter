@@ -1,4 +1,4 @@
-package com.uniandes.sport
+package com.uniandes.uniandessport_flutter
 
 import io.flutter.embedding.android.FlutterActivity
 

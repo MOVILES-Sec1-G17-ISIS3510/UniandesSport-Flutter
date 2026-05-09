@@ -15,7 +15,7 @@ plugins {
 
 
 android {
-    namespace = "com.uniandes.sport"
+    namespace = "com.uniandes.uniandessport_flutter"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -38,7 +38,7 @@ android {
 
 
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.uniandes.sport"
+        applicationId = "com.uniandes.uniandessport_flutter"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

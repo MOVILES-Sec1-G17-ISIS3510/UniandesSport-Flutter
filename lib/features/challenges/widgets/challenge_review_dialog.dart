@@ -316,7 +316,7 @@ class _ChallengeReviewDialogState extends State<ChallengeReviewDialog> {
       final isOnline =
           connectivity.isNotEmpty &&
           !connectivity.contains(ConnectivityResult.none);
-      Future.microtask(() => _syncEngine.processQueue());
+      Future.microtask(() => _syncEngine.processQueue(forceRetry: true));
 
       if (!mounted) return;
       navigator.pop(true);
