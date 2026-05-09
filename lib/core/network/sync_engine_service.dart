@@ -53,8 +53,7 @@ class SyncEngineService {
   Future<void> _trySyncPendingQueue() async {
     try {
       final connectivity = await Connectivity().checkConnectivity();
-      _isConnected = _hasConnectionDynamic(connectivity);
-      if (!_isConnected) return;
+      if (!_hasConnection(connectivity)) return;
       await processQueue();
     } catch (_) {
       // Si falla la verificación de conectividad, no rompemos el ciclo.
