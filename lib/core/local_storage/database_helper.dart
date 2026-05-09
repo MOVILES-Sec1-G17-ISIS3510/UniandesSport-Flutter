@@ -14,7 +14,7 @@ class DatabaseHelper {
   DatabaseHelper._internal();
 
   static const String _dbName = 'uniandes_sport.db';
-  static const int _dbVersion = 3;
+  static const int _dbVersion = 4;
 
   Database? _database;
 
@@ -81,29 +81,23 @@ class DatabaseHelper {
       )
     ''');
 
-    // Tabla `challenge_snapshots` para guardar capturas locales del módulo Retos.
-    // Se usa para demostrar almacenamiento relacional con consultas y reemplazo por ID.
+    // Tabla `coaches_cache` para almacenamiento offline-first y caché con TTL
+    // de la lista de coaches y del coach destacado del mes.
     await db.execute('''
-      CREATE TABLE challenge_snapshots(
+      CREATE TABLE coaches_cache(
         id TEXT PRIMARY KEY,
-        title TEXT NOT NULL,
-        sport TEXT NOT NULL,
-        progress REAL NOT NULL,
-        notes TEXT,
-        tracking_mode TEXT,
-        step_goal INTEGER,
-        rating_average REAL,
-        participants_count INTEGER,
-        goal_label TEXT,
-        description TEXT,
-        difficulty TEXT,
-        reward TEXT,
-        created_by TEXT,
-        end_date TEXT,
-        status TEXT,
-        updated_at TEXT NOT NULL,
-        is_synced INTEGER NOT NULL
+        data TEXT NOT NULL,
+        is_coach_of_month INTEGER NOT NULL DEFAULT 0,
+        cached_at INTEGER NOT NULL
       )
+    ''');
+
+    // Índice en is_coach_of_month: la query del coach destacado filtra
+    // por esta columna (`WHERE is_coach_of_month = 1`). Sin índice SQLite
+    // hace full table scan; con índice usa un B-tree para hit directo.
+    await db.execute('''
+      CREATE INDEX idx_coaches_cache_coach_of_month
+        ON coaches_cache(is_coach_of_month)
     ''');
   }
 
@@ -129,9 +123,23 @@ class DatabaseHelper {
         )
       ''');
     }
-
     if (oldVersion < 3) {
-      await db.execute('ALTER TABLE sync_queue ADD COLUMN payload TEXT');
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS coaches_cache(
+          id TEXT PRIMARY KEY,
+          data TEXT NOT NULL,
+          is_coach_of_month INTEGER NOT NULL DEFAULT 0,
+          cached_at INTEGER NOT NULL
+        )
+      ''');
+    }
+    if (oldVersion < 4) {
+      // Índice retroactivo para installs que ya tenían coaches_cache
+      // en v3 sin índice.
+      await db.execute('''
+        CREATE INDEX IF NOT EXISTS idx_coaches_cache_coach_of_month
+          ON coaches_cache(is_coach_of_month)
+      ''');
     }
   }
 
