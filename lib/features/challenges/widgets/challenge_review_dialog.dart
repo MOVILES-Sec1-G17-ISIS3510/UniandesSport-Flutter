@@ -1,8 +1,9 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -10,6 +11,8 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
 import '../../../core/constants/app_field_limits.dart';
+import '../../../core/local_storage/database_helper.dart';
+import '../../../core/network/sync_engine_service.dart';
 
 class ChallengeReviewDialog extends StatefulWidget {
   const ChallengeReviewDialog({
@@ -26,6 +29,8 @@ class ChallengeReviewDialog extends StatefulWidget {
 }
 
 class _ChallengeReviewDialogState extends State<ChallengeReviewDialog> {
+  final DatabaseHelper _dbHelper = DatabaseHelper();
+  final SyncEngineService _syncEngine = SyncEngineService();
   final TextEditingController _commentController = TextEditingController();
   final ImagePicker _picker = ImagePicker();
   final SpeechToText _speech = SpeechToText();
@@ -236,17 +241,6 @@ class _ChallengeReviewDialogState extends State<ChallengeReviewDialog> {
     }
   }
 
-  Future<String?> _uploadReviewImage() async {
-    if (_selectedImage == null) return null;
-
-    final fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
-    final ref = FirebaseStorage.instance.ref().child(
-      'challenge_reviews/${widget.challengeId}/$fileName',
-    );
-    await ref.putFile(_selectedImage!);
-    return ref.getDownloadURL();
-  }
-
   Future<String> _resolveUserName(String uid) async {
     final userDoc = await FirebaseFirestore.instance
         .collection('users')
@@ -297,82 +291,48 @@ class _ChallengeReviewDialogState extends State<ChallengeReviewDialog> {
     final messenger = ScaffoldMessenger.of(context);
 
     try {
-      final challengeRef = FirebaseFirestore.instance
-          .collection('challenges')
-          .doc(widget.challengeId);
-      final reviewRef = challengeRef.collection('reviews').doc(user.uid);
-
-      final existingReviewSnapshot = await reviewRef.get();
-      final existingData =
-          existingReviewSnapshot.data() ?? const <String, dynamic>{};
-      final previousRating = (existingData['rating'] as num?)?.toDouble();
-      final existingImageUrl = (existingData['imageUrl'] as String?)?.trim();
-
-      final uploadedImageUrl = await _uploadReviewImage();
-      final imageUrl =
-          uploadedImageUrl ??
-          ((existingImageUrl != null && existingImageUrl.isNotEmpty)
-              ? existingImageUrl
-              : null);
-
       final userName = await _resolveUserName(user.uid);
+      final payload = <String, dynamic>{
+        'challengeId': widget.challengeId,
+        'challengeTitle': widget.challengeTitle,
+        'userId': user.uid,
+        'userName': userName,
+        'rating': _rating,
+        'comment': comment,
+        if (_selectedImage != null) 'imagePath': _selectedImage!.path,
+        'queuedAt': DateTime.now().toIso8601String(),
+      };
 
-      await FirebaseFirestore.instance.runTransaction((transaction) async {
-        final challengeSnapshot = await transaction.get(challengeRef);
-        if (!challengeSnapshot.exists) {
-          throw StateError('Challenge not found');
-        }
-
-        final challengeData =
-            challengeSnapshot.data() ?? const <String, dynamic>{};
-
-        final currentCount =
-            (challengeData['ratingCount'] as num?)?.toInt() ?? 0;
-        final currentAverage =
-            (challengeData['ratingAverage'] as num?)?.toDouble() ?? 0.0;
-
-        double totalScore = currentAverage * currentCount;
-        int nextCount = currentCount;
-
-        if (previousRating != null && currentCount > 0) {
-          totalScore -= previousRating;
-        } else {
-          nextCount += 1;
-        }
-
-        totalScore += _rating;
-        final nextAverage = nextCount > 0 ? (totalScore / nextCount) : 0.0;
-
-        final reviewPayload = <String, dynamic>{
-          'challengeId': widget.challengeId,
-          'challengeTitle': widget.challengeTitle,
-          'userId': user.uid,
-          'userName': userName,
-          'rating': _rating,
-          'comment': comment,
-          'updatedAt': FieldValue.serverTimestamp(),
-          if (previousRating == null) 'createdAt': FieldValue.serverTimestamp(),
-          if (imageUrl != null) 'imageUrl': imageUrl,
-        };
-
-        transaction.set(reviewRef, reviewPayload, SetOptions(merge: true));
-        transaction.update(challengeRef, {
-          'ratingAverage': double.parse(nextAverage.toStringAsFixed(2)),
-          'ratingCount': nextCount,
-          'reviewsCount': nextCount,
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
+      await _dbHelper.insert('sync_queue', {
+        'event_id': widget.challengeId,
+        'action': 'upsert_challenge_review',
+        'payload': jsonEncode(payload),
+        'status': 'pending',
+        'retry_count': 0,
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
       });
+
+      final connectivity = await Connectivity().checkConnectivity();
+      final isOnline =
+          connectivity.isNotEmpty &&
+          !connectivity.contains(ConnectivityResult.none);
+      Future.microtask(() => _syncEngine.processQueue());
 
       if (!mounted) return;
       navigator.pop(true);
       messenger.showSnackBar(
-        const SnackBar(content: Text('Review submitted successfully.')),
+        SnackBar(
+          content: Text(
+            isOnline
+                ? 'Review queued and syncing now.'
+                : 'Review saved offline. It will sync when connectivity returns.',
+          ),
+        ),
       );
     } catch (error) {
       if (!mounted) return;
       messenger.showSnackBar(
-        SnackBar(content: Text('Could not submit review: $error')),
+        SnackBar(content: Text('Could not save review locally: $error')),
       );
     } finally {
       if (mounted) {
