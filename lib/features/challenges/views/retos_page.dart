@@ -1,15 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
+import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../core/utils/step_sensor_service.dart';
-import '../../../core/constants/app_field_limits.dart';
 import '../../../core/services/ttl_image_cache_service.dart';
 import '../../../core/local_storage/retos_local_storage_service.dart';
 import '../../../core/local_storage/database_helper.dart';
@@ -39,12 +37,11 @@ class _RetosPageState extends State<RetosPage>
   // UI filters
   String _selectedSportFilter = 'all';
   String _selectedTrackingFilter = 'all';
-  List<double> _ratingFilterOptions = const [0.0, 3.0, 4.0, 5.0];
+  final List<double> _ratingFilterOptions = const [0.0, 3.0, 4.0, 5.0];
   double _selectedMinRatingFilter = 0.0;
 
   // State flags
   bool _isCreatingChallenge = false;
-  bool _isCheckingConnectivity = true;
   bool _isLoadingCachedChallenges = false;
   bool _isOffline = false;
 
@@ -60,8 +57,6 @@ class _RetosPageState extends State<RetosPage>
   StreamSubscription<dynamic>? _connectivitySub;
   List<Map<String, dynamic>> _cachedChallengeRows = [];
 
-  final int _defaultStepGoal = 8000;
-
   @override
   void initState() {
     super.initState();
@@ -73,17 +68,15 @@ class _RetosPageState extends State<RetosPage>
     // Start connectivity check
     Connectivity().checkConnectivity().then((result) {
       setState(() {
-        _isOffline = result == ConnectivityResult.none;
-        _isCheckingConnectivity = false;
+        _isOffline = _isConnectivityOffline(result);
       });
     });
 
     _connectivitySub = Connectivity().onConnectivityChanged.listen((result) {
-      final nowOffline = result == ConnectivityResult.none;
+      final nowOffline = _isConnectivityOffline(result);
       if (mounted) {
         setState(() {
           _isOffline = nowOffline;
-          _isCheckingConnectivity = false;
         });
       }
       if (!nowOffline) {
@@ -115,6 +108,16 @@ class _RetosPageState extends State<RetosPage>
   @override
   bool get wantKeepAlive => true;
 
+  bool _isConnectivityOffline(Object result) {
+    if (result is List<ConnectivityResult>) {
+      return result.isEmpty || result.contains(ConnectivityResult.none);
+    }
+    if (result is ConnectivityResult) {
+      return result == ConnectivityResult.none;
+    }
+    return false;
+  }
+
   void _resetChallengeFilters() {
     setState(() {
       _selectedSportFilter = 'all';
@@ -131,10 +134,13 @@ class _RetosPageState extends State<RetosPage>
         'manual';
     final rating = (data['ratingAverage'] as num?)?.toDouble() ?? 0.0;
 
-    if (_selectedSportFilter != 'all' && sport != _selectedSportFilter)
+    if (_selectedSportFilter != 'all' && sport != _selectedSportFilter) {
       return false;
-    if (_selectedTrackingFilter != 'all' && tracking != _selectedTrackingFilter)
+    }
+    if (_selectedTrackingFilter != 'all' &&
+        tracking != _selectedTrackingFilter) {
       return false;
+    }
     if (rating < _selectedMinRatingFilter) return false;
     return true;
   }
@@ -147,7 +153,13 @@ class _RetosPageState extends State<RetosPage>
       'progress': (row['progress'] as num?)?.toDouble() ?? 0.0,
       'participantsCount': (row['participants_count'] as num?)?.toInt() ?? 0,
       'ratingAverage': (row['rating_average'] as num?)?.toDouble() ?? 0.0,
+      'ratingCount': (row['rating_count'] as num?)?.toInt() ?? 0,
       'trackingMode': row['tracking_mode']?.toString() ?? 'manual',
+      'goalLabel': row['goal_label']?.toString(),
+      'description': row['description']?.toString() ?? row['notes']?.toString(),
+      'difficulty': row['difficulty']?.toString(),
+      'reward': row['reward']?.toString(),
+      'stepGoal': (row['step_goal'] as num?)?.toInt(),
       'endDate': row['end_date'] != null
           ? DateTime.tryParse(row['end_date'] as String)
           : null,
@@ -166,7 +178,8 @@ class _RetosPageState extends State<RetosPage>
         'title': (data['title'] as String?) ?? data['goalLabel'] ?? 'Challenge',
         'sport': (data['sport'] as String?) ?? 'general',
         'progress':
-            (data['progressByUser']?[widget.profile.uid] as num?)?.toDouble() ??
+            ((data['progressByUser'] as Map?)?[widget.profile.uid] as num?)
+                ?.toDouble() ??
             0.0,
         'participantsCount':
             (data['participantsCount'] as num?)?.toInt() ??
@@ -174,8 +187,14 @@ class _RetosPageState extends State<RetosPage>
                 ? (data['participants'] as List).length
                 : 0),
         'ratingAverage': (data['ratingAverage'] as num?)?.toDouble() ?? 0.0,
+        'ratingCount': (data['ratingCount'] as num?)?.toInt() ?? 0,
         'trackingMode': (data['trackingMode'] as String?) ?? 'manual',
-        'endDate': (data['endDate'] as Timestamp?)?.toDate()?.toIso8601String(),
+        'goalLabel': (data['goalLabel'] as String?)?.trim(),
+        'description': (data['description'] as String?)?.trim(),
+        'difficulty': (data['difficulty'] as String?)?.trim(),
+        'reward': (data['reward'] as String?)?.trim(),
+        'stepGoal': (data['stepGoal'] as num?)?.toInt(),
+        'endDate': (data['endDate'] as Timestamp?)?.toDate().toIso8601String(),
         'isSynced': true,
       };
     }).toList();
@@ -199,24 +218,390 @@ class _RetosPageState extends State<RetosPage>
   }
 
   Future<void> _retryConnectivity() async {
-    setState(() => _isCheckingConnectivity = true);
     final connectivity = await Connectivity().checkConnectivity();
     if (mounted) {
-      setState(() {
-        _isOffline = connectivity == ConnectivityResult.none;
-        _isCheckingConnectivity = false;
-      });
+      setState(() => _isOffline = _isConnectivityOffline(connectivity));
     }
   }
 
-  bool _shouldTrackStepsByDefault({
-    String? sport,
-    String? goalText,
-    String? descriptionText,
-  }) {
-    final s = (sport ?? '').toLowerCase();
-    if (s.contains('run') || s == 'running') return true;
-    return false;
+  Widget _buildChallengeFilters(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            ChoiceChip(
+              label: const Text('All sports'),
+              selected: _selectedSportFilter == 'all',
+              onSelected: (_) => setState(() => _selectedSportFilter = 'all'),
+            ),
+            ChoiceChip(
+              label: const Text('Running'),
+              selected: _selectedSportFilter == 'running',
+              onSelected: (_) =>
+                  setState(() => _selectedSportFilter = 'running'),
+            ),
+            ChoiceChip(
+              label: const Text('Soccer'),
+              selected: _selectedSportFilter == 'soccer',
+              onSelected: (_) =>
+                  setState(() => _selectedSportFilter = 'soccer'),
+            ),
+            ChoiceChip(
+              label: const Text('Calisthenics'),
+              selected: _selectedSportFilter == 'calistenia',
+              onSelected: (_) =>
+                  setState(() => _selectedSportFilter = 'calistenia'),
+            ),
+            ChoiceChip(
+              label: const Text('Tennis'),
+              selected: _selectedSportFilter == 'tennis',
+              onSelected: (_) =>
+                  setState(() => _selectedSportFilter = 'tennis'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            ChoiceChip(
+              label: const Text('All modes'),
+              selected: _selectedTrackingFilter == 'all',
+              onSelected: (_) =>
+                  setState(() => _selectedTrackingFilter = 'all'),
+            ),
+            ChoiceChip(
+              label: const Text('Manual'),
+              selected: _selectedTrackingFilter == 'manual',
+              onSelected: (_) =>
+                  setState(() => _selectedTrackingFilter = 'manual'),
+            ),
+            ChoiceChip(
+              label: const Text('Steps'),
+              selected: _selectedTrackingFilter == 'steps',
+              onSelected: (_) =>
+                  setState(() => _selectedTrackingFilter = 'steps'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text(
+              'Rating',
+              style: Theme.of(
+                context,
+              ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            for (final rating in _ratingFilterOptions)
+              ChoiceChip(
+                label: Text(
+                  rating == 0 ? 'Any' : '${rating.toStringAsFixed(0)}+',
+                ),
+                selected: _selectedMinRatingFilter == rating,
+                onSelected: (_) =>
+                    setState(() => _selectedMinRatingFilter = rating),
+              ),
+            TextButton.icon(
+              onPressed: _resetChallengeFilters,
+              icon: const Icon(Icons.filter_alt_off),
+              label: const Text('Clear'),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLiveChallengeList(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+  ) {
+    final filteredDocs = docs
+        .where((doc) => _matchesChallengeFilters(doc.data()))
+        .toList();
+    final rankedDocs = _recommendationEngine.rankChallenges(
+      challenges: filteredDocs,
+      profile: widget.profile,
+    );
+    final topRatedDocs = _recommendationEngine.topRatedChallenges(
+      challenges: filteredDocs,
+      maxResults: 5,
+    );
+    final recommendation = _recommendationEngine.buildRecommendation(
+      challenges: rankedDocs,
+      profile: widget.profile,
+    );
+    final recommendedId = recommendation?.challengeId;
+
+    return RefreshIndicator(
+      onRefresh: () async {
+        await _retryConnectivity();
+        await _loadCachedChallenges();
+      },
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          if (_isOffline) ...[
+            const _OfflineConnectionBanner(),
+            const SizedBox(height: 14),
+          ],
+          _buildChallengeFilters(context),
+          if (recommendation != null) ...[
+            const SizedBox(height: 14),
+            _ChallengeRecommendationBox(recommendation: recommendation),
+          ],
+          if (topRatedDocs.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            _TopRatedChallengesSection(challengeDocs: topRatedDocs),
+          ],
+          const SizedBox(height: 14),
+          if (rankedDocs.isEmpty)
+            const _InfoBox(text: 'No challenges match these filters.')
+          else
+            ...rankedDocs.map(
+              (doc) => Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _ChallengeCard(
+                  challengeDoc: doc,
+                  userId: widget.profile.uid,
+                  stepSensorService: _stepSensorService,
+                  ttlImageCache: _ttlImageCache,
+                  isRecommended: doc.id == recommendedId,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openOfflineChallengeDetails(Map<String, dynamic> challenge) {
+    final title = challenge['title']?.toString() ?? 'Challenge';
+    final challengeId = challenge['id']?.toString() ?? '';
+    final sport = challenge['sport']?.toString() ?? 'general';
+    final description = challenge['description']?.toString();
+    final goalLabel = challenge['goalLabel']?.toString();
+    final reward = challenge['reward']?.toString();
+    final difficulty = challenge['difficulty']?.toString();
+    final trackingMode = challenge['trackingMode']?.toString();
+    final stepGoal = (challenge['stepGoal'] as num?)?.toInt();
+    final ratingAverage =
+        (challenge['ratingAverage'] as num?)?.toDouble() ?? 0.0;
+    final ratingCount = (challenge['ratingCount'] as num?)?.toInt() ?? 0;
+
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 18, 18, 24),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const _OfflineConnectionBanner(),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Icon(
+                      _iconForCachedSport(sport),
+                      color: _accentForCachedSport(sport),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(_sportLabelForCachedSport(sport)),
+                    const Spacer(),
+                    IconButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+                Text(
+                  title,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 8),
+                _CachedRatingSummary(
+                  ratingAverage: ratingAverage,
+                  ratingCount: ratingCount,
+                ),
+                if (difficulty != null && difficulty.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text('Difficulty: $difficulty'),
+                ],
+                if (trackingMode == 'steps') ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    stepGoal == null
+                        ? 'Tracking: Step sensor'
+                        : 'Tracking: Step sensor ($stepGoal steps goal)',
+                  ),
+                ],
+                const SizedBox(height: 14),
+                Text(
+                  'Description',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  (description != null && description.isNotEmpty)
+                      ? description
+                      : 'This challenge does not have a detailed description yet.',
+                ),
+                if (goalLabel != null && goalLabel.isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  Text(
+                    'Goal',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(goalLabel),
+                ],
+                if (reward != null && reward.isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  Text(
+                    'Reward',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(reward),
+                ],
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      _openOfflineReviewDialog(challenge);
+                    },
+                    icon: const Icon(Icons.rate_review),
+                    label: const Text('Rate and review this challenge'),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  'Reviews',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                FutureBuilder<List<Map<String, dynamic>>>(
+                  future: _loadCachedReviews(challengeId),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting &&
+                        !snapshot.hasData) {
+                      return const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 6),
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      );
+                    }
+                    return _ReviewList(
+                      reviews: snapshot.data ?? const <Map<String, dynamic>>[],
+                      cache: _ttlImageCache,
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openOfflineReviewDialog(Map<String, dynamic> challenge) async {
+    final challengeId = challenge['id']?.toString();
+    if (challengeId == null || challengeId.isEmpty) return;
+
+    await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return ChallengeReviewDialog(
+          challengeId: challengeId,
+          challengeTitle: challenge['title']?.toString() ?? 'Challenge',
+        );
+      },
+    );
+    if (mounted) setState(() {});
+  }
+
+  Future<List<Map<String, dynamic>>> _loadCachedReviews(
+    String challengeId,
+  ) async {
+    final rows = await _localStorageService.loadChallengeReviewsFromSqlite(
+      challengeId,
+    );
+    return rows.map(_mapReviewRow).toList();
+  }
+
+  Map<String, dynamic> _mapReviewRow(Map<String, Object?> row) {
+    return {
+      'userName': row['user_name']?.toString() ?? 'Anonymous',
+      'comment': row['comment']?.toString() ?? '',
+      'rating': (row['rating'] as num?)?.toInt() ?? 0,
+      'imagePath': row['image_path']?.toString(),
+      'imageUrl': row['image_url']?.toString(),
+      'isSynced': (row['is_synced'] as int?) == 1,
+    };
+  }
+
+  Widget _buildOfflineChallengeList() {
+    if (_isLoadingCachedChallenges) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    final filteredRows = _cachedChallengeRows
+        .where(_matchesChallengeFilters)
+        .toList();
+
+    return RefreshIndicator(
+      onRefresh: () async {
+        await _retryConnectivity();
+        await _loadCachedChallenges();
+      },
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          const _OfflineConnectionBanner(),
+          const SizedBox(height: 14),
+          _buildChallengeFilters(context),
+          const SizedBox(height: 14),
+          if (filteredRows.isEmpty)
+            const _InfoBox(text: 'No cached challenges match these filters.')
+          else
+            ...filteredRows.map(
+              (challenge) => Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _OfflineChallengeCard(
+                  challenge: challenge,
+                  onOpenDetails: () => _openOfflineChallengeDetails(challenge),
+                  onReview: () => _openOfflineReviewDialog(challenge),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -231,23 +616,58 @@ class _RetosPageState extends State<RetosPage>
             : () => _createChallengeSimple(context),
         child: const Icon(Icons.add),
       ),
-      body: Center(
-        child: Text(
-          'Challenges (simplified view)',
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
-      ),
+      body: _isOffline
+          ? _buildOfflineChallengeList()
+          : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: _challengesStream,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting &&
+                    !snapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                if (snapshot.hasError) {
+                  return ListView(
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      _InfoBox(
+                        text:
+                            'Could not load challenges from Firebase: ${snapshot.error}',
+                      ),
+                    ],
+                  );
+                }
+
+                final docs = snapshot.data?.docs ?? widget.challengeDocs;
+
+                if (docs.isNotEmpty) {
+                  _cacheLiveChallenges(docs);
+                }
+
+                if (docs.isEmpty) {
+                  return ListView(
+                    padding: const EdgeInsets.all(16),
+                    children: const [
+                      _InfoBox(text: 'No challenges available yet.'),
+                    ],
+                  );
+                }
+
+                return _buildLiveChallengeList(docs);
+              },
+            ),
     );
   }
 
   Future<void> _createChallengeSimple(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
     final controller = TextEditingController();
     final formKey = GlobalKey<FormState>();
 
     await showDialog<void>(
       context: context,
       builder: (dctx) => AlertDialog(
-        title: const Text('Create challenge (offline)'),
+        title: const Text('Create challenge'),
         content: Form(
           key: formKey,
           child: TextFormField(
@@ -267,6 +687,12 @@ class _RetosPageState extends State<RetosPage>
               Navigator.of(dctx).pop();
               setState(() => _isCreatingChallenge = true);
               try {
+                final connectivity = await Connectivity().checkConnectivity();
+                final wasOfflineAtSubmit = _isConnectivityOffline(connectivity);
+                if (mounted) {
+                  setState(() => _isOffline = wasOfflineAtSubmit);
+                }
+
                 await _challengeRepository.createChallengeLocalFirst(
                   title: controller.text.trim(),
                   sport: 'running',
@@ -279,19 +705,21 @@ class _RetosPageState extends State<RetosPage>
                   reward: '',
                 );
                 await _loadCachedChallenges();
-                if (mounted)
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
+                if (mounted) {
+                  messenger.showSnackBar(
+                    SnackBar(
                       content: Text(
-                        'Challenge created locally and queued for sync.',
+                        wasOfflineAtSubmit
+                            ? 'No hay conexión. El reto quedó encolado y se subirá cuando vuelva internet.'
+                            : 'Challenge created successfully.',
                       ),
                     ),
                   );
+                }
               } catch (e) {
-                if (mounted)
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(SnackBar(content: Text('Error: $e')));
+                if (mounted) {
+                  messenger.showSnackBar(SnackBar(content: Text('Error: $e')));
+                }
               } finally {
                 if (mounted) setState(() => _isCreatingChallenge = false);
               }
@@ -395,25 +823,28 @@ class _TtlCachedReviewImageState extends State<_TtlCachedReviewImage> {
     if (isLoading || !hasFailed) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(10),
-        child: CachedNetworkImage(
-          imageUrl: widget.imageUrl,
+        child: Image.network(
+          widget.imageUrl,
           height: 120,
           width: double.infinity,
           fit: BoxFit.cover,
-          placeholder: (context, url) {
-            return Container(
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) return child;
+            return SizedBox(
               height: 120,
-              color: surfaceColor,
-              alignment: Alignment.center,
-              child: const CircularProgressIndicator(),
+              child: ColoredBox(
+                color: surfaceColor,
+                child: const Center(child: CircularProgressIndicator()),
+              ),
             );
           },
-          errorWidget: (context, url, error) {
-            return Container(
+          errorBuilder: (context, error, stackTrace) {
+            return SizedBox(
               height: 120,
-              color: surfaceColor,
-              alignment: Alignment.center,
-              child: const Icon(Icons.broken_image_outlined),
+              child: ColoredBox(
+                color: surfaceColor,
+                child: const Center(child: Icon(Icons.broken_image_outlined)),
+              ),
             );
           },
         ),
@@ -453,6 +884,8 @@ class _ChallengeCard extends StatefulWidget {
 
 class _ChallengeCardState extends State<_ChallengeCard> {
   final DatabaseHelper _dbHelper = DatabaseHelper();
+  final RetosLocalStorageService _localStorageService =
+      RetosLocalStorageService();
   final SyncEngineService _syncEngine = SyncEngineService();
   bool _loading = false;
   bool _progressUpdating = false;
@@ -531,17 +964,6 @@ class _ChallengeCardState extends State<_ChallengeCard> {
     return '$left days left';
   }
 
-  bool _isChallengeFinishedForUser({
-    required bool isJoined,
-    required double progress,
-    required DateTime? endDate,
-  }) {
-    if (!isJoined) return false;
-    if (progress >= 1.0) return true;
-    if (endDate == null) return false;
-    return endDate.isBefore(DateTime.now());
-  }
-
   Future<void> _openReviewDialog(String title) async {
     if (!mounted) return;
 
@@ -554,6 +976,40 @@ class _ChallengeCardState extends State<_ChallengeCard> {
         );
       },
     );
+    if (mounted) setState(() {});
+  }
+
+  Future<List<Map<String, dynamic>>> _loadChallengeReviews() async {
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('challenges')
+          .doc(widget.challengeDoc.id)
+          .collection('reviews')
+          .orderBy('updatedAt', descending: true)
+          .limit(8)
+          .get();
+
+      await _localStorageService.cacheChallengeReviewsFromFirestore(
+        challengeId: widget.challengeDoc.id,
+        docs: snapshot.docs,
+      );
+    } catch (_) {
+      // Offline fallback reads whatever was cached locally.
+    }
+
+    final rows = await _localStorageService.loadChallengeReviewsFromSqlite(
+      widget.challengeDoc.id,
+    );
+    return rows.map((row) {
+      return {
+        'userName': row['user_name']?.toString() ?? 'Anonymous',
+        'comment': row['comment']?.toString() ?? '',
+        'rating': (row['rating'] as num?)?.toInt() ?? 0,
+        'imagePath': row['image_path']?.toString(),
+        'imageUrl': row['image_url']?.toString(),
+        'isSynced': (row['is_synced'] as int?) == 1,
+      };
+    }).toList();
   }
 
   Widget _buildRatingSummary({
@@ -603,13 +1059,7 @@ class _ChallengeCardState extends State<_ChallengeCard> {
     final sport = (data['sport'] as String?) ?? '';
     final ratingAverage = (data['ratingAverage'] as num?)?.toDouble() ?? 0.0;
     final ratingCount = (data['ratingCount'] as num?)?.toInt() ?? 0;
-    final reviewsFuture = FirebaseFirestore.instance
-        .collection('challenges')
-        .doc(widget.challengeDoc.id)
-        .collection('reviews')
-        .orderBy('updatedAt', descending: true)
-        .limit(8)
-        .get();
+    final reviewsFuture = _loadChallengeReviews();
 
     if (!mounted) return;
 
@@ -715,20 +1165,18 @@ class _ChallengeCardState extends State<_ChallengeCard> {
                     const SizedBox(height: 6),
                     Text(reward, style: Theme.of(context).textTheme.bodyMedium),
                   ],
-                  if (canReview) ...[
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: () {
-                          Navigator.of(context).pop();
-                          _openReviewDialog(challengeTitle);
-                        },
-                        icon: const Icon(Icons.rate_review),
-                        label: const Text('Rate and review this challenge'),
-                      ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        _openReviewDialog(challengeTitle);
+                      },
+                      icon: const Icon(Icons.rate_review),
+                      label: const Text('Rate and review this challenge'),
                     ),
-                  ],
+                  ),
                   const SizedBox(height: 14),
                   Text(
                     'Reviews',
@@ -737,7 +1185,7 @@ class _ChallengeCardState extends State<_ChallengeCard> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  FutureBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                  FutureBuilder<List<Map<String, dynamic>>>(
                     future: reviewsFuture,
                     builder: (context, snapshot) {
                       if (snapshot.connectionState == ConnectionState.waiting &&
@@ -748,96 +1196,10 @@ class _ChallengeCardState extends State<_ChallengeCard> {
                         );
                       }
 
-                      final docs =
-                          snapshot.data?.docs ??
-                          const <QueryDocumentSnapshot<Map<String, dynamic>>>[];
-                      if (docs.isEmpty) {
-                        return Text(
-                          'No reviews yet. Be the first to rate this challenge.',
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        );
-                      }
-
-                      return Column(
-                        children: docs.map((doc) {
-                          final review = doc.data();
-                          final userName =
-                              (review['userName'] as String?)
-                                      ?.trim()
-                                      .isNotEmpty ==
-                                  true
-                              ? review['userName'] as String
-                              : 'Anonymous';
-                          final comment =
-                              (review['comment'] as String?)?.trim() ?? '';
-                          final imageUrl = (review['imageUrl'] as String?)
-                              ?.trim();
-                          final rating =
-                              ((review['rating'] as num?)?.toInt() ?? 0).clamp(
-                                0,
-                                5,
-                              );
-
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 10),
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .surfaceContainerHighest
-                                  .withValues(alpha: 0.4),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        userName,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .labelLarge
-                                            ?.copyWith(
-                                              fontWeight: FontWeight.w800,
-                                            ),
-                                      ),
-                                    ),
-                                    Row(
-                                      children: List.generate(5, (index) {
-                                        return Icon(
-                                          Icons.star,
-                                          size: 16,
-                                          color: rating > index
-                                              ? Colors.amber[700]
-                                              : Colors.grey[400],
-                                        );
-                                      }),
-                                    ),
-                                  ],
-                                ),
-                                if (comment.isNotEmpty) ...[
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    comment,
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.bodyMedium,
-                                  ),
-                                ],
-                                if (imageUrl != null &&
-                                    imageUrl.isNotEmpty) ...[
-                                  const SizedBox(height: 8),
-                                  _TtlCachedReviewImage(
-                                    imageUrl: imageUrl,
-                                    cache: widget.ttlImageCache,
-                                  ),
-                                ],
-                              ],
-                            ),
-                          );
-                        }).toList(),
+                      return _ReviewList(
+                        reviews:
+                            snapshot.data ?? const <Map<String, dynamic>>[],
+                        cache: widget.ttlImageCache,
                       );
                     },
                   ),
@@ -1135,11 +1497,7 @@ class _ChallengeCardState extends State<_ChallengeCard> {
     final ratingCount = (data['ratingCount'] as num?)?.toInt() ?? 0;
 
     final endDate = (data['endDate'] as Timestamp?)?.toDate();
-    final canReview = _isChallengeFinishedForUser(
-      isJoined: isJoined,
-      progress: clampedProgress,
-      endDate: endDate,
-    );
+    const canReview = true;
     final sport = (data['sport'] as String?) ?? '';
     final accent = _accentForSport(sport);
     final participantsCount =
@@ -1597,52 +1955,209 @@ class _TopRatedChallengesSection extends StatelessWidget {
   }
 }
 
-/// Panel de acciones para la vista protegida sin conexión.
-class _OfflineRetosActionPanel extends StatelessWidget {
-  const _OfflineRetosActionPanel({required this.onRetry});
+Color _accentForCachedSport(String sport) {
+  switch (sport.toLowerCase()) {
+    case 'running':
+      return const Color(0xFF2E7DFA);
+    case 'futbol':
+    case 'soccer':
+    case 'football':
+      return const Color(0xFF2EAD67);
+    case 'calistenia':
+      return const Color(0xFFE88A1A);
+    case 'tennis':
+    case 'tenis':
+      return const Color(0xFFD2B125);
+    default:
+      return const Color(0xFF0C8E8B);
+  }
+}
 
-  final VoidCallback onRetry;
+String _sportLabelForCachedSport(String sport) {
+  switch (sport.toLowerCase()) {
+    case 'futbol':
+    case 'soccer':
+    case 'football':
+      return 'Soccer';
+    case 'running':
+      return 'Running';
+    case 'calistenia':
+      return 'Calisthenics';
+    case 'tennis':
+    case 'tenis':
+      return 'Tennis';
+    default:
+      return sport.trim().isEmpty ? 'General' : sport;
+  }
+}
+
+IconData _iconForCachedSport(String sport) {
+  switch (sport.toLowerCase()) {
+    case 'running':
+      return Icons.directions_run;
+    case 'futbol':
+    case 'soccer':
+    case 'football':
+      return Icons.sports_soccer;
+    case 'calistenia':
+      return Icons.fitness_center;
+    case 'tennis':
+    case 'tenis':
+      return Icons.sports_tennis;
+    default:
+      return Icons.emoji_events;
+  }
+}
+
+class _OfflineConnectionBanner extends StatelessWidget {
+  const _OfflineConnectionBanner();
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
+        color: const Color(0xFFFFF4D6),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE3B341)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Text(
-            'No cached challenges yet',
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'If you open this tab with a connection at least once, the app will store the challenges in SQLite so you can browse them later without internet.',
-            style: theme.textTheme.bodyMedium,
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              FilledButton.icon(
-                onPressed: onRetry,
-                icon: const Icon(Icons.refresh),
-                label: const Text('Retry'),
+          const Icon(Icons.wifi_off, color: Color(0xFF8A5A00)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'No hay conexión. Puedes ver retos cacheados, crear retos y escribir reviews; se sincronizarán cuando vuelva internet.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: const Color(0xFF6B4700),
+                fontWeight: FontWeight.w700,
               ),
-            ],
+            ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _CachedRatingSummary extends StatelessWidget {
+  const _CachedRatingSummary({
+    required this.ratingAverage,
+    required this.ratingCount,
+  });
+
+  final double ratingAverage;
+  final int ratingCount;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(Icons.star, size: 18, color: Colors.amber[700]),
+        const SizedBox(width: 4),
+        Text(
+          ratingCount > 0
+              ? '${ratingAverage.toStringAsFixed(1)} ($ratingCount)'
+              : 'No ratings yet',
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w700),
+        ),
+      ],
+    );
+  }
+}
+
+class _ReviewList extends StatelessWidget {
+  const _ReviewList({required this.reviews, required this.cache});
+
+  final List<Map<String, dynamic>> reviews;
+  final TtlImageCacheService cache;
+
+  @override
+  Widget build(BuildContext context) {
+    if (reviews.isEmpty) {
+      return Text(
+        'No reviews yet. Be the first to rate this challenge.',
+        style: Theme.of(context).textTheme.bodyMedium,
+      );
+    }
+
+    return Column(
+      children: reviews.map((review) {
+        final userName =
+            (review['userName'] as String?)?.trim().isNotEmpty == true
+            ? review['userName'] as String
+            : 'Anonymous';
+        final comment = (review['comment'] as String?)?.trim() ?? '';
+        final imageUrl = (review['imageUrl'] as String?)?.trim();
+        final imagePath = (review['imagePath'] as String?)?.trim();
+        final rating = ((review['rating'] as num?)?.toInt() ?? 0).clamp(0, 5);
+        final isSynced = review['isSynced'] == true;
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Theme.of(
+              context,
+            ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      userName,
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  if (!isSynced) ...[
+                    const Icon(Icons.cloud_upload, size: 15),
+                    const SizedBox(width: 4),
+                  ],
+                  Row(
+                    children: List.generate(5, (index) {
+                      return Icon(
+                        Icons.star,
+                        size: 16,
+                        color: rating > index
+                            ? Colors.amber[700]
+                            : Colors.grey[400],
+                      );
+                    }),
+                  ),
+                ],
+              ),
+              if (comment.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(comment, style: Theme.of(context).textTheme.bodyMedium),
+              ],
+              if (imagePath != null && imagePath.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Image.file(
+                    File(imagePath),
+                    height: 120,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              ] else if (imageUrl != null && imageUrl.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                _TtlCachedReviewImage(imageUrl: imageUrl, cache: cache),
+              ],
+            ],
+          ),
+        );
+      }).toList(),
     );
   }
 }
@@ -1651,13 +2166,13 @@ class _OfflineRetosActionPanel extends StatelessWidget {
 class _OfflineChallengeCard extends StatelessWidget {
   const _OfflineChallengeCard({
     required this.challenge,
-    required this.onSaveLocal,
     required this.onOpenDetails,
+    required this.onReview,
   });
 
   final Map<String, dynamic> challenge;
-  final VoidCallback onSaveLocal;
   final VoidCallback onOpenDetails;
+  final VoidCallback onReview;
 
   Color _accentForSport(String sport) {
     switch (sport.toLowerCase()) {
@@ -1754,149 +2269,134 @@ class _OfflineChallengeCard extends StatelessWidget {
         (challenge['participantsCount'] as num?)?.toInt() ?? 0;
     final ratingAverage =
         (challenge['ratingAverage'] as num?)?.toDouble() ?? 0.0;
-    final trackingMode = challenge['trackingMode']?.toString() ?? 'manual';
     final isSynced = challenge['isSynced'] == true;
 
     return Material(
       color: Colors.transparent,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [accent.withValues(alpha: 0.10), Colors.white],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: accent.withValues(alpha: 0.30)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: accent.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    _sportLabel(sport),
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: accent,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-                const Spacer(),
-                _buildSyncStatusChip(context, isSynced),
-              ],
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onOpenDetails,
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [accent.withValues(alpha: 0.10), Colors.white],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
             ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: 18,
-                  backgroundColor: accent.withValues(alpha: 0.15),
-                  child: Icon(_iconForSport(sport), color: accent),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        challenge['title']?.toString() ?? 'Challenge',
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Mode: $trackingMode',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
-                  ),
-                ),
-                Text(
-                  '${(progress * 100).toStringAsFixed(0)}%',
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    color: accent,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(999),
-              child: LinearProgressIndicator(
-                value: progress,
-                minHeight: 10,
-                backgroundColor: Colors.grey[200],
-                valueColor: AlwaysStoppedAnimation(accent),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: accent.withValues(alpha: 0.30)),
+            boxShadow: [
+              BoxShadow(
+                color: accent.withValues(alpha: 0.12),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
               ),
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Icon(
-                  Icons.groups_2_outlined,
-                  size: 16,
-                  color: Colors.grey[600],
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  '$participantsCount participants',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Colors.grey[700],
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const Spacer(),
-                Row(
-                  children: [
-                    Icon(Icons.star, size: 16, color: Colors.amber[700]),
-                    const SizedBox(width: 4),
-                    Text(
-                      ratingAverage > 0
-                          ? ratingAverage.toStringAsFixed(1)
-                          : 'No rating',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Colors.grey[700],
-                        fontWeight: FontWeight.w600,
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: accent.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      _sportLabel(sport),
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: accent,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: onOpenDetails,
-                    icon: const Icon(Icons.visibility),
-                    label: const Text('View details'),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: onSaveLocal,
-                    icon: const Icon(Icons.save),
-                    label: const Text('Save locally'),
+                  const Spacer(),
+                  _buildSyncStatusChip(context, isSynced),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  CircleAvatar(
+                    radius: 18,
+                    backgroundColor: accent.withValues(alpha: 0.15),
+                    child: Icon(_iconForSport(sport), color: accent),
                   ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          challenge['title']?.toString() ?? 'Challenge',
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Cached for offline access',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: 4),
+                        _CachedRatingSummary(
+                          ratingAverage: ratingAverage,
+                          ratingCount:
+                              (challenge['ratingCount'] as num?)?.toInt() ?? 0,
+                        ),
+                      ],
+                    ),
+                  ),
+                  Text(
+                    '${(progress * 100).toStringAsFixed(0)}%',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: accent,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(999),
+                child: LinearProgressIndicator(
+                  value: progress.clamp(0.0, 1.0),
+                  minHeight: 10,
+                  backgroundColor: Colors.grey[200],
+                  valueColor: AlwaysStoppedAnimation(accent),
                 ),
-              ],
-            ),
-          ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Icon(
+                    Icons.groups_2_outlined,
+                    size: 16,
+                    color: Colors.grey[600],
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    '$participantsCount participants',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Colors.grey[700],
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const Spacer(),
+                  OutlinedButton.icon(
+                    onPressed: onReview,
+                    icon: const Icon(Icons.rate_review),
+                    label: const Text('Rate'),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

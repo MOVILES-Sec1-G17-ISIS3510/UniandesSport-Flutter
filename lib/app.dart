@@ -82,14 +82,12 @@ class _UniandesSportsAppState extends State<UniandesSportsApp> {
       ],
       child: Builder(
         builder: (context) {
-          final themeViewModel = context.watch<ThemeViewModel>();
-
           return MaterialApp(
             debugShowCheckedModeBanner: false,
             title: 'Uniandes Sports',
             theme: AppTheme.light,
             darkTheme: AppTheme.dark,
-            themeMode: themeViewModel.currentTheme,
+            themeMode: ThemeMode.light,
             home: const AuthGate(),
           );
         },
