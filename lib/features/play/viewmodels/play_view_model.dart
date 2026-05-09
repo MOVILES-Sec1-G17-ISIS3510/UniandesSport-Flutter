@@ -52,13 +52,13 @@ class PlayViewModel extends ChangeNotifier {
 
   // ─── Estado de búsqueda ───────────────────────────────────────────────────
 
-  bool _hasSearched = false;
-  bool _isSearching = false;
+  var _hasSearched = false;
+  var _isSearching = false;
   List<SportEvent> _searchResults = [];
   String? _searchError;
 
-  bool get hasSearched => _hasSearched;
-  bool get isSearching => _isSearching;
+  get hasSearched => _hasSearched;
+  get isSearching => _isSearching;
   List<SportEvent> get searchResults => List.unmodifiable(_searchResults);
   String? get searchError => _searchError;
 
@@ -71,24 +71,24 @@ class PlayViewModel extends ChangeNotifier {
 
   // ─── Estado de My Scheduled ───────────────────────────────────────────────
 
-  bool _isLoadingMyScheduled = false;
+  var _isLoadingMyScheduled = false;
   List<SportEvent> _myScheduledEvents = [];
   String? _myScheduledError;
 
-  bool get isLoadingMyScheduled => _isLoadingMyScheduled;
+  get isLoadingMyScheduled => _isLoadingMyScheduled;
   List<SportEvent> get myScheduledEvents => List.unmodifiable(_myScheduledEvents);
   String? get myScheduledError => _myScheduledError;
 
   // ─── Getters derivados (lógica de negocio) ────────────────────────────────
 
   /// El usuario puede buscar solo si eligió deporte Y modalidad.
-  bool get canSearch => _selectedSport != null && _selectedModality != null;
+  get canSearch => _selectedSport != null && _selectedModality != null;
 
   /// El usuario puede crear un evento casual cuando ya eligio un deporte.
   ///
   /// Nota: el formulario de creacion siempre persiste modalidad `casual`,
   /// asi evitamos bloquear UX por no elegir modalidad antes de crear.
-  bool get canCreate => _selectedSport != null;
+  get canCreate => _selectedSport != null;
 
   // ─── Acceso al perfil ────────────────────────────────────────────────────
 
@@ -171,7 +171,7 @@ class PlayViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> loadMyScheduled({bool forceRefresh = false}) async {
+  Future loadMyScheduled({forceRefresh = false}) async {
     if (_isLoadingMyScheduled) return;
     if (!forceRefresh && _myScheduledEvents.isNotEmpty) return;
 
@@ -190,12 +190,38 @@ class PlayViewModel extends ChangeNotifier {
     }
   }
 
-  Future<bool> leaveScheduledEvent(SportEvent event) async {
+  Future leaveScheduledEvent(SportEvent event) async {
+    final index = _myScheduledEvents.indexWhere((scheduledEvent) => scheduledEvent.id == event.id);
+    if (index == -1) return false;
+
+    final removedEvent = _myScheduledEvents.removeAt(index);
+    notifyListeners();
+
     try {
       await _repo.leaveEvent(eventId: event.id, userId: _profile.uid);
-      await loadMyScheduled(forceRefresh: true);
       return true;
-    } catch (_) {
+    } catch (error) {
+      _myScheduledEvents.insert(index, removedEvent);
+      notifyListeners();
+      debugPrint('[leaveScheduledEvent] Failed to persist local leave: $error');
+      return false;
+    }
+  }
+
+  Future cancelScheduledEvent(SportEvent event) async {
+    final index = _myScheduledEvents.indexWhere((scheduledEvent) => scheduledEvent.id == event.id);
+    if (index == -1) return false;
+
+    final removedEvent = _myScheduledEvents.removeAt(index);
+    notifyListeners();
+
+    try {
+      await _repo.cancelEvent(eventId: event.id, userId: _profile.uid);
+      return true;
+    } catch (error) {
+      _myScheduledEvents.insert(index, removedEvent);
+      notifyListeners();
+      debugPrint('[cancelScheduledEvent] Failed to persist local cancel: $error');
       return false;
     }
   }
@@ -217,7 +243,7 @@ class PlayViewModel extends ChangeNotifier {
       userId: _profile.uid,
     );
 
-    final success = result['success'] as bool;
+    final success = result['success'] == true;
 
     // Si tuvo éxito, refresca el listado para mostrar el contador actualizado.
     if (success) {
