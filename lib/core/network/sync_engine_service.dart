@@ -25,6 +25,7 @@ class SyncEngineService {
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
   Timer? _periodicSyncTimer;
   bool _isProcessing = false;
+  bool _isConnected = true; // Tracks actual network state
 
   // Retries/backoff config
   static const int _maxRetries = 5;
@@ -78,6 +79,12 @@ class SyncEngineService {
       );
 
       for (final task in pending) {
+        // Detener inmediatamente si se pierde la conexión
+        if (!_isConnected) {
+          _isProcessing = false;
+          break;
+        }
+
         final int id = task['id'] as int;
         final String? eventId = task['event_id'] as String?;
         final String? action = task['action'] as String?;
