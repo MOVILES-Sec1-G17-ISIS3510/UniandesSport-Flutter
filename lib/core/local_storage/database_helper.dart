@@ -80,6 +80,31 @@ class DatabaseHelper {
         timestamp INTEGER
       )
     ''');
+
+    // Tabla `challenge_snapshots` para guardar capturas locales del módulo Retos.
+    // Se usa para demostrar almacenamiento relacional con consultas y reemplazo por ID.
+    await db.execute('''
+      CREATE TABLE challenge_snapshots(
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        sport TEXT NOT NULL,
+        progress REAL NOT NULL,
+        notes TEXT,
+        tracking_mode TEXT,
+        step_goal INTEGER,
+        rating_average REAL,
+        participants_count INTEGER,
+        goal_label TEXT,
+        description TEXT,
+        difficulty TEXT,
+        reward TEXT,
+        created_by TEXT,
+        end_date TEXT,
+        status TEXT,
+        updated_at TEXT NOT NULL,
+        is_synced INTEGER NOT NULL
+      )
+    ''');
   }
 
   FutureOr<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -111,18 +136,30 @@ class DatabaseHelper {
   }
 
   /// Métodos utilitarios para uso por repositorios y servicios.
-  Future<int> insert(String table, Map<String, Object?> values, {ConflictAlgorithm? conflictAlgorithm}) async {
+  Future<int> insert(
+    String table,
+    Map<String, Object?> values, {
+    ConflictAlgorithm? conflictAlgorithm,
+  }) async {
     final db = await database;
     return await db.insert(table, values, conflictAlgorithm: conflictAlgorithm);
   }
 
-  Future<int> update(String table, Map<String, Object?> values, String where,
-      List<Object?> whereArgs) async {
+  Future<int> update(
+    String table,
+    Map<String, Object?> values,
+    String where,
+    List<Object?> whereArgs,
+  ) async {
     final db = await database;
     return await db.update(table, values, where: where, whereArgs: whereArgs);
   }
 
-  Future<int> delete(String table, String where, List<Object?> whereArgs) async {
+  Future<int> delete(
+    String table,
+    String where,
+    List<Object?> whereArgs,
+  ) async {
     final db = await database;
     return await db.delete(table, where: where, whereArgs: whereArgs);
   }
@@ -146,7 +183,11 @@ class DatabaseHelper {
   }
 
   /// Inserta múltiples filas usando Batch y opcionalmente reemplaza en conflicto.
-  Future<void> batchInsert(String table, List<Map<String, Object?>> rows, {bool replaceOnConflict = true}) async {
+  Future<void> batchInsert(
+    String table,
+    List<Map<String, Object?>> rows, {
+    bool replaceOnConflict = true,
+  }) async {
     final db = await database;
     final batch = db.batch();
 

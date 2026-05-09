@@ -2,10 +2,12 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 
 import '../local_storage/database_helper.dart';
 
@@ -47,7 +49,7 @@ class SyncEngineService {
   Future<void> _trySyncPendingQueue() async {
     try {
       final connectivity = await Connectivity().checkConnectivity();
-      if (connectivity == ConnectivityResult.none) return;
+      if (!_hasConnection(connectivity)) return;
       await processQueue();
     } catch (_) {
       // Si falla la verificación de conectividad, no rompemos el ciclo.
@@ -150,7 +152,11 @@ class SyncEngineService {
             // Marcar como failed permanentemente: establecemos retry_count a max para que no se reintente.
             await _dbHelper.update(
               'sync_queue',
-              {'retry_count': _maxRetries, 'status': 'failed', 'timestamp': DateTime.now().millisecondsSinceEpoch},
+              {
+                'retry_count': _maxRetries,
+                'status': 'failed',
+                'timestamp': DateTime.now().millisecondsSinceEpoch,
+              },
               'id = ?',
               [id],
             );
@@ -161,18 +167,27 @@ class SyncEngineService {
               // Superó reintentos, marcar como failed y no programar más reintentos.
               await _dbHelper.update(
                 'sync_queue',
-                {'retry_count': newRetries, 'status': 'failed', 'timestamp': DateTime.now().millisecondsSinceEpoch},
+                {
+                  'retry_count': newRetries,
+                  'status': 'failed',
+                  'timestamp': DateTime.now().millisecondsSinceEpoch,
+                },
                 'id = ?',
                 [id],
               );
             } else {
               // Calcular backoff exponencial y actualizar el timestamp para el próximo intento.
               final int delayMs = _baseBackoffMs * (1 << (newRetries - 1));
-              final int nextAttempt = DateTime.now().millisecondsSinceEpoch + delayMs;
+              final int nextAttempt =
+                  DateTime.now().millisecondsSinceEpoch + delayMs;
 
               await _dbHelper.update(
                 'sync_queue',
-                {'retry_count': newRetries, 'status': 'failed', 'timestamp': nextAttempt},
+                {
+                  'retry_count': newRetries,
+                  'status': 'failed',
+                  'timestamp': nextAttempt,
+                },
                 'id = ?',
                 [id],
               );
@@ -193,7 +208,11 @@ class SyncEngineService {
   Future<bool> _uploadPlayEventToFirestore(String? eventId) async {
     if (eventId == null) return false;
 
-    final rows = await _dbHelper.query('play_events', where: 'id = ?', whereArgs: [eventId]);
+    final rows = await _dbHelper.query(
+      'play_events',
+      where: 'id = ?',
+      whereArgs: [eventId],
+    );
     if (rows.isEmpty) return false;
 
     final event = rows.first;
@@ -204,19 +223,26 @@ class SyncEngineService {
       'modality': event['modality'],
       'description': event['description'],
       'location': event['location'],
-      'scheduledAt': Timestamp.fromDate(DateTime.parse(event['scheduled_at'] as String)),
+      'scheduledAt': Timestamp.fromDate(
+        DateTime.parse(event['scheduled_at'] as String),
+      ),
       'maxParticipants': event['max_participants'],
       'participants': jsonDecode(event['participants_json'] as String),
       'status': event['status'],
-      'createdAt': Timestamp.fromDate(DateTime.parse(event['created_at'] as String)),
-      'updatedAt': Timestamp.fromDate(DateTime.parse(event['updated_at'] as String)),
-      'metadata': {
-        'creatorSemester': event['creator_semester'],
-      },
+      'createdAt': Timestamp.fromDate(
+        DateTime.parse(event['created_at'] as String),
+      ),
+      'updatedAt': Timestamp.fromDate(
+        DateTime.parse(event['updated_at'] as String),
+      ),
+      'metadata': {'creatorSemester': event['creator_semester']},
       'ownerUid': _auth.currentUser?.uid,
     };
 
-    await _firestore.collection('events').doc(eventId).set(payload, SetOptions(merge: true));
+    await _firestore
+        .collection('events')
+        .doc(eventId)
+        .set(payload, SetOptions(merge: true));
     return true;
   }
 
@@ -253,7 +279,11 @@ class SyncEngineService {
   Future<bool> _uploadSimpleEventToFirestore(String? eventId) async {
     if (eventId == null) return false;
 
-    final rows = await _dbHelper.query('events', where: 'id = ?', whereArgs: [eventId]);
+    final rows = await _dbHelper.query(
+      'events',
+      where: 'id = ?',
+      whereArgs: [eventId],
+    );
     if (rows.isEmpty) return false;
 
     final event = rows.first;
