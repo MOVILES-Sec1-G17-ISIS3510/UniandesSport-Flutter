@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:uniandessport_flutter/features/coach/widgets/bq2_stats_card.dart';
 import 'package:uniandessport_flutter/features/coach/widgets/request_coach_dialog.dart';
 import 'package:uniandessport_flutter/features/coach/viewmodels/coaches_view_model.dart';
 import 'package:uniandessport_flutter/features/coach/widgets/coach_card.dart';
@@ -380,7 +381,10 @@ class _ProfesPageState extends State<ProfesPage> {
                       ),
                     ),
 
-                    const SizedBox(height: 24),
+                    // BQ #2 — sync rate de reviews offline.
+                    const BQ2StatsCard(),
+
+                    const SizedBox(height: 4),
 
                     // Lista de coaches
                     Expanded(
@@ -392,7 +396,55 @@ class _ProfesPageState extends State<ProfesPage> {
                           }
 
                           if (vm.error != null) {
-                            return Center(child: Text(vm.error!));
+                            // Generic Fallback (#6 del libro): cuando no hay
+                            // cache ni red, no le mostramos al usuario la
+                            // excepción cruda (anti-pattern #3 "Non-Informative
+                            // Message"). Le damos un mensaje claro + botón de
+                            // reintentar que vuelve a disparar Strategy #5.
+                            return Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(24),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.cloud_off_outlined,
+                                      size: 80,
+                                      color: colorScheme.onSurfaceVariant,
+                                    ),
+                                    const SizedBox(height: 16),
+                                    Text(
+                                      "No pudimos cargar los profes",
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: colorScheme.onSurface,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      "Verifica tu conexión a internet e intenta de nuevo.",
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 24),
+                                    FilledButton.icon(
+                                      onPressed: () => vm.loadCoaches(),
+                                      icon: const Icon(Icons.refresh),
+                                      label: const Text("Reintentar"),
+                                      style: FilledButton.styleFrom(
+                                        backgroundColor: Colors.teal,
+                                        foregroundColor: Colors.white,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
                           }
 
                           if (vm.coaches.isEmpty) {

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -67,6 +68,18 @@ class PendingReview {
 ///
 /// The queue is kept in SharedPreferences because reviews are small and the
 /// app only needs lightweight offline persistence.
+///
+/// Para la BQ #2, cada sync exitoso emite **eventos al pipeline de
+/// analítica del equipo**:
+///   1. Un documento en la colección Firestore `analytics_bq2_review_sync`
+///      (BD central — fuente de verdad para el card en la app).
+///   2. Un evento `review_sync_completed` a Firebase Analytics, que el
+///      proyecto exporta automáticamente a BigQuery, donde el equipo
+///      construye la vista que alimenta el dashboard de Looker.
+///
+/// `notifyReconnect` se llama desde el ViewModel cuando vuelve la conexión
+/// y persiste el timestamp en SharedPreferences para que el cálculo del
+/// delta sea correcto incluso si la sync ocurre mucho después.
 class PendingReviewsService {
   PendingReviewsService._internal();
 
@@ -75,10 +88,56 @@ class PendingReviewsService {
 
   static const String _queueKey = 'pending_reviews_queue';
 
+  /// Clave del último timestamp de reconexión. Es estado efímero local
+  /// (no analytics), por eso vive en SharedPreferences.
+  static const String _bq2ReconnectAtKey = 'bq2_last_reconnect_at_ms';
+
+  /// Colección en Firestore que persiste los eventos de la BQ #2.
+  static const String _bq2EventsCollection = 'analytics_bq2_review_sync';
+
+  /// Ventana objetivo definida por la BQ.
+  static const Duration _bq2Threshold = Duration(seconds: 60);
+
   Future<void> addPendingReview(PendingReview review) async {
     final queue = await _loadQueue();
     queue.add(review);
     await _saveQueue(queue);
+  }
+
+  /// Marca el instante de reconexión. El ViewModel debe llamar esto
+  /// cuando el listener de connectivity_plus detecta transición
+  /// offline → online, ANTES de invocar [syncToFirestore].
+  Future<void> notifyReconnect() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(
+      _bq2ReconnectAtKey,
+      DateTime.now().millisecondsSinceEpoch,
+    );
+  }
+
+  /// Borra los eventos de la BQ #2 del usuario actual de Firestore y
+  /// limpia el último timestamp de reconexión local. Útil para correr
+  /// una sesión de prueba limpia (por ejemplo, en el viva voce) sin
+  /// arrastrar mediciones previas.
+  Future<void> resetBQ2Stats() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_bq2ReconnectAtKey);
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final query = await FirebaseFirestore.instance
+        .collection(_bq2EventsCollection)
+        .where('uid', isEqualTo: user.uid)
+        .get();
+
+    if (query.docs.isEmpty) return;
+
+    final batch = FirebaseFirestore.instance.batch();
+    for (final doc in query.docs) {
+      batch.delete(doc.reference);
+    }
+    await batch.commit();
   }
 
   Future<int> syncToFirestore() async {
@@ -86,6 +145,13 @@ class PendingReviewsService {
     if (queue.isEmpty) {
       return 0;
     }
+
+    // Lee el timestamp de la última reconexión para medir el delta.
+    final prefs = await SharedPreferences.getInstance();
+    final reconnectAtMs = prefs.getInt(_bq2ReconnectAtKey);
+    final reconnectAt = reconnectAtMs != null
+        ? DateTime.fromMillisecondsSinceEpoch(reconnectAtMs)
+        : null;
 
     final user = FirebaseAuth.instance.currentUser;
     final remaining = <PendingReview>[];
@@ -95,6 +161,40 @@ class PendingReviewsService {
       try {
         await _syncSingleReview(review, fallbackUserId: user?.uid);
         syncedCount++;
+
+        // BQ #2 — emite el evento al pipeline de analítica.
+        // Solo emite cuando hay un reconnect identificado (ese es el
+        // momento "T=0" para medir el delta). Reviews sincronizadas
+        // sin pasar por reconexión no aplican al numerador ni al
+        // denominador de la BQ.
+        if (reconnectAt != null && user != null) {
+          final delta = DateTime.now().difference(reconnectAt);
+          final withinThreshold = delta <= _bq2Threshold;
+
+          // 1) Persistencia central en Firestore — fuente de verdad
+          // para el card en la app y para BigQuery/Looker del equipo.
+          await FirebaseFirestore.instance
+              .collection(_bq2EventsCollection)
+              .add({
+            'uid': user.uid,
+            'coachId': review.coachId,
+            'reconnectedAt': Timestamp.fromDate(reconnectAt),
+            'syncedAt': FieldValue.serverTimestamp(),
+            'deltaMs': delta.inMilliseconds,
+            'withinThreshold': withinThreshold,
+          });
+
+          // 2) Firebase Analytics — fluye automáticamente a BigQuery
+          // si el proyecto tiene el linking activado, alimentando el
+          // dashboard de Looker del equipo.
+          await FirebaseAnalytics.instance.logEvent(
+            name: 'review_sync_completed',
+            parameters: {
+              'delta_ms': delta.inMilliseconds,
+              'within_60s': withinThreshold ? 1 : 0,
+            },
+          );
+        }
       } catch (_) {
         remaining.add(review);
       }
