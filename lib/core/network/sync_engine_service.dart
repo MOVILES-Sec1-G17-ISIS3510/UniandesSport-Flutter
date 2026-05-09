@@ -23,6 +23,7 @@ class SyncEngineService {
   StreamSubscription<dynamic>? _connectivitySub;
   Timer? _periodicSyncTimer;
   bool _isProcessing = false;
+  bool _isConnected = true; // Tracks actual network state
 
   // Retries/backoff config
   static const int _maxRetries = 5;
@@ -32,8 +33,13 @@ class SyncEngineService {
   /// Inicializa el escucha de conectividad. Llamar desde el arranque de la app (por ejemplo en main).
   void initialize() {
     _connectivitySub ??= Connectivity().onConnectivityChanged.listen((dynamic result) {
-      if (!_hasConnectionDynamic(result)) return;
-      processQueue();
+      final bool hasConn = _hasConnectionDynamic(result);
+      _isConnected = hasConn;
+      
+      if (hasConn) {
+        // Automatically trigger sync when connection is recovered
+        processQueue();
+      }
     });
 
     _periodicSyncTimer ??= Timer.periodic(_periodicSyncInterval, (_) {
@@ -82,6 +88,12 @@ class SyncEngineService {
       )).cast<Map<String, dynamic>>();
 
       for (final task in pending) {
+        // Detener inmediatamente si se pierde la conexión
+        if (!_isConnected) {
+          _isProcessing = false;
+          break;
+        }
+
         final int id = task['id'] as int;
         final String? eventId = task['event_id'] as String?;
         final String? action = task['action'] as String?;
