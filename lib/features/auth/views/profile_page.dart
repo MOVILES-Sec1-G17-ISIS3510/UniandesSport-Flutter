@@ -5,12 +5,19 @@ import 'package:provider/provider.dart';
 import '../../../core/constants/app_sports.dart';
 import '../../../core/constants/app_field_limits.dart';
 import '../../../core/theme/theme_viewmodel.dart';
+import '../services/auth_repository.dart';
 import '../models/user_profile.dart';
 import '../models/user_role.dart';
-import 'login_page.dart';
 import '../viewmodels/auth_view_model.dart';
 import 'auth_gate.dart';
 import '../../home/views/available_time_slots_page.dart';
+import 'auth_gate.dart';
+
+// Import del feature profile añadido
+import '../../profile/viewmodels/profile_viewmodel.dart';
+import '../../profile/services/profile_repository.dart';
+import '../../profile/widgets/profile_avatar.dart';
+import '../../profile/widgets/profile_picture_dialog.dart';
 
 class ProfilePage extends StatefulWidget {
   final UserProfile profile;
@@ -75,7 +82,7 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   Widget build(BuildContext context) {
     final themeViewModel = context.watch<ThemeViewModel>();
-
+    
     final selectedMainSportKey = _mainSportController.text.trim().isEmpty
         ? null
         : AppSports.normalizeSportKey(_mainSportController.text);
@@ -142,18 +149,90 @@ class _ProfilePageState extends State<ProfilePage> {
                 Center(
                   child: Column(
                     children: [
-                      CircleAvatar(
-                        radius: 50,
-                        backgroundColor: Colors.teal,
-                        child: Text(
-                          _buildInitials(widget.profile.fullName),
-                          style: const TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
+                      // Se reemplaza CircleAvatar por ProfileAvatar integrado con ViewModel
+                      ChangeNotifierProvider<ProfileViewModel>(
+                        create: (_) {
+                          final repo = ProfileRepository();
+                          final vm = ProfileViewModel(repository: repo);
+                          vm.initialize(widget.profile.uid);
+                          return vm;
+                        },
+                        child: Consumer<ProfileViewModel>(
+                          builder: (context, profileVM, child) {
+                            final effectiveProfile = profileVM.profile ?? widget.profile;
+                            return Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                ProfileAvatar(
+                                  photoUrl: effectiveProfile.photoUrl,
+                                  fullName: effectiveProfile.fullName,
+                                  userId: effectiveProfile.uid,
+                                  radius: 50,
+                                  isLoading: profileVM.isLoading,
+                                  onTap: profileVM.isLoading
+                                      ? null
+                                      : () async {
+                                          final source = await ProfilePictureDialog.showPictureSourcePicker(context);
+                                          if (source == null) return;
+
+                                          await profileVM.changeProfilePicture(
+                                            source: source,
+                                            userId: widget.profile.uid,
+                                          );
+
+                                          if (mounted) {
+                                            if (profileVM.errorMessage != null) {
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                SnackBar(content: Text('Error: ${profileVM.errorMessage}')),
+                                              );
+                                            } else {
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                const SnackBar(content: Text('Profile picture updated')),
+                                              );
+                                            }
+                                          }
+                                        },
+                                ),
+
+                                const SizedBox(height: 8),
+
+                                // Botón visible para cambiar foto (opción 1 solicitada)
+                                ElevatedButton.icon(
+                                  onPressed: profileVM.isLoading
+                                      ? null
+                                      : () async {
+                                          final source = await ProfilePictureDialog.showPictureSourcePicker(context);
+                                          if (source == null) return;
+
+                                          await profileVM.changeProfilePicture(
+                                            source: source,
+                                            userId: widget.profile.uid,
+                                          );
+
+                                          if (mounted) {
+                                            if (profileVM.errorMessage != null) {
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                SnackBar(content: Text('Error: ${profileVM.errorMessage}')),
+                                              );
+                                            } else {
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                const SnackBar(content: Text('Profile picture updated')),
+                                              );
+                                            }
+                                          }
+                                        },
+                                  icon: const Icon(Icons.camera_alt),
+                                  label: const Text('Change photo'),
+                                  style: ElevatedButton.styleFrom(
+                                    minimumSize: const Size(140, 40),
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
                         ),
                       ),
+
                       const SizedBox(height: 16),
                       if (!_isEditing)
                         Column(
@@ -458,20 +537,17 @@ class _ProfilePageState extends State<ProfilePage> {
       if (mounted) {
         // Redirige al login usando pushAndRemoveUntil
         Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const LoginPage()),
+          MaterialPageRoute(builder: (_) => AuthGate()),
           (route) => false,
         );
       }
     } catch (e) {
       if (mounted) {
         final errorStr = e.toString().toLowerCase();
-        final displayError =
-            errorStr.contains('network') ||
-                errorStr.contains('unavailable') ||
-                errorStr.contains('socket')
+        final displayError = errorStr.contains('network') || errorStr.contains('unavailable') || errorStr.contains('socket')
             ? 'Network error. Check your connection.'
             : 'Authentication failed. Please try again.';
-
+            
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error closing session: $displayError')),
         );
@@ -483,9 +559,10 @@ class _ProfilePageState extends State<ProfilePage> {
   void _saveProfile() async {
     if (!_editFormKey.currentState!.validate()) return;
 
+    final repository = context.read<AuthRepository>();
     final semester = int.tryParse(_semesterController.text.trim());
 
-    await context.read<AuthViewModel>().updateProfile(
+    await repository.updateUserProfile(
       uid: widget.profile.uid,
       fullName: _fullNameController.text.trim(),
       university: _universityController.text.trim(),
@@ -517,16 +594,18 @@ class _AvailableTimeSlotsLauncher extends StatelessWidget {
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outlineVariant,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             'Available time slots',
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
           ),
           const SizedBox(height: 6),
           Text(

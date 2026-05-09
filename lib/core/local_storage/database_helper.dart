@@ -74,6 +74,7 @@ class DatabaseHelper {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         event_id TEXT,
         action TEXT,
+        payload TEXT,
         status TEXT,
         retry_count INTEGER,
         timestamp INTEGER
@@ -143,18 +144,30 @@ class DatabaseHelper {
   }
 
   /// Métodos utilitarios para uso por repositorios y servicios.
-  Future<int> insert(String table, Map<String, Object?> values, {ConflictAlgorithm? conflictAlgorithm}) async {
+  Future<int> insert(
+    String table,
+    Map<String, Object?> values, {
+    ConflictAlgorithm? conflictAlgorithm,
+  }) async {
     final db = await database;
     return await db.insert(table, values, conflictAlgorithm: conflictAlgorithm);
   }
 
-  Future<int> update(String table, Map<String, Object?> values, String where,
-      List<Object?> whereArgs) async {
+  Future<int> update(
+    String table,
+    Map<String, Object?> values,
+    String where,
+    List<Object?> whereArgs,
+  ) async {
     final db = await database;
     return await db.update(table, values, where: where, whereArgs: whereArgs);
   }
 
-  Future<int> delete(String table, String where, List<Object?> whereArgs) async {
+  Future<int> delete(
+    String table,
+    String where,
+    List<Object?> whereArgs,
+  ) async {
     final db = await database;
     return await db.delete(table, where: where, whereArgs: whereArgs);
   }
@@ -164,9 +177,11 @@ class DatabaseHelper {
         String? where,
         List<Object?>? whereArgs,
         String? orderBy,
+        int? limit,
+        int? offset,
       }) async {
     final db = await database;
-    return await db.query(table, where: where, whereArgs: whereArgs, orderBy: orderBy);
+    return await db.query(table, where: where, whereArgs: whereArgs, orderBy: orderBy, limit: limit, offset: offset);
   }
 
   /// Ejecuta una transacción y reexpone la API de sqflite para operaciones atómicas.
@@ -176,7 +191,11 @@ class DatabaseHelper {
   }
 
   /// Inserta múltiples filas usando Batch y opcionalmente reemplaza en conflicto.
-  Future<void> batchInsert(String table, List<Map<String, Object?>> rows, {bool replaceOnConflict = true}) async {
+  Future<void> batchInsert(
+    String table,
+    List<Map<String, Object?>> rows, {
+    bool replaceOnConflict = true,
+  }) async {
     final db = await database;
     final batch = db.batch();
 
