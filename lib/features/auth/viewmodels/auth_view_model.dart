@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 
 import '../services/auth_repository.dart';
 import '../models/user_role.dart';
+import '../models/user_profile.dart';
 
 /// Capa de presentacion para autenticacion.
 ///
@@ -13,6 +16,13 @@ class AuthViewModel extends ChangeNotifier {
   AuthViewModel(this._repository);
 
   final AuthRepository _repository;
+  late final Stream<User?> _authStateChanges = _repository.authStateChanges();
+
+  Stream<User?> get authStateChanges => _authStateChanges;
+
+  Future<List<ConnectivityResult>> checkConnectivity() {
+    return Connectivity().checkConnectivity();
+  }
 
   bool _isLoading = false;
   String? _errorMessage;
@@ -76,6 +86,28 @@ class AuthViewModel extends ChangeNotifier {
   }
 
   Future<void> signOut() => _repository.signOut();
+
+  Future<void> updateProfile({
+    required String uid,
+    String? fullName,
+    String? university,
+    String? program,
+    int? semester,
+    String? mainSport,
+  }) {
+    return _repository.updateUserProfile(
+      uid: uid,
+      fullName: fullName,
+      university: university,
+      program: program,
+      semester: semester,
+      mainSport: mainSport,
+    );
+  }
+
+  Future<UserProfile?> getUserProfile(String uid) {
+    return _repository.getUserProfile(uid);
+  }
 
   /// Cambia el estado loading y notifica a listeners de Provider.
   void _setLoading(bool value) {

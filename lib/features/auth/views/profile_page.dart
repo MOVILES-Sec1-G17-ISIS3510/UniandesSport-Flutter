@@ -5,9 +5,9 @@ import 'package:provider/provider.dart';
 import '../../../core/constants/app_sports.dart';
 import '../../../core/constants/app_field_limits.dart';
 import '../../../core/theme/theme_viewmodel.dart';
-import '../services/auth_repository.dart';
 import '../models/user_profile.dart';
 import '../models/user_role.dart';
+import 'login_page.dart';
 import '../viewmodels/auth_view_model.dart';
 import 'auth_gate.dart';
 import '../../home/views/available_time_slots_page.dart';
@@ -75,7 +75,7 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   Widget build(BuildContext context) {
     final themeViewModel = context.watch<ThemeViewModel>();
-    
+
     final selectedMainSportKey = _mainSportController.text.trim().isEmpty
         ? null
         : AppSports.normalizeSportKey(_mainSportController.text);
@@ -458,17 +458,20 @@ class _ProfilePageState extends State<ProfilePage> {
       if (mounted) {
         // Redirige al login usando pushAndRemoveUntil
         Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const AuthGate()),
+          MaterialPageRoute(builder: (_) => const LoginPage()),
           (route) => false,
         );
       }
     } catch (e) {
       if (mounted) {
         final errorStr = e.toString().toLowerCase();
-        final displayError = errorStr.contains('network') || errorStr.contains('unavailable') || errorStr.contains('socket')
+        final displayError =
+            errorStr.contains('network') ||
+                errorStr.contains('unavailable') ||
+                errorStr.contains('socket')
             ? 'Network error. Check your connection.'
             : 'Authentication failed. Please try again.';
-            
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error closing session: $displayError')),
         );
@@ -480,10 +483,9 @@ class _ProfilePageState extends State<ProfilePage> {
   void _saveProfile() async {
     if (!_editFormKey.currentState!.validate()) return;
 
-    final repository = context.read<AuthRepository>();
     final semester = int.tryParse(_semesterController.text.trim());
 
-    await repository.updateUserProfile(
+    await context.read<AuthViewModel>().updateProfile(
       uid: widget.profile.uid,
       fullName: _fullNameController.text.trim(),
       university: _universityController.text.trim(),
@@ -515,18 +517,16 @@ class _AvailableTimeSlotsLauncher extends StatelessWidget {
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: Theme.of(context).colorScheme.outlineVariant,
-        ),
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             'Available time slots',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 6),
           Text(

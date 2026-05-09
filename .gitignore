@@ -1,0 +1,33 @@
+# Flutter/Dart generated files
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub/
+.pub-cache/
+
+# Build outputs
+build/
+**/build/
+
+# Android/Gradle generated files
+android/.gradle/
+android/**/captures/
+android/**/outputs/
+
+# iOS/macOS generated files
+ios/Flutter/Flutter.podspec
+ios/Flutter/Generated.xcconfig
+ios/Flutter/ephemeral/
+macos/Flutter/ephemeral/
+
+# Artifacts and temporary logs
+*.apk
+*.aab
+*.log
+hs_err_pid*
+replay_pid*
+
+# IDE/system noise
+.DS_Store
+Thumbs.db

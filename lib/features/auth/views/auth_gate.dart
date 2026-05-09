@@ -1,16 +1,18 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../home/views/home_screen.dart';
 import '../models/user_profile.dart';
 import '../models/user_role.dart';
+import '../viewmodels/auth_view_model.dart';
 import 'login_page.dart';
 
 /// Puerta de entrada de autenticacion.
 ///
 /// Flujo de arranque:
-/// 1) Si FirebaseAuth.instance.currentUser != null -> HomeScreen inmediato.
+/// 1) Si el ViewModel expone una sesion activa -> HomeScreen inmediato.
 /// 2) Si no hay sesión, se verifica conectividad.
 /// 3) Si no hay internet, se muestra un mensaje claro en pantalla.
 /// 4) Si hay internet, se muestra LoginPage.
@@ -23,16 +25,21 @@ class AuthGate extends StatefulWidget {
 
 class _AuthGateState extends State<AuthGate> {
   Future<List<ConnectivityResult>>? _connectivityFuture;
+  late AuthViewModel _authViewModel;
 
   @override
-  void initState() {
-    super.initState();
-    _connectivityFuture = Connectivity().checkConnectivity();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    if (_connectivityFuture != null) return;
+
+    _authViewModel = context.read<AuthViewModel>();
+    _connectivityFuture = _authViewModel.checkConnectivity();
   }
 
   void _retryConnectivity() {
     setState(() {
-      _connectivityFuture = Connectivity().checkConnectivity();
+      _connectivityFuture = _authViewModel.checkConnectivity();
     });
   }
 
@@ -51,9 +58,10 @@ class _AuthGateState extends State<AuthGate> {
 
   @override
   Widget build(BuildContext context) {
+    final authViewModel = context.watch<AuthViewModel>();
+
     return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
-      initialData: FirebaseAuth.instance.currentUser,
+      stream: authViewModel.authStateChanges,
       builder: (context, authSnapshot) {
         final firebaseUser = authSnapshot.data;
 
@@ -69,13 +77,15 @@ class _AuthGateState extends State<AuthGate> {
         return FutureBuilder<List<ConnectivityResult>>(
           future: _connectivityFuture,
           builder: (context, connectivitySnapshot) {
-            if (connectivitySnapshot.connectionState == ConnectionState.waiting) {
+            if (connectivitySnapshot.connectionState ==
+                ConnectionState.waiting) {
               return const Scaffold(
                 body: Center(child: CircularProgressIndicator()),
               );
             }
 
-            final results = connectivitySnapshot.data ?? const <ConnectivityResult>[];
+            final results =
+                connectivitySnapshot.data ?? const <ConnectivityResult>[];
             final hasInternet = _hasInternet(results);
 
             if (!hasInternet) {
@@ -113,10 +123,7 @@ class _NoInternetScreen extends StatelessWidget {
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 const SizedBox(height: 20),
-                ElevatedButton(
-                  onPressed: onRetry,
-                  child: const Text('Retry'),
-                ),
+                ElevatedButton(onPressed: onRetry, child: const Text('Retry')),
               ],
             ),
           ),
