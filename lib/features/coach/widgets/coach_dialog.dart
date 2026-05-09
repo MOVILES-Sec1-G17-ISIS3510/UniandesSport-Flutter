@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:uniandessport_flutter/core/constants/app_theme.dart';
@@ -499,19 +500,22 @@ Widget _reviewCard(
           const SizedBox(height: 8),
           ClipRRect(
             borderRadius: BorderRadius.circular(10),
-            child: Image.network(
-              imageUrl,
+            // CachedNetworkImage = Strategy #4 del libro (Cached on Network
+            // Response) + cache 2-nivel automático (RAM + Disco). La librería
+            // por dentro usa flutter_cache_manager con eviction LRU y maneja
+            // OOM bounding las imágenes en memoria. Cubre la categoría de
+            // "Glide/Picasso/...librerías caché de imágenes" de la rúbrica.
+            child: CachedNetworkImage(
+              imageUrl: imageUrl,
               width: double.infinity,
               height: 160,
               fit: BoxFit.cover,
-              loadingBuilder: (context, child, loadingProgress) {
-                if (loadingProgress == null) return child;
-                return const SizedBox(
-                  height: 160,
-                  child: Center(child: CircularProgressIndicator()),
-                );
-              },
-              errorBuilder: (context, error, stackTrace) => const SizedBox(
+              fadeInDuration: const Duration(milliseconds: 200),
+              placeholder: (context, url) => const SizedBox(
+                height: 160,
+                child: Center(child: CircularProgressIndicator()),
+              ),
+              errorWidget: (context, url, error) => const SizedBox(
                 height: 60,
                 child: Center(
                   child: Icon(Icons.broken_image, color: Colors.grey),
