@@ -208,22 +208,7 @@ class DatabaseHelper {
     try {
       await db.execute('ALTER TABLE $table ADD COLUMN $column $columnType');
     } catch (_) {
-      // Si la columna ya existe, SQLite lanza error y continuamos sin romper la app.
-        CREATE TABLE IF NOT EXISTS coaches_cache(
-          id TEXT PRIMARY KEY,
-          data TEXT NOT NULL,
-          is_coach_of_month INTEGER NOT NULL DEFAULT 0,
-          cached_at INTEGER NOT NULL
-        )
-      ''');
-    }
-    if (oldVersion < 4) {
-      // Índice retroactivo para installs que ya tenían coaches_cache
-      // en v3 sin índice.
-      await db.execute('''
-        CREATE INDEX IF NOT EXISTS idx_coaches_cache_coach_of_month
-          ON coaches_cache(is_coach_of_month)
-      ''');
+      // Si la columna ya existe, SQLite lanza error; ignoramos y continuamos.
     }
   }
 

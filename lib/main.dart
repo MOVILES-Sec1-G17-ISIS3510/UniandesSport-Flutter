@@ -7,6 +7,8 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import 'app.dart';
 import 'core/network/sync_engine_service.dart';
+import 'features/calisthenics/models/calisthenics_result_model.dart';
+import 'features/calisthenics/services/calisthenics_ai_service.dart';
 
 /// Entry point de la app.
 ///
@@ -19,7 +21,6 @@ void main() async {
   Hive.registerAdapter(CalisthenicsResultModelAdapter());
   await TimeslotHiveService().init();
   await FavoriteCoachesService.instance.init();
-
 
   // Inicializar Firebase antes de usar Firestore en SyncEngineService
   await Firebase.initializeApp();
