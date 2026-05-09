@@ -2,12 +2,10 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 
 import '../local_storage/database_helper.dart';
 
@@ -49,7 +47,7 @@ class SyncEngineService {
   Future<void> _trySyncPendingQueue() async {
     try {
       final connectivity = await Connectivity().checkConnectivity();
-      if (!_hasConnection(connectivity)) return;
+      if (!_hasConnectionDynamic(connectivity)) return;
       await processQueue();
     } catch (_) {
       // Si falla la verificación de conectividad, no rompemos el ciclo.
