@@ -57,6 +57,30 @@ class EventRepository {
     return cached.map((r) => EventModel.fromMap(r)).toList();
   }
 
+  /// Obtiene eventos paginados filtrando los pasados y ordenando ascendentemente.
+  Future<List<EventModel>> getEventsPaginated({required int page, required int limit}) async {
+    // Si es la primera página, siempre refrescamos la caché desde Firestore
+    // para asegurar que tenemos los eventos más recientes del backend.
+    if (page == 1) {
+      await _cacheEventsFromFirestore(pageSize: 100);
+    }
+
+    final nowIso = DateTime.now().toIso8601String();
+    
+    // SQLite query: Filtrar por fecha >= now, ordenar ASC, con paginación
+    final offset = (page - 1) * limit;
+    final rows = await _dbHelper.query(
+      'events',
+      where: 'date >= ?',
+      whereArgs: [nowIso],
+      orderBy: 'date ASC',
+      limit: limit,
+      offset: offset,
+    );
+
+    return rows.map((r) => EventModel.fromMap(r)).toList();
+  }
+
   /// Descarga eventos del Firestore filtrados por ownerUid y los cachea localmente
   /// usando batchInsert con replaceOnConflict para evitar duplicados y mantener atomicidad.
   Future<void> _cacheEventsFromFirestore({int pageSize = 100}) async {
