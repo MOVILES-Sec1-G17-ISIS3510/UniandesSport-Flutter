@@ -253,6 +253,8 @@ class DatabaseHelper {
     String? where,
     List<Object?>? whereArgs,
     String? orderBy,
+    int? limit,
+    int? offset,
   }) async {
     final db = await database;
     return await db.query(
@@ -260,6 +262,8 @@ class DatabaseHelper {
       where: where,
       whereArgs: whereArgs,
       orderBy: orderBy,
+      limit: limit,
+      offset: offset,
     );
   }
 

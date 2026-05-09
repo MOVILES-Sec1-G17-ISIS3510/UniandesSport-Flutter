@@ -117,14 +117,33 @@ class SyncEngineService {
           } catch (_) {
             success = false;
           }
-        } else if (action == 'leave_play_event') {
+        } else if (action == 'leave_play_event' || action == 'LEAVE_EVENT') {
           try {
-            success = await _leavePlayEventInFirestore(eventId);
+            final resolved = _resolveEventId(eventId, payload);
+            success = await _leavePlayEventInFirestore(resolved);
           } on FirebaseException catch (fe) {
             if (fe.code == 'permission-denied' ||
                 fe.code == 'unauthenticated' ||
                 fe.code == 'invalid-argument' ||
                 fe.code == 'not-found') {
+              permanentFailure = true;
+              success = false;
+            } else {
+              success = false;
+            }
+          } catch (_) {
+            success = false;
+          }
+        } else if (action == 'CANCEL_EVENT') {
+          try {
+            final resolved = _resolveEventId(eventId, payload);
+            success = await _cancelPlayEventInFirestore(resolved);
+          } on FirebaseException catch (fe) {
+            if (fe.code == 'not-found') {
+              success = true;
+            } else if (fe.code == 'permission-denied' ||
+                fe.code == 'unauthenticated' ||
+                fe.code == 'invalid-argument') {
               permanentFailure = true;
               success = false;
             } else {
@@ -192,7 +211,9 @@ class SyncEngineService {
           await _dbHelper.delete('sync_queue', 'id = ?', [id]);
 
           if (eventId != null) {
-            if (action == 'create_play_event' || action == 'leave_play_event') {
+            if (action == 'create_play_event' ||
+                action == 'leave_play_event' ||
+                action == 'LEAVE_EVENT') {
               await _dbHelper.update(
                 'play_events',
                 {'is_synced': 1},
@@ -210,6 +231,9 @@ class SyncEngineService {
               // La reseña ya se subió; no hay tabla local específica para marcar.
             } else if (action == 'sync_challenge_steps') {
               // El progreso se actualiza en Firestore dentro de la transacción.
+            } else if (action == 'CANCEL_EVENT') {
+              await _dbHelper.delete('play_events', 'id = ?', [eventId]);
+              await _dbHelper.delete('events', 'id = ?', [eventId]);
             } else {
               await _dbHelper.update(
                 'events',
@@ -327,6 +351,20 @@ class SyncEngineService {
       'participants': FieldValue.arrayRemove([userUid]),
       'updatedAt': FieldValue.serverTimestamp(),
     });
+
+    return true;
+  }
+
+  Future<bool> _cancelPlayEventInFirestore(String? eventId) async {
+    if (eventId == null) return false;
+
+    await _firestore.collection('events').doc(eventId).update({
+      'status': 'cancelled',
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    await _dbHelper.delete('play_events', 'id = ?', [eventId]);
+    await _dbHelper.delete('events', 'id = ?', [eventId]);
 
     return true;
   }
@@ -571,6 +609,23 @@ class SyncEngineService {
     });
 
     return true;
+  }
+
+  String? _resolveEventId(String? eventId, String? payload) {
+    if (eventId != null && eventId.isNotEmpty) return eventId;
+    if (payload == null || payload.isEmpty) return null;
+
+    try {
+      final Map<String, dynamic> parsed =
+          jsonDecode(payload) as Map<String, dynamic>;
+      if (parsed.containsKey('eventId')) return parsed['eventId'] as String?;
+      if (parsed.containsKey('id')) return parsed['id'] as String?;
+    } catch (_) {
+      final match = RegExp(r'"eventId"\s*:\s*"([^"]+)"').firstMatch(payload);
+      if (match != null && match.groupCount >= 1) return match.group(1);
+    }
+
+    return null;
   }
 
   void dispose() {

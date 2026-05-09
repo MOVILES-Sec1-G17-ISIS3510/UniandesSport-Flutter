@@ -1105,6 +1105,7 @@ class _ChallengeCardState extends State<_ChallengeCard> {
   /// Renderiza una tarjeta de reto con progreso, participantes y estado de llamada a la acción.
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final data = widget.challengeDoc.data();
 
     final title = (data['title'] as String?)?.trim().isNotEmpty == true
@@ -1145,6 +1146,14 @@ class _ChallengeCardState extends State<_ChallengeCard> {
     final participantsCount =
         (data['participantsCount'] as num?)?.toInt() ?? participants.length;
 
+    // Colores dinámicos para modo oscuro
+    final gradientStartColor = accent.withValues(alpha: isDark ? 0.08 : 0.10);
+    final gradientEndColor = isDark
+        ? Theme.of(context).colorScheme.surface
+        : Colors.white;
+    final borderColor = accent.withValues(alpha: isDark ? 0.25 : 0.30);
+    final shadowColor = accent.withValues(alpha: isDark ? 0.15 : 0.12);
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -1158,15 +1167,15 @@ class _ChallengeCardState extends State<_ChallengeCard> {
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: [accent.withValues(alpha: 0.10), Colors.white],
+              colors: [gradientStartColor, gradientEndColor],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: accent.withValues(alpha: 0.30)),
+            border: Border.all(color: borderColor),
             boxShadow: [
               BoxShadow(
-                color: accent.withValues(alpha: 0.12),
+                color: shadowColor,
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               ),
