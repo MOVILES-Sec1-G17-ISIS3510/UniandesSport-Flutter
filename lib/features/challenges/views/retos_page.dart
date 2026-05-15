@@ -1,14 +1,16 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
+import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
-import '../../../core/utils/step_sensor_service.dart';
 import '../../../core/constants/app_field_limits.dart';
+import '../../../core/constants/app_theme.dart';
+import '../../../core/utils/step_sensor_service.dart';
 import '../../../core/services/ttl_image_cache_service.dart';
 import '../../../core/local_storage/retos_local_storage_service.dart';
 import '../../../core/local_storage/database_helper.dart';
@@ -38,14 +40,14 @@ class _RetosPageState extends State<RetosPage>
   // UI filters
   String _selectedSportFilter = 'all';
   String _selectedTrackingFilter = 'all';
-  List<double> _ratingFilterOptions = const [0.0, 3.0, 4.0, 5.0];
+  final List<double> _ratingFilterOptions = const [0.0, 3.0, 4.0, 5.0];
   double _selectedMinRatingFilter = 0.0;
 
   // State flags
   bool _isCreatingChallenge = false;
-  bool _isCheckingConnectivity = true;
   bool _isLoadingCachedChallenges = false;
   bool _isOffline = false;
+  bool _isCheckingConnectivity = true;
 
   // Services and caches
   late final ChallengeRecommendationEngine _recommendationEngine;
@@ -93,22 +95,23 @@ class _RetosPageState extends State<RetosPage>
       if (mounted) {
         setState(() {
           _isOffline = nowOffline;
-          _isCheckingConnectivity = false;
         });
       }
       if (!nowOffline) {
-        // When back online, attempt to cache remote catalog
+        // When back online, attempt to cache remote catalog. Usamos un
+        // handler `then` marcado `async` que hace `await` internamente
+        // para cumplir el patrón "Future con handler + async/await".
         final docsFuture = FirebaseFirestore.instance
             .collection('challenges')
             .limit(200)
             .get();
-        docsFuture
-            .then(
-              (snap) => _localStorageService.cacheChallengeCatalogFromFirestore(
-                snap.docs,
-              ),
-            )
-            .ignore();
+        docsFuture.then((snap) async {
+          // Esperamos a que la persistencia local termine antes de
+          // continuar; esto facilita el manejo de errores y testing.
+          await _localStorageService.cacheChallengeCatalogFromFirestore(
+            snap.docs,
+          );
+        }).ignore();
       }
     });
 
@@ -124,6 +127,16 @@ class _RetosPageState extends State<RetosPage>
 
   @override
   bool get wantKeepAlive => true;
+
+  bool _isConnectivityOffline(Object result) {
+    if (result is List<ConnectivityResult>) {
+      return result.isEmpty || result.contains(ConnectivityResult.none);
+    }
+    if (result is ConnectivityResult) {
+      return result == ConnectivityResult.none;
+    }
+    return false;
+  }
 
   void _resetChallengeFilters() {
     setState(() {
@@ -141,10 +154,13 @@ class _RetosPageState extends State<RetosPage>
         'manual';
     final rating = (data['ratingAverage'] as num?)?.toDouble() ?? 0.0;
 
-    if (_selectedSportFilter != 'all' && sport != _selectedSportFilter)
+    if (_selectedSportFilter != 'all' && sport != _selectedSportFilter) {
       return false;
-    if (_selectedTrackingFilter != 'all' && tracking != _selectedTrackingFilter)
+    }
+    if (_selectedTrackingFilter != 'all' &&
+        tracking != _selectedTrackingFilter) {
       return false;
+    }
     if (rating < _selectedMinRatingFilter) return false;
     return true;
   }
@@ -157,7 +173,13 @@ class _RetosPageState extends State<RetosPage>
       'progress': (row['progress'] as num?)?.toDouble() ?? 0.0,
       'participantsCount': (row['participants_count'] as num?)?.toInt() ?? 0,
       'ratingAverage': (row['rating_average'] as num?)?.toDouble() ?? 0.0,
+      'ratingCount': (row['rating_count'] as num?)?.toInt() ?? 0,
       'trackingMode': row['tracking_mode']?.toString() ?? 'manual',
+      'goalLabel': row['goal_label']?.toString(),
+      'description': row['description']?.toString() ?? row['notes']?.toString(),
+      'difficulty': row['difficulty']?.toString(),
+      'reward': row['reward']?.toString(),
+      'stepGoal': (row['step_goal'] as num?)?.toInt(),
       'endDate': row['end_date'] != null
           ? DateTime.tryParse(row['end_date'] as String)
           : null,
@@ -176,7 +198,8 @@ class _RetosPageState extends State<RetosPage>
         'title': (data['title'] as String?) ?? data['goalLabel'] ?? 'Challenge',
         'sport': (data['sport'] as String?) ?? 'general',
         'progress':
-            (data['progressByUser']?[widget.profile.uid] as num?)?.toDouble() ??
+            ((data['progressByUser'] as Map?)?[widget.profile.uid] as num?)
+                ?.toDouble() ??
             0.0,
         'participantsCount':
             (data['participantsCount'] as num?)?.toInt() ??
@@ -184,8 +207,14 @@ class _RetosPageState extends State<RetosPage>
                 ? (data['participants'] as List).length
                 : 0),
         'ratingAverage': (data['ratingAverage'] as num?)?.toDouble() ?? 0.0,
+        'ratingCount': (data['ratingCount'] as num?)?.toInt() ?? 0,
         'trackingMode': (data['trackingMode'] as String?) ?? 'manual',
-        'endDate': (data['endDate'] as Timestamp?)?.toDate()?.toIso8601String(),
+        'goalLabel': (data['goalLabel'] as String?)?.trim(),
+        'description': (data['description'] as String?)?.trim(),
+        'difficulty': (data['difficulty'] as String?)?.trim(),
+        'reward': (data['reward'] as String?)?.trim(),
+        'stepGoal': (data['stepGoal'] as num?)?.toInt(),
+        'endDate': (data['endDate'] as Timestamp?)?.toDate().toIso8601String(),
         'isSynced': true,
       };
     }).toList();
@@ -228,98 +257,217 @@ class _RetosPageState extends State<RetosPage>
   }
 
   Widget _buildChallengeFilters(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            ChoiceChip(
-              label: const Text('All sports'),
-              selected: _selectedSportFilter == 'all',
-              onSelected: (_) => setState(() => _selectedSportFilter = 'all'),
-            ),
-            ChoiceChip(
-              label: const Text('Running'),
-              selected: _selectedSportFilter == 'running',
-              onSelected: (_) =>
-                  setState(() => _selectedSportFilter = 'running'),
-            ),
-            ChoiceChip(
-              label: const Text('Soccer'),
-              selected: _selectedSportFilter == 'soccer',
-              onSelected: (_) =>
-                  setState(() => _selectedSportFilter = 'soccer'),
-            ),
-            ChoiceChip(
-              label: const Text('Calisthenics'),
-              selected: _selectedSportFilter == 'calistenia',
-              onSelected: (_) =>
-                  setState(() => _selectedSportFilter = 'calistenia'),
-            ),
-            ChoiceChip(
-              label: const Text('Tennis'),
-              selected: _selectedSportFilter == 'tennis',
-              onSelected: (_) =>
-                  setState(() => _selectedSportFilter = 'tennis'),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            ChoiceChip(
-              label: const Text('All modes'),
-              selected: _selectedTrackingFilter == 'all',
-              onSelected: (_) =>
-                  setState(() => _selectedTrackingFilter = 'all'),
-            ),
-            ChoiceChip(
-              label: const Text('Manual'),
-              selected: _selectedTrackingFilter == 'manual',
-              onSelected: (_) =>
-                  setState(() => _selectedTrackingFilter = 'manual'),
-            ),
-            ChoiceChip(
-              label: const Text('Steps'),
-              selected: _selectedTrackingFilter == 'steps',
-              onSelected: (_) =>
-                  setState(() => _selectedTrackingFilter = 'steps'),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            Text(
-              'Rating',
-              style: Theme.of(
-                context,
-              ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800),
-            ),
-            for (final rating in _ratingFilterOptions)
-              ChoiceChip(
-                label: Text(
-                  rating == 0 ? 'Any' : '${rating.toStringAsFixed(0)}+',
-                ),
-                selected: _selectedMinRatingFilter == rating,
-                onSelected: (_) =>
-                    setState(() => _selectedMinRatingFilter = rating),
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: colorScheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.tune, color: colorScheme.primary, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                'Filtros',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
               ),
-            TextButton.icon(
-              onPressed: _resetChallengeFilters,
-              icon: const Icon(Icons.filter_alt_off),
-              label: const Text('Clear'),
-            ),
-          ],
-        ),
-      ],
+              const Spacer(),
+              TextButton.icon(
+                onPressed: _resetChallengeFilters,
+                icon: const Icon(Icons.filter_alt_off, size: 18),
+                label: const Text('Limpiar'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _FilterChoiceChip(
+                label: 'Todos',
+                selected: _selectedSportFilter == 'all',
+                onSelected: () => setState(() => _selectedSportFilter = 'all'),
+              ),
+              _FilterChoiceChip(
+                label: 'Running',
+                selected: _selectedSportFilter == 'running',
+                onSelected: () =>
+                    setState(() => _selectedSportFilter = 'running'),
+              ),
+              _FilterChoiceChip(
+                label: 'Soccer',
+                selected: _selectedSportFilter == 'soccer',
+                onSelected: () =>
+                    setState(() => _selectedSportFilter = 'soccer'),
+              ),
+              _FilterChoiceChip(
+                label: 'Calisthenics',
+                selected: _selectedSportFilter == 'calistenia',
+                onSelected: () =>
+                    setState(() => _selectedSportFilter = 'calistenia'),
+              ),
+              _FilterChoiceChip(
+                label: 'Tennis',
+                selected: _selectedSportFilter == 'tennis',
+                onSelected: () =>
+                    setState(() => _selectedSportFilter = 'tennis'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _FilterChoiceChip(
+                label: 'Todo modo',
+                selected: _selectedTrackingFilter == 'all',
+                onSelected: () =>
+                    setState(() => _selectedTrackingFilter = 'all'),
+              ),
+              _FilterChoiceChip(
+                label: 'Manual',
+                selected: _selectedTrackingFilter == 'manual',
+                onSelected: () =>
+                    setState(() => _selectedTrackingFilter = 'manual'),
+              ),
+              _FilterChoiceChip(
+                label: 'Pasos',
+                selected: _selectedTrackingFilter == 'steps',
+                onSelected: () =>
+                    setState(() => _selectedTrackingFilter = 'steps'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text(
+                'Rating',
+                style: Theme.of(
+                  context,
+                ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              for (final rating in _ratingFilterOptions)
+                _FilterChoiceChip(
+                  label: rating == 0
+                      ? 'Cualquiera'
+                      : '${rating.toStringAsFixed(0)}+',
+                  selected: _selectedMinRatingFilter == rating,
+                  onSelected: () =>
+                      setState(() => _selectedMinRatingFilter = rating),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChallengesHeader({
+    required int totalCount,
+    required int filteredCount,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final activeFilters = [
+      _selectedSportFilter != 'all',
+      _selectedTrackingFilter != 'all',
+      _selectedMinRatingFilter > 0,
+    ].where((isActive) => isActive).length;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: colorScheme.outlineVariant),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: AppTheme.teal.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(Icons.emoji_events, color: AppTheme.teal),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Retos activos',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Elige uno, mide tu avance y compite con la comunidad.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: _ChallengeStatTile(
+                  icon: Icons.flag_outlined,
+                  label: 'Disponibles',
+                  value: '$totalCount',
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _ChallengeStatTile(
+                  icon: Icons.search,
+                  label: 'Mostrando',
+                  value: '$filteredCount',
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _ChallengeStatTile(
+                  icon: Icons.filter_alt_outlined,
+                  label: 'Filtros',
+                  value: '$activeFilters',
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -339,8 +487,13 @@ class _RetosPageState extends State<RetosPage>
         padding: const EdgeInsets.all(16),
         children: [
           if (_isOffline) ...[_OfflineConnectionBanner()],
+          _buildChallengesHeader(
+            totalCount: liveDocs.length,
+            filteredCount: filteredDocs.length,
+          ),
+          const SizedBox(height: 12),
           _buildChallengeFilters(context),
-          const SizedBox(height: 16),
+          const SizedBox(height: 18),
           if (filteredDocs.isEmpty)
             const _InfoBox(text: 'No challenges match these filters.')
           else
@@ -708,30 +861,25 @@ class _TtlCachedReviewImageState extends State<_TtlCachedReviewImage> {
     if (isLoading || !hasFailed) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(10),
-        child: Image.network(
-          widget.imageUrl,
+        child: CachedNetworkImage(
+          imageUrl: widget.imageUrl,
           height: 120,
           width: double.infinity,
           fit: BoxFit.cover,
-          loadingBuilder: (context, child, loadingProgress) {
-            if (loadingProgress == null) return child;
-            return SizedBox(
-              height: 120,
-              child: ColoredBox(
-                color: surfaceColor,
-                child: const Center(child: CircularProgressIndicator()),
-              ),
-            );
-          },
-          errorBuilder: (context, error, stackTrace) {
-            return SizedBox(
-              height: 120,
-              child: ColoredBox(
-                color: surfaceColor,
-                child: const Center(child: Icon(Icons.broken_image_outlined)),
-              ),
-            );
-          },
+          placeholder: (context, url) => SizedBox(
+            height: 120,
+            child: ColoredBox(
+              color: surfaceColor,
+              child: const Center(child: CircularProgressIndicator()),
+            ),
+          ),
+          errorWidget: (context, url, error) => SizedBox(
+            height: 120,
+            child: ColoredBox(
+              color: surfaceColor,
+              child: const Center(child: Icon(Icons.broken_image_outlined)),
+            ),
+          ),
         ),
       );
     }
@@ -743,6 +891,130 @@ class _TtlCachedReviewImageState extends State<_TtlCachedReviewImage> {
         color: surfaceColor,
         alignment: Alignment.center,
         child: const Icon(Icons.broken_image_outlined),
+      ),
+    );
+  }
+}
+
+class _FilterChoiceChip extends StatelessWidget {
+  const _FilterChoiceChip({
+    required this.label,
+    required this.selected,
+    required this.onSelected,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return ChoiceChip(
+      label: Text(label),
+      selected: selected,
+      onSelected: (_) => onSelected(),
+      showCheckmark: false,
+      labelStyle: Theme.of(context).textTheme.labelSmall?.copyWith(
+        color: selected ? colorScheme.onPrimary : colorScheme.onSurfaceVariant,
+        fontWeight: FontWeight.w800,
+      ),
+      selectedColor: colorScheme.primary,
+      backgroundColor: colorScheme.surfaceContainerHighest.withValues(
+        alpha: 0.55,
+      ),
+      side: BorderSide(
+        color: selected ? colorScheme.primary : colorScheme.outlineVariant,
+      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+    );
+  }
+}
+
+class _ChallengeStatTile extends StatelessWidget {
+  const _ChallengeStatTile({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: colorScheme.primary),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w900,
+              height: 1,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.labelSmall,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ChallengeMetricPill extends StatelessWidget {
+  const _ChallengeMetricPill({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.18)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 15, color: color),
+          const SizedBox(width: 5),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: color,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -769,6 +1041,8 @@ class _ChallengeCard extends StatefulWidget {
 
 class _ChallengeCardState extends State<_ChallengeCard> {
   final DatabaseHelper _dbHelper = DatabaseHelper();
+  final RetosLocalStorageService _localStorageService =
+      RetosLocalStorageService();
   final SyncEngineService _syncEngine = SyncEngineService();
   bool _loading = false;
   bool _progressUpdating = false;
@@ -873,17 +1147,6 @@ class _ChallengeCardState extends State<_ChallengeCard> {
     return '$left days left';
   }
 
-  bool _isChallengeFinishedForUser({
-    required bool isJoined,
-    required double progress,
-    required DateTime? endDate,
-  }) {
-    if (!isJoined) return false;
-    if (progress >= 1.0) return true;
-    if (endDate == null) return false;
-    return endDate.isBefore(DateTime.now());
-  }
-
   Future<void> _openReviewDialog(String title) async {
     if (!mounted) return;
 
@@ -896,6 +1159,40 @@ class _ChallengeCardState extends State<_ChallengeCard> {
         );
       },
     );
+    if (mounted) setState(() {});
+  }
+
+  Future<List<Map<String, dynamic>>> _loadChallengeReviews() async {
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('challenges')
+          .doc(widget.challengeDoc.id)
+          .collection('reviews')
+          .orderBy('updatedAt', descending: true)
+          .limit(8)
+          .get();
+
+      await _localStorageService.cacheChallengeReviewsFromFirestore(
+        challengeId: widget.challengeDoc.id,
+        docs: snapshot.docs,
+      );
+    } catch (_) {
+      // Offline fallback reads whatever was cached locally.
+    }
+
+    final rows = await _localStorageService.loadChallengeReviewsFromSqlite(
+      widget.challengeDoc.id,
+    );
+    return rows.map((row) {
+      return {
+        'userName': row['user_name']?.toString() ?? 'Anonymous',
+        'comment': row['comment']?.toString() ?? '',
+        'rating': (row['rating'] as num?)?.toInt() ?? 0,
+        'imagePath': row['image_path']?.toString(),
+        'imageUrl': row['image_url']?.toString(),
+        'isSynced': (row['is_synced'] as int?) == 1,
+      };
+    }).toList();
   }
 
   Widget _buildRatingSummary({
@@ -945,13 +1242,7 @@ class _ChallengeCardState extends State<_ChallengeCard> {
     final sport = (data['sport'] as String?) ?? '';
     final ratingAverage = (data['ratingAverage'] as num?)?.toDouble() ?? 0.0;
     final ratingCount = (data['ratingCount'] as num?)?.toInt() ?? 0;
-    final reviewsFuture = FirebaseFirestore.instance
-        .collection('challenges')
-        .doc(widget.challengeDoc.id)
-        .collection('reviews')
-        .orderBy('updatedAt', descending: true)
-        .limit(8)
-        .get();
+    final reviewsFuture = _loadChallengeReviews();
 
     if (!mounted) return;
 
@@ -1057,20 +1348,18 @@ class _ChallengeCardState extends State<_ChallengeCard> {
                     const SizedBox(height: 6),
                     Text(reward, style: Theme.of(context).textTheme.bodyMedium),
                   ],
-                  if (canReview) ...[
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: () {
-                          Navigator.of(context).pop();
-                          _openReviewDialog(challengeTitle);
-                        },
-                        icon: const Icon(Icons.rate_review),
-                        label: const Text('Rate and review this challenge'),
-                      ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        _openReviewDialog(challengeTitle);
+                      },
+                      icon: const Icon(Icons.rate_review),
+                      label: const Text('Rate and review this challenge'),
                     ),
-                  ],
+                  ),
                   const SizedBox(height: 14),
                   Text(
                     'Reviews',
@@ -1079,7 +1368,7 @@ class _ChallengeCardState extends State<_ChallengeCard> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  FutureBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                  FutureBuilder<List<Map<String, dynamic>>>(
                     future: reviewsFuture,
                     builder: (context, snapshot) {
                       if (snapshot.connectionState == ConnectionState.waiting &&
@@ -1090,96 +1379,10 @@ class _ChallengeCardState extends State<_ChallengeCard> {
                         );
                       }
 
-                      final docs =
-                          snapshot.data?.docs ??
-                          const <QueryDocumentSnapshot<Map<String, dynamic>>>[];
-                      if (docs.isEmpty) {
-                        return Text(
-                          'No reviews yet. Be the first to rate this challenge.',
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        );
-                      }
-
-                      return Column(
-                        children: docs.map((doc) {
-                          final review = doc.data();
-                          final userName =
-                              (review['userName'] as String?)
-                                      ?.trim()
-                                      .isNotEmpty ==
-                                  true
-                              ? review['userName'] as String
-                              : 'Anonymous';
-                          final comment =
-                              (review['comment'] as String?)?.trim() ?? '';
-                          final imageUrl = (review['imageUrl'] as String?)
-                              ?.trim();
-                          final rating =
-                              ((review['rating'] as num?)?.toInt() ?? 0).clamp(
-                                0,
-                                5,
-                              );
-
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 10),
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .surfaceContainerHighest
-                                  .withValues(alpha: 0.4),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        userName,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .labelLarge
-                                            ?.copyWith(
-                                              fontWeight: FontWeight.w800,
-                                            ),
-                                      ),
-                                    ),
-                                    Row(
-                                      children: List.generate(5, (index) {
-                                        return Icon(
-                                          Icons.star,
-                                          size: 16,
-                                          color: rating > index
-                                              ? Colors.amber[700]
-                                              : Colors.grey[400],
-                                        );
-                                      }),
-                                    ),
-                                  ],
-                                ),
-                                if (comment.isNotEmpty) ...[
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    comment,
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.bodyMedium,
-                                  ),
-                                ],
-                                if (imageUrl != null &&
-                                    imageUrl.isNotEmpty) ...[
-                                  const SizedBox(height: 8),
-                                  _TtlCachedReviewImage(
-                                    imageUrl: imageUrl,
-                                    cache: widget.ttlImageCache,
-                                  ),
-                                ],
-                              ],
-                            ),
-                          );
-                        }).toList(),
+                      return _ReviewList(
+                        reviews:
+                            snapshot.data ?? const <Map<String, dynamic>>[],
+                        cache: widget.ttlImageCache,
                       );
                     },
                   ),
@@ -1448,6 +1651,7 @@ class _ChallengeCardState extends State<_ChallengeCard> {
   /// Renderiza una tarjeta de reto con progreso, participantes y estado de llamada a la acción.
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final data = widget.challengeDoc.data();
 
@@ -1486,37 +1690,38 @@ class _ChallengeCardState extends State<_ChallengeCard> {
         (data['participantsCount'] as num?)?.toInt() ?? participants.length;
 
     // Colores dinámicos para modo oscuro
-    final gradientStartColor = accent.withValues(alpha: isDark ? 0.08 : 0.10);
-    final gradientEndColor = isDark
-        ? Theme.of(context).colorScheme.surface
-        : Colors.white;
-    final borderColor = accent.withValues(alpha: isDark ? 0.25 : 0.30);
-    final shadowColor = accent.withValues(alpha: isDark ? 0.15 : 0.12);
+    final gradientStartColor = accent.withValues(alpha: isDark ? 0.12 : 0.14);
+    final gradientEndColor = isDark ? colorScheme.surface : Colors.white;
+    final borderColor = accent.withValues(alpha: isDark ? 0.32 : 0.24);
+    final shadowColor = isDark
+        ? accent.withValues(alpha: 0.18)
+        : Colors.black.withValues(alpha: 0.06);
+    final mutedTextColor = colorScheme.onSurfaceVariant;
 
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(22),
         onTap: () => _openChallengeDetails(
           data,
           canReview: canReview,
           challengeTitle: title,
         ),
         child: Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [gradientStartColor, gradientEndColor],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(22),
             border: Border.all(color: borderColor),
             boxShadow: [
               BoxShadow(
                 color: shadowColor,
-                blurRadius: 10,
-                offset: const Offset(0, 4),
+                blurRadius: 18,
+                offset: const Offset(0, 10),
               ),
             ],
           ),
@@ -1584,11 +1789,17 @@ class _ChallengeCardState extends State<_ChallengeCard> {
               ),
               const SizedBox(height: 10),
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  CircleAvatar(
-                    radius: 18,
-                    backgroundColor: accent.withValues(alpha: 0.15),
-                    child: Icon(_iconForSport(sport), color: accent),
+                  Container(
+                    width: 46,
+                    height: 46,
+                    decoration: BoxDecoration(
+                      color: accent.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: accent.withValues(alpha: 0.18)),
+                    ),
+                    child: Icon(_iconForSport(sport), color: accent, size: 26),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -1597,29 +1808,45 @@ class _ChallengeCardState extends State<_ChallengeCard> {
                       children: [
                         Text(
                           title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.titleSmall
-                              ?.copyWith(fontWeight: FontWeight.bold),
+                              ?.copyWith(
+                                fontWeight: FontWeight.w900,
+                                height: 1.15,
+                              ),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           _daysLeft(endDate),
-                          style: Theme.of(context).textTheme.bodySmall,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: mutedTextColor),
                         ),
                         const SizedBox(height: 4),
                         _buildRatingSummary(
                           context: context,
                           ratingAverage: ratingAverage,
                           ratingCount: ratingCount,
-                          color: Colors.grey[700],
+                          color: mutedTextColor,
                         ),
                       ],
                     ),
                   ),
-                  Text(
-                    '${(clampedProgress * 100).toStringAsFixed(0)}%',
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w800,
-                      color: accent,
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: accent.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '${(clampedProgress * 100).toStringAsFixed(0)}%',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w900,
+                        color: accent,
+                      ),
                     ),
                   ),
                 ],
@@ -1637,7 +1864,8 @@ class _ChallengeCardState extends State<_ChallengeCard> {
                             child: LinearProgressIndicator(
                               value: clampedProgress,
                               minHeight: 12,
-                              backgroundColor: Colors.grey[200],
+                              backgroundColor: colorScheme.outlineVariant
+                                  .withValues(alpha: 0.45),
                               valueColor: AlwaysStoppedAnimation(accent),
                             ),
                           ),
@@ -1731,32 +1959,33 @@ class _ChallengeCardState extends State<_ChallengeCard> {
                   child: LinearProgressIndicator(
                     value: clampedProgress,
                     minHeight: 10,
-                    backgroundColor: Colors.grey[200],
+                    backgroundColor: colorScheme.outlineVariant.withValues(
+                      alpha: 0.45,
+                    ),
                     valueColor: AlwaysStoppedAnimation(accent),
                   ),
                 ),
-              const SizedBox(height: 10),
-              Row(
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
                 children: [
-                  Icon(
-                    Icons.groups_2_outlined,
-                    size: 16,
-                    color: Colors.grey[600],
+                  _ChallengeMetricPill(
+                    icon: Icons.groups_2_outlined,
+                    label: '$participantsCount participantes',
+                    color: mutedTextColor,
                   ),
-                  const SizedBox(width: 6),
-                  Text(
-                    '$participantsCount participants',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Colors.grey[700],
-                      fontWeight: FontWeight.w600,
-                    ),
+                  _ChallengeMetricPill(
+                    icon: isStepTracking
+                        ? Icons.directions_walk
+                        : Icons.edit_note,
+                    label: isStepTracking ? 'Por pasos' : 'Manual',
+                    color: accent,
                   ),
-                  const Spacer(),
-                  Text(
-                    _daysLeft(endDate),
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodySmall?.copyWith(color: Colors.grey[700]),
+                  _ChallengeMetricPill(
+                    icon: Icons.schedule,
+                    label: _daysLeft(endDate),
+                    color: mutedTextColor,
                   ),
                 ],
               ),
@@ -1768,6 +1997,9 @@ class _ChallengeCardState extends State<_ChallengeCard> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: isJoined ? Colors.red[400] : accent,
                     minimumSize: const Size(0, 44),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
                     textStyle: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                   child: _loading
@@ -1779,7 +2011,7 @@ class _ChallengeCardState extends State<_ChallengeCard> {
                             color: Colors.white,
                           ),
                         )
-                      : Text(isJoined ? 'Leave challenge' : 'Join challenge'),
+                      : Text(isJoined ? 'Salir del reto' : 'Unirme al reto'),
                 ),
               ),
               if (canReview) ...[
@@ -1789,7 +2021,12 @@ class _ChallengeCardState extends State<_ChallengeCard> {
                   child: OutlinedButton.icon(
                     onPressed: () => _openReviewDialog(title),
                     icon: const Icon(Icons.rate_review),
-                    label: const Text('Rate challenge'),
+                    label: const Text('Calificar reto'),
+                    style: OutlinedButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -2010,52 +2247,177 @@ class _TopRatedChallengesSection extends StatelessWidget {
   }
 }
 
-/// Panel de acciones para la vista protegida sin conexión.
-class _OfflineRetosActionPanel extends StatelessWidget {
-  const _OfflineRetosActionPanel({required this.onRetry});
+Color _accentForCachedSport(String sport) {
+  switch (sport.toLowerCase()) {
+    case 'running':
+      return const Color(0xFF2E7DFA);
+    case 'futbol':
+    case 'soccer':
+    case 'football':
+      return const Color(0xFF2EAD67);
+    case 'calistenia':
+      return const Color(0xFFE88A1A);
+    case 'tennis':
+    case 'tenis':
+      return const Color(0xFFD2B125);
+    default:
+      return const Color(0xFF0C8E8B);
+  }
+}
 
-  final VoidCallback onRetry;
+String _sportLabelForCachedSport(String sport) {
+  switch (sport.toLowerCase()) {
+    case 'futbol':
+    case 'soccer':
+    case 'football':
+      return 'Soccer';
+    case 'running':
+      return 'Running';
+    case 'calistenia':
+      return 'Calisthenics';
+    case 'tennis':
+    case 'tenis':
+      return 'Tennis';
+    default:
+      return sport.trim().isEmpty ? 'General' : sport;
+  }
+}
+
+IconData _iconForCachedSport(String sport) {
+  switch (sport.toLowerCase()) {
+    case 'running':
+      return Icons.directions_run;
+    case 'futbol':
+    case 'soccer':
+    case 'football':
+      return Icons.sports_soccer;
+    case 'calistenia':
+      return Icons.fitness_center;
+    case 'tennis':
+    case 'tenis':
+      return Icons.sports_tennis;
+    default:
+      return Icons.emoji_events;
+  }
+}
+
+class _CachedRatingSummary extends StatelessWidget {
+  const _CachedRatingSummary({
+    required this.ratingAverage,
+    required this.ratingCount,
+  });
+
+  final double ratingAverage;
+  final int ratingCount;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    return Row(
+      children: [
+        Icon(Icons.star, size: 18, color: Colors.amber[700]),
+        const SizedBox(width: 4),
+        Text(
+          ratingCount > 0
+              ? '${ratingAverage.toStringAsFixed(1)} ($ratingCount)'
+              : 'No ratings yet',
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w700),
+        ),
+      ],
+    );
+  }
+}
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'No cached challenges yet',
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w800,
-            ),
+class _ReviewList extends StatelessWidget {
+  const _ReviewList({required this.reviews, required this.cache});
+
+  final List<Map<String, dynamic>> reviews;
+  final TtlImageCacheService cache;
+
+  @override
+  Widget build(BuildContext context) {
+    if (reviews.isEmpty) {
+      return Text(
+        'No reviews yet. Be the first to rate this challenge.',
+        style: Theme.of(context).textTheme.bodyMedium,
+      );
+    }
+
+    return Column(
+      children: reviews.map((review) {
+        final userName =
+            (review['userName'] as String?)?.trim().isNotEmpty == true
+            ? review['userName'] as String
+            : 'Anonymous';
+        final comment = (review['comment'] as String?)?.trim() ?? '';
+        final imageUrl = (review['imageUrl'] as String?)?.trim();
+        final imagePath = (review['imagePath'] as String?)?.trim();
+        final rating = ((review['rating'] as num?)?.toInt() ?? 0).clamp(0, 5);
+        final isSynced = review['isSynced'] == true;
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Theme.of(
+              context,
+            ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+            borderRadius: BorderRadius.circular(12),
           ),
-          const SizedBox(height: 8),
-          Text(
-            'If you open this tab with a connection at least once, the app will store the challenges in SQLite so you can browse them later without internet.',
-            style: theme.textTheme.bodyMedium,
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              FilledButton.icon(
-                onPressed: onRetry,
-                icon: const Icon(Icons.refresh),
-                label: const Text('Retry'),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      userName,
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  if (!isSynced) ...[
+                    const Icon(Icons.cloud_upload, size: 15),
+                    const SizedBox(width: 4),
+                  ],
+                  Row(
+                    children: List.generate(5, (index) {
+                      return Icon(
+                        Icons.star,
+                        size: 16,
+                        color: rating > index
+                            ? Colors.amber[700]
+                            : Colors.grey[400],
+                      );
+                    }),
+                  ),
+                ],
               ),
+              if (comment.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(comment, style: Theme.of(context).textTheme.bodyMedium),
+              ],
+              if (imagePath != null && imagePath.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Image.file(
+                    File(imagePath),
+                    height: 120,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              ] else if (imageUrl != null && imageUrl.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                _TtlCachedReviewImage(imageUrl: imageUrl, cache: cache),
+              ],
             ],
           ),
-        ],
-      ),
+        );
+      }).toList(),
     );
   }
 }
@@ -2064,13 +2426,13 @@ class _OfflineRetosActionPanel extends StatelessWidget {
 class _OfflineChallengeCard extends StatelessWidget {
   const _OfflineChallengeCard({
     required this.challenge,
-    required this.onSaveLocal,
     required this.onOpenDetails,
+    required this.onReview,
   });
 
   final Map<String, dynamic> challenge;
-  final VoidCallback onSaveLocal;
   final VoidCallback onOpenDetails;
+  final VoidCallback onReview;
 
   Color _accentForSport(String sport) {
     switch (sport.toLowerCase()) {
@@ -2167,149 +2529,134 @@ class _OfflineChallengeCard extends StatelessWidget {
         (challenge['participantsCount'] as num?)?.toInt() ?? 0;
     final ratingAverage =
         (challenge['ratingAverage'] as num?)?.toDouble() ?? 0.0;
-    final trackingMode = challenge['trackingMode']?.toString() ?? 'manual';
     final isSynced = challenge['isSynced'] == true;
 
     return Material(
       color: Colors.transparent,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [accent.withValues(alpha: 0.10), Colors.white],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: accent.withValues(alpha: 0.30)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: accent.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    _sportLabel(sport),
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: accent,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-                const Spacer(),
-                _buildSyncStatusChip(context, isSynced),
-              ],
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onOpenDetails,
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [accent.withValues(alpha: 0.10), Colors.white],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
             ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: 18,
-                  backgroundColor: accent.withValues(alpha: 0.15),
-                  child: Icon(_iconForSport(sport), color: accent),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        challenge['title']?.toString() ?? 'Challenge',
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Mode: $trackingMode',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
-                  ),
-                ),
-                Text(
-                  '${(progress * 100).toStringAsFixed(0)}%',
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    color: accent,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(999),
-              child: LinearProgressIndicator(
-                value: progress,
-                minHeight: 10,
-                backgroundColor: Colors.grey[200],
-                valueColor: AlwaysStoppedAnimation(accent),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: accent.withValues(alpha: 0.30)),
+            boxShadow: [
+              BoxShadow(
+                color: accent.withValues(alpha: 0.12),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
               ),
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Icon(
-                  Icons.groups_2_outlined,
-                  size: 16,
-                  color: Colors.grey[600],
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  '$participantsCount participants',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Colors.grey[700],
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const Spacer(),
-                Row(
-                  children: [
-                    Icon(Icons.star, size: 16, color: Colors.amber[700]),
-                    const SizedBox(width: 4),
-                    Text(
-                      ratingAverage > 0
-                          ? ratingAverage.toStringAsFixed(1)
-                          : 'No rating',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Colors.grey[700],
-                        fontWeight: FontWeight.w600,
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: accent.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      _sportLabel(sport),
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: accent,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: onOpenDetails,
-                    icon: const Icon(Icons.visibility),
-                    label: const Text('View details'),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: onSaveLocal,
-                    icon: const Icon(Icons.save),
-                    label: const Text('Save locally'),
+                  const Spacer(),
+                  _buildSyncStatusChip(context, isSynced),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  CircleAvatar(
+                    radius: 18,
+                    backgroundColor: accent.withValues(alpha: 0.15),
+                    child: Icon(_iconForSport(sport), color: accent),
                   ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          challenge['title']?.toString() ?? 'Challenge',
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Cached for offline access',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: 4),
+                        _CachedRatingSummary(
+                          ratingAverage: ratingAverage,
+                          ratingCount:
+                              (challenge['ratingCount'] as num?)?.toInt() ?? 0,
+                        ),
+                      ],
+                    ),
+                  ),
+                  Text(
+                    '${(progress * 100).toStringAsFixed(0)}%',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: accent,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(999),
+                child: LinearProgressIndicator(
+                  value: progress.clamp(0.0, 1.0),
+                  minHeight: 10,
+                  backgroundColor: Colors.grey[200],
+                  valueColor: AlwaysStoppedAnimation(accent),
                 ),
-              ],
-            ),
-          ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Icon(
+                    Icons.groups_2_outlined,
+                    size: 16,
+                    color: Colors.grey[600],
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    '$participantsCount participants',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Colors.grey[700],
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const Spacer(),
+                  OutlinedButton.icon(
+                    onPressed: onReview,
+                    icon: const Icon(Icons.rate_review),
+                    label: const Text('Rate'),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -12,6 +12,7 @@ import 'package:speech_to_text/speech_to_text.dart';
 
 import '../../../core/constants/app_field_limits.dart';
 import '../../../core/local_storage/database_helper.dart';
+import '../../../core/local_storage/retos_local_storage_service.dart';
 import '../../../core/network/sync_engine_service.dart';
 
 class ChallengeReviewDialog extends StatefulWidget {
@@ -30,6 +31,8 @@ class ChallengeReviewDialog extends StatefulWidget {
 
 class _ChallengeReviewDialogState extends State<ChallengeReviewDialog> {
   final DatabaseHelper _dbHelper = DatabaseHelper();
+  final RetosLocalStorageService _localStorageService =
+      RetosLocalStorageService();
   final SyncEngineService _syncEngine = SyncEngineService();
   final TextEditingController _commentController = TextEditingController();
   final ImagePicker _picker = ImagePicker();
@@ -130,7 +133,23 @@ class _ChallengeReviewDialogState extends State<ChallengeReviewDialog> {
         _commentController.text = existingComment;
       });
     } catch (_) {
-      // Non-blocking: users can still submit without preloading previous review.
+      final cachedRows = await _localStorageService.loadChallengeReviewsFromSqlite(
+        widget.challengeId,
+      );
+      Map<String, Object?>? cached;
+      for (final row in cachedRows) {
+        if (row['user_id']?.toString() == user.uid) {
+          cached = row;
+          break;
+        }
+      }
+
+      final cachedReview = cached;
+      if (cachedReview == null || !mounted) return;
+      setState(() {
+        _rating = ((cachedReview['rating'] as num?)?.toInt() ?? 0).clamp(0, 5);
+        _commentController.text = cachedReview['comment']?.toString() ?? '';
+      });
     }
   }
 
@@ -242,19 +261,23 @@ class _ChallengeReviewDialogState extends State<ChallengeReviewDialog> {
   }
 
   Future<String> _resolveUserName(String uid) async {
-    final userDoc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
-        .get();
+    try {
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get();
 
-    if (!userDoc.exists) {
-      return FirebaseAuth.instance.currentUser?.email ?? 'Anonymous';
-    }
+      if (!userDoc.exists) {
+        return FirebaseAuth.instance.currentUser?.email ?? 'Anonymous';
+      }
 
-    final data = userDoc.data() ?? const <String, dynamic>{};
-    final fullName = (data['fullName'] as String?)?.trim();
-    if (fullName != null && fullName.isNotEmpty) {
-      return fullName;
+      final data = userDoc.data() ?? const <String, dynamic>{};
+      final fullName = (data['fullName'] as String?)?.trim();
+      if (fullName != null && fullName.isNotEmpty) {
+        return fullName;
+      }
+    } catch (_) {
+      // Offline path: keep the review local and sync it later.
     }
 
     return FirebaseAuth.instance.currentUser?.email ?? 'Anonymous';
@@ -292,6 +315,7 @@ class _ChallengeReviewDialogState extends State<ChallengeReviewDialog> {
 
     try {
       final userName = await _resolveUserName(user.uid);
+      final now = DateTime.now();
       final payload = <String, dynamic>{
         'challengeId': widget.challengeId,
         'challengeTitle': widget.challengeTitle,
@@ -300,8 +324,19 @@ class _ChallengeReviewDialogState extends State<ChallengeReviewDialog> {
         'rating': _rating,
         'comment': comment,
         if (_selectedImage != null) 'imagePath': _selectedImage!.path,
-        'queuedAt': DateTime.now().toIso8601String(),
+        'queuedAt': now.toIso8601String(),
       };
+
+      await _localStorageService.saveChallengeReviewSnapshot(
+        challengeId: widget.challengeId,
+        userId: user.uid,
+        userName: userName,
+        rating: _rating,
+        comment: comment,
+        imagePath: _selectedImage?.path,
+        updatedAt: now,
+        isSynced: false,
+      );
 
       await _dbHelper.insert('sync_queue', {
         'event_id': widget.challengeId,
