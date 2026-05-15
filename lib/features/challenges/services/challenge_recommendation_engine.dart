@@ -3,7 +3,32 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../../core/constants/app_sports.dart';
 import '../../auth/models/user_profile.dart';
+import '../../../core/services/ttl_memory_cache_service.dart';
 
+/// Motor de recomendaciones y ranking de retos.
+///
+/// Este módulo expone tipos ligeros (`ChallengeRecommendation`,
+/// `ChallengeRankingInsights`) y la clase `ChallengeRecommendationEngine`
+/// que encapsula la lógica para:
+/// - Clasificar retos por relevancia para un usuario (`rankChallenges`).
+/// - Seleccionar los retos mejor valorados (`topRatedChallenges`).
+/// - Construir una recomendación simple que explique por qué un reto
+///   es adecuado para el usuario (`buildRecommendation`).
+///
+/// Rendimiento y concurrencia:
+/// - El cálculo pesado puede ejecutarse en un isolate con `compute()`
+///   (función `_computeChallengeInsights`) para no bloquear la UI.
+/// - Para evitar recalcular con frecuencia, se utiliza una caché en
+///   memoria (`TtlMemoryCacheService`) con TTL y LRU. La clave de caché
+///   incluye el `uid` del usuario, los ids de retos y el parámetro
+///   `topRatedMaxResults`.
+
+/// Resultado simple de recomendación para mostrar al usuario.
+///
+/// Contiene la referencia al reto recomendado (`challengeId`), un título
+/// amigable (`title`), la etiqueta del deporte (`sportLabel`) y una
+/// explicación breve (`reason`) que puede usarse en la UI para justificar
+/// la recomendación.
 class ChallengeRecommendation {
   final String challengeId;
   final String title;
@@ -18,6 +43,12 @@ class ChallengeRecommendation {
   });
 }
 
+/// Insights agregados tras computar el ranking de retos.
+///
+/// - `rankedIds`: lista de ids ordenada por relevancia.
+/// - `topRatedIds`: sublista de ids con mejores valoraciones (útil para
+///    secciones tipo "más valorados").
+/// - `recommendation`: recomendación puntual con una explicación.
 class ChallengeRankingInsights {
   final List<String> rankedIds;
   final List<String> topRatedIds;
@@ -29,6 +60,11 @@ class ChallengeRankingInsights {
     required this.recommendation,
   });
 
+  /// Construye un `ChallengeRankingInsights` a partir del `Map` que
+  /// produce `_computeChallengeInsights` (o la versión en isolate).
+  ///
+  /// Esta fábrica hace las conversiones de tipos y aplica valores por
+  /// defecto seguros si faltara algún campo.
   factory ChallengeRankingInsights.fromComputeResult(
     Map<String, dynamic> result,
   ) {
@@ -56,6 +92,18 @@ class ChallengeRankingInsights {
 class ChallengeRecommendationEngine {
   const ChallengeRecommendationEngine();
 
+  // Cache to avoid recomputing insights too often.
+  static final TtlMemoryCacheService _insightsCache = TtlMemoryCacheService(
+    defaultTtlMs: 2 * 60 * 1000,
+    maxEntries: 50,
+  );
+
+  /// Calcula los insights de retos para un usuario dado.
+  ///
+  /// Intenta primero obtener el resultado desde la caché en memoria para
+  /// evitar recomputaciones. Si no está en caché, lanza la computación a
+  /// un isolate con `compute()` (para no bloquear la UI). El resultado
+  /// se convierte a `ChallengeRankingInsights` usando la fábrica.
   Future<ChallengeRankingInsights> buildInsightsAsync({
     required List<QueryDocumentSnapshot<Map<String, dynamic>>> challenges,
     required UserProfile profile,
@@ -95,7 +143,31 @@ class ChallengeRecommendationEngine {
         }).toList(),
       };
 
+      // Construye una clave de caché sencilla basada en el usuario y los ids
+      // de los retos. Incluir `topRatedMaxResults` evita colisiones cuando
+      // el mismo conjunto de retos se consulta con parámetros distintos.
+      final ids = challenges.map((d) => d.id).join(',');
+      final cacheKey = 'insights_${profile.uid}_$ids\_${topRatedMaxResults}';
+
+      // Consulta la caché en memoria (LRU + TTL). Si el resultado existe
+      // y no ha expirado, lo reutilizamos inmediatamente.
+      final cached = _insightsCache.get(cacheKey);
+      if (cached is Map<String, dynamic>) {
+        return ChallengeRankingInsights.fromComputeResult(cached);
+      }
+
+      // Ejecuta la función pesada en un isolate para mantener la UI
+      // responsiva. `compute` recibe un `Map` serializable.
       final result = await compute(_computeChallengeInsights, payload);
+
+      // Intenta almacenar el resultado en caché. Se atrapa cualquier error
+      // silenciosamente para no romper la experiencia si la caché falla.
+      if (result is Map<String, dynamic>) {
+        try {
+          _insightsCache.put(cacheKey, result);
+        } catch (_) {}
+      }
+
       return ChallengeRankingInsights.fromComputeResult(result);
     } catch (_) {
       return _buildInsightsSync(
@@ -111,6 +183,9 @@ class ChallengeRecommendationEngine {
     required UserProfile profile,
     int topRatedMaxResults = 5,
   }) {
+    // Versión síncrona/alternativa que se usa como fallback si la
+    // computación en isolate lanza una excepción. Reusa las funciones
+    // puras `rankChallenges` y `topRatedChallenges`.
     final rankedDocs = rankChallenges(challenges: challenges, profile: profile);
     final topRatedDocs = topRatedChallenges(
       challenges: challenges,
@@ -133,6 +208,8 @@ class ChallengeRecommendationEngine {
     int maxResults = 4,
     int minReviews = 1,
   }) {
+    // Filtra por número mínimo de reseñas y ordena por puntuación y
+    // confianza (score que mezcla media y cantidad de reviews).
     if (challenges.isEmpty || maxResults <= 0) {
       return const [];
     }
@@ -179,6 +256,9 @@ class ChallengeRecommendationEngine {
     required List<QueryDocumentSnapshot<Map<String, dynamic>>> challenges,
     required UserProfile profile,
   }) {
+    // Ordena los retos aplicando el scoring por cada documento y luego
+    // ordenando por puntaje. En caso de empate se usan fechas de fin
+    // para priorizar retos con fecha más próxima.
     if (challenges.isEmpty) return const [];
 
     final scored = challenges
@@ -209,6 +289,10 @@ class ChallengeRecommendationEngine {
     required List<QueryDocumentSnapshot<Map<String, dynamic>>> challenges,
     required UserProfile profile,
   }) {
+    // Construye una recomendación textual simple basada en los dos
+    // motivos principales que mejor describen por qué el reto es
+    // recomendado (p. ej. coincide con deporte principal, es fácil,
+    // tiene buena valoración, etc.).
     if (challenges.isEmpty) return null;
 
     final scored =
@@ -220,6 +304,8 @@ class ChallengeRecommendationEngine {
     if (scored.isEmpty) return null;
     final best = scored.first;
 
+    // Lista de motivos (en inglés original) — aquí se eligen las dos
+    // causas más relevantes para formar una frase explicativa corta.
     final reasons = <String>[
       if (best.matchesMainSport) 'it matches your main sport',
       if (best.preferenceScore >= 0.5) 'it aligns with your interests',
@@ -247,6 +333,7 @@ class ChallengeRecommendationEngine {
   }) {
     final data = doc.data();
 
+    // Extrae campos básicos y normaliza valores.
     final sportRaw = (data['sport'] as String?)?.trim() ?? '';
     final sportKey = AppSports.normalizeSportKey(sportRaw);
     final sportLabel = AppSports.formatSportLabel(sportRaw);
@@ -257,6 +344,7 @@ class ChallengeRecommendationEngine {
               ? data['goalLabel'] as String
               : 'Challenge');
 
+    // Determina si el usuario ya participa y su progreso actual.
     final participants = List<String>.from(data['participants'] ?? const []);
     final isJoined = participants.contains(profile.uid);
 
@@ -271,6 +359,8 @@ class ChallengeRecommendationEngine {
         ? 30
         : endDate.difference(DateTime.now()).inDays;
 
+    // Preferencias del usuario para deportes; se intenta acceder por
+    // llave normalizada y por el nombre bruto como fallback.
     final prefs = profile.inferredPreferences ?? const <String, double>{};
     final preferenceScore = (prefs[sportKey] ?? prefs[sportRaw] ?? 0.0).clamp(
       0.0,
@@ -301,6 +391,7 @@ class ChallengeRecommendationEngine {
 
     final explicitDifficulty = ((data['difficulty'] as String?) ?? '')
         .toLowerCase();
+    // Mapea dificultad explícita a una heurística de "facilidad".
     final difficultyEase = switch (explicitDifficulty) {
       'easy' || 'facil' => 1.0,
       'medium' || 'intermedio' => 0.65,
@@ -311,6 +402,8 @@ class ChallengeRecommendationEngine {
     final easeScore =
         (0.50 * difficultyEase) + (0.30 * socialEase) + (0.20 * daysScore);
 
+    // Selecciona la estrategia de scoring según si el usuario ya está
+    // inscrito o tiene progreso en el reto (consistencia vs exploración).
     final strategy = _ChallengeScoringStrategyFactory.resolve(
       isJoined: isJoined,
       progress: userProgress,
@@ -372,6 +465,10 @@ class _ExplorationScoringStrategy implements _ChallengeScoringStrategy {
   }
 }
 
+/// Estrategia para usuarios que ya están involucrados en el reto.
+///
+/// Prioriza la continuidad (progreso acumulado) y la coherencia con
+/// la actividad previa del usuario, por eso aplica un `continuationBoost`.
 class _ConsistencyScoringStrategy implements _ChallengeScoringStrategy {
   const _ConsistencyScoringStrategy();
 
@@ -433,6 +530,21 @@ class _ScoredChallenge {
   });
 }
 
+/// Función pura que realiza el cálculo de insights a partir de un
+/// `payload` serializable. Está diseñada para ejecutarse en un isolate
+/// usando `compute()`.
+///
+/// Formato esperado del `payload`:
+/// - `mainSport`: String con el deporte principal del usuario (opcional).
+/// - `preferences`: Map<String,double> con preferencias por deporte.
+/// - `topRatedMaxResults`: int con el tamaño de la lista "top rated".
+/// - `challenges`: List<Map> con los campos mínimos por reto:
+///     - `id`, `title`, `goalLabel`, `sport`, `difficulty`, `endDateMs`,
+///       `ratingAverage`, `ratingCount`, `participantsCount`,
+///       `isJoined`, `userProgress`.
+///
+/// Salida: `Map<String,dynamic>` con llaves: `rankedIds`, `topRatedIds`,
+/// `recommendation` (o `null`).
 Map<String, dynamic> _computeChallengeInsights(Map<String, dynamic> payload) {
   final challenges = List<Map<String, dynamic>>.from(
     payload['challenges'] as List? ?? const [],

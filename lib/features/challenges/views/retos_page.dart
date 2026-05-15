@@ -6,8 +6,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../../core/constants/app_field_limits.dart';
+import '../../../core/constants/app_theme.dart';
 import '../../../core/utils/step_sensor_service.dart';
 import '../../../core/services/ttl_image_cache_service.dart';
 import '../../../core/local_storage/retos_local_storage_service.dart';
@@ -96,18 +98,20 @@ class _RetosPageState extends State<RetosPage>
         });
       }
       if (!nowOffline) {
-        // When back online, attempt to cache remote catalog
+        // When back online, attempt to cache remote catalog. Usamos un
+        // handler `then` marcado `async` que hace `await` internamente
+        // para cumplir el patrón "Future con handler + async/await".
         final docsFuture = FirebaseFirestore.instance
             .collection('challenges')
             .limit(200)
             .get();
-        docsFuture
-            .then(
-              (snap) => _localStorageService.cacheChallengeCatalogFromFirestore(
-                snap.docs,
-              ),
-            )
-            .ignore();
+        docsFuture.then((snap) async {
+          // Esperamos a que la persistencia local termine antes de
+          // continuar; esto facilita el manejo de errores y testing.
+          await _localStorageService.cacheChallengeCatalogFromFirestore(
+            snap.docs,
+          );
+        }).ignore();
       }
     });
 
@@ -253,98 +257,217 @@ class _RetosPageState extends State<RetosPage>
   }
 
   Widget _buildChallengeFilters(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            ChoiceChip(
-              label: const Text('All sports'),
-              selected: _selectedSportFilter == 'all',
-              onSelected: (_) => setState(() => _selectedSportFilter = 'all'),
-            ),
-            ChoiceChip(
-              label: const Text('Running'),
-              selected: _selectedSportFilter == 'running',
-              onSelected: (_) =>
-                  setState(() => _selectedSportFilter = 'running'),
-            ),
-            ChoiceChip(
-              label: const Text('Soccer'),
-              selected: _selectedSportFilter == 'soccer',
-              onSelected: (_) =>
-                  setState(() => _selectedSportFilter = 'soccer'),
-            ),
-            ChoiceChip(
-              label: const Text('Calisthenics'),
-              selected: _selectedSportFilter == 'calistenia',
-              onSelected: (_) =>
-                  setState(() => _selectedSportFilter = 'calistenia'),
-            ),
-            ChoiceChip(
-              label: const Text('Tennis'),
-              selected: _selectedSportFilter == 'tennis',
-              onSelected: (_) =>
-                  setState(() => _selectedSportFilter = 'tennis'),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            ChoiceChip(
-              label: const Text('All modes'),
-              selected: _selectedTrackingFilter == 'all',
-              onSelected: (_) =>
-                  setState(() => _selectedTrackingFilter = 'all'),
-            ),
-            ChoiceChip(
-              label: const Text('Manual'),
-              selected: _selectedTrackingFilter == 'manual',
-              onSelected: (_) =>
-                  setState(() => _selectedTrackingFilter = 'manual'),
-            ),
-            ChoiceChip(
-              label: const Text('Steps'),
-              selected: _selectedTrackingFilter == 'steps',
-              onSelected: (_) =>
-                  setState(() => _selectedTrackingFilter = 'steps'),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            Text(
-              'Rating',
-              style: Theme.of(
-                context,
-              ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800),
-            ),
-            for (final rating in _ratingFilterOptions)
-              ChoiceChip(
-                label: Text(
-                  rating == 0 ? 'Any' : '${rating.toStringAsFixed(0)}+',
-                ),
-                selected: _selectedMinRatingFilter == rating,
-                onSelected: (_) =>
-                    setState(() => _selectedMinRatingFilter = rating),
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: colorScheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.tune, color: colorScheme.primary, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                'Filtros',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
               ),
-            TextButton.icon(
-              onPressed: _resetChallengeFilters,
-              icon: const Icon(Icons.filter_alt_off),
-              label: const Text('Clear'),
-            ),
-          ],
-        ),
-      ],
+              const Spacer(),
+              TextButton.icon(
+                onPressed: _resetChallengeFilters,
+                icon: const Icon(Icons.filter_alt_off, size: 18),
+                label: const Text('Limpiar'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _FilterChoiceChip(
+                label: 'Todos',
+                selected: _selectedSportFilter == 'all',
+                onSelected: () => setState(() => _selectedSportFilter = 'all'),
+              ),
+              _FilterChoiceChip(
+                label: 'Running',
+                selected: _selectedSportFilter == 'running',
+                onSelected: () =>
+                    setState(() => _selectedSportFilter = 'running'),
+              ),
+              _FilterChoiceChip(
+                label: 'Soccer',
+                selected: _selectedSportFilter == 'soccer',
+                onSelected: () =>
+                    setState(() => _selectedSportFilter = 'soccer'),
+              ),
+              _FilterChoiceChip(
+                label: 'Calisthenics',
+                selected: _selectedSportFilter == 'calistenia',
+                onSelected: () =>
+                    setState(() => _selectedSportFilter = 'calistenia'),
+              ),
+              _FilterChoiceChip(
+                label: 'Tennis',
+                selected: _selectedSportFilter == 'tennis',
+                onSelected: () =>
+                    setState(() => _selectedSportFilter = 'tennis'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _FilterChoiceChip(
+                label: 'Todo modo',
+                selected: _selectedTrackingFilter == 'all',
+                onSelected: () =>
+                    setState(() => _selectedTrackingFilter = 'all'),
+              ),
+              _FilterChoiceChip(
+                label: 'Manual',
+                selected: _selectedTrackingFilter == 'manual',
+                onSelected: () =>
+                    setState(() => _selectedTrackingFilter = 'manual'),
+              ),
+              _FilterChoiceChip(
+                label: 'Pasos',
+                selected: _selectedTrackingFilter == 'steps',
+                onSelected: () =>
+                    setState(() => _selectedTrackingFilter = 'steps'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text(
+                'Rating',
+                style: Theme.of(
+                  context,
+                ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              for (final rating in _ratingFilterOptions)
+                _FilterChoiceChip(
+                  label: rating == 0
+                      ? 'Cualquiera'
+                      : '${rating.toStringAsFixed(0)}+',
+                  selected: _selectedMinRatingFilter == rating,
+                  onSelected: () =>
+                      setState(() => _selectedMinRatingFilter = rating),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChallengesHeader({
+    required int totalCount,
+    required int filteredCount,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final activeFilters = [
+      _selectedSportFilter != 'all',
+      _selectedTrackingFilter != 'all',
+      _selectedMinRatingFilter > 0,
+    ].where((isActive) => isActive).length;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: colorScheme.outlineVariant),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: AppTheme.teal.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(Icons.emoji_events, color: AppTheme.teal),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Retos activos',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Elige uno, mide tu avance y compite con la comunidad.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: _ChallengeStatTile(
+                  icon: Icons.flag_outlined,
+                  label: 'Disponibles',
+                  value: '$totalCount',
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _ChallengeStatTile(
+                  icon: Icons.search,
+                  label: 'Mostrando',
+                  value: '$filteredCount',
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _ChallengeStatTile(
+                  icon: Icons.filter_alt_outlined,
+                  label: 'Filtros',
+                  value: '$activeFilters',
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -364,8 +487,13 @@ class _RetosPageState extends State<RetosPage>
         padding: const EdgeInsets.all(16),
         children: [
           if (_isOffline) ...[_OfflineConnectionBanner()],
+          _buildChallengesHeader(
+            totalCount: liveDocs.length,
+            filteredCount: filteredDocs.length,
+          ),
+          const SizedBox(height: 12),
           _buildChallengeFilters(context),
-          const SizedBox(height: 16),
+          const SizedBox(height: 18),
           if (filteredDocs.isEmpty)
             const _InfoBox(text: 'No challenges match these filters.')
           else
@@ -733,30 +861,25 @@ class _TtlCachedReviewImageState extends State<_TtlCachedReviewImage> {
     if (isLoading || !hasFailed) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(10),
-        child: Image.network(
-          widget.imageUrl,
+        child: CachedNetworkImage(
+          imageUrl: widget.imageUrl,
           height: 120,
           width: double.infinity,
           fit: BoxFit.cover,
-          loadingBuilder: (context, child, loadingProgress) {
-            if (loadingProgress == null) return child;
-            return SizedBox(
-              height: 120,
-              child: ColoredBox(
-                color: surfaceColor,
-                child: const Center(child: CircularProgressIndicator()),
-              ),
-            );
-          },
-          errorBuilder: (context, error, stackTrace) {
-            return SizedBox(
-              height: 120,
-              child: ColoredBox(
-                color: surfaceColor,
-                child: const Center(child: Icon(Icons.broken_image_outlined)),
-              ),
-            );
-          },
+          placeholder: (context, url) => SizedBox(
+            height: 120,
+            child: ColoredBox(
+              color: surfaceColor,
+              child: const Center(child: CircularProgressIndicator()),
+            ),
+          ),
+          errorWidget: (context, url, error) => SizedBox(
+            height: 120,
+            child: ColoredBox(
+              color: surfaceColor,
+              child: const Center(child: Icon(Icons.broken_image_outlined)),
+            ),
+          ),
         ),
       );
     }
@@ -768,6 +891,130 @@ class _TtlCachedReviewImageState extends State<_TtlCachedReviewImage> {
         color: surfaceColor,
         alignment: Alignment.center,
         child: const Icon(Icons.broken_image_outlined),
+      ),
+    );
+  }
+}
+
+class _FilterChoiceChip extends StatelessWidget {
+  const _FilterChoiceChip({
+    required this.label,
+    required this.selected,
+    required this.onSelected,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return ChoiceChip(
+      label: Text(label),
+      selected: selected,
+      onSelected: (_) => onSelected(),
+      showCheckmark: false,
+      labelStyle: Theme.of(context).textTheme.labelSmall?.copyWith(
+        color: selected ? colorScheme.onPrimary : colorScheme.onSurfaceVariant,
+        fontWeight: FontWeight.w800,
+      ),
+      selectedColor: colorScheme.primary,
+      backgroundColor: colorScheme.surfaceContainerHighest.withValues(
+        alpha: 0.55,
+      ),
+      side: BorderSide(
+        color: selected ? colorScheme.primary : colorScheme.outlineVariant,
+      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+    );
+  }
+}
+
+class _ChallengeStatTile extends StatelessWidget {
+  const _ChallengeStatTile({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: colorScheme.primary),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w900,
+              height: 1,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.labelSmall,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ChallengeMetricPill extends StatelessWidget {
+  const _ChallengeMetricPill({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.18)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 15, color: color),
+          const SizedBox(width: 5),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: color,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1404,6 +1651,7 @@ class _ChallengeCardState extends State<_ChallengeCard> {
   /// Renderiza una tarjeta de reto con progreso, participantes y estado de llamada a la acción.
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final data = widget.challengeDoc.data();
 
@@ -1442,37 +1690,38 @@ class _ChallengeCardState extends State<_ChallengeCard> {
         (data['participantsCount'] as num?)?.toInt() ?? participants.length;
 
     // Colores dinámicos para modo oscuro
-    final gradientStartColor = accent.withValues(alpha: isDark ? 0.08 : 0.10);
-    final gradientEndColor = isDark
-        ? Theme.of(context).colorScheme.surface
-        : Colors.white;
-    final borderColor = accent.withValues(alpha: isDark ? 0.25 : 0.30);
-    final shadowColor = accent.withValues(alpha: isDark ? 0.15 : 0.12);
+    final gradientStartColor = accent.withValues(alpha: isDark ? 0.12 : 0.14);
+    final gradientEndColor = isDark ? colorScheme.surface : Colors.white;
+    final borderColor = accent.withValues(alpha: isDark ? 0.32 : 0.24);
+    final shadowColor = isDark
+        ? accent.withValues(alpha: 0.18)
+        : Colors.black.withValues(alpha: 0.06);
+    final mutedTextColor = colorScheme.onSurfaceVariant;
 
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(22),
         onTap: () => _openChallengeDetails(
           data,
           canReview: canReview,
           challengeTitle: title,
         ),
         child: Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [gradientStartColor, gradientEndColor],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(22),
             border: Border.all(color: borderColor),
             boxShadow: [
               BoxShadow(
                 color: shadowColor,
-                blurRadius: 10,
-                offset: const Offset(0, 4),
+                blurRadius: 18,
+                offset: const Offset(0, 10),
               ),
             ],
           ),
@@ -1540,11 +1789,17 @@ class _ChallengeCardState extends State<_ChallengeCard> {
               ),
               const SizedBox(height: 10),
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  CircleAvatar(
-                    radius: 18,
-                    backgroundColor: accent.withValues(alpha: 0.15),
-                    child: Icon(_iconForSport(sport), color: accent),
+                  Container(
+                    width: 46,
+                    height: 46,
+                    decoration: BoxDecoration(
+                      color: accent.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: accent.withValues(alpha: 0.18)),
+                    ),
+                    child: Icon(_iconForSport(sport), color: accent, size: 26),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -1553,29 +1808,45 @@ class _ChallengeCardState extends State<_ChallengeCard> {
                       children: [
                         Text(
                           title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.titleSmall
-                              ?.copyWith(fontWeight: FontWeight.bold),
+                              ?.copyWith(
+                                fontWeight: FontWeight.w900,
+                                height: 1.15,
+                              ),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           _daysLeft(endDate),
-                          style: Theme.of(context).textTheme.bodySmall,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: mutedTextColor),
                         ),
                         const SizedBox(height: 4),
                         _buildRatingSummary(
                           context: context,
                           ratingAverage: ratingAverage,
                           ratingCount: ratingCount,
-                          color: Colors.grey[700],
+                          color: mutedTextColor,
                         ),
                       ],
                     ),
                   ),
-                  Text(
-                    '${(clampedProgress * 100).toStringAsFixed(0)}%',
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w800,
-                      color: accent,
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: accent.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '${(clampedProgress * 100).toStringAsFixed(0)}%',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w900,
+                        color: accent,
+                      ),
                     ),
                   ),
                 ],
@@ -1593,7 +1864,8 @@ class _ChallengeCardState extends State<_ChallengeCard> {
                             child: LinearProgressIndicator(
                               value: clampedProgress,
                               minHeight: 12,
-                              backgroundColor: Colors.grey[200],
+                              backgroundColor: colorScheme.outlineVariant
+                                  .withValues(alpha: 0.45),
                               valueColor: AlwaysStoppedAnimation(accent),
                             ),
                           ),
@@ -1687,32 +1959,33 @@ class _ChallengeCardState extends State<_ChallengeCard> {
                   child: LinearProgressIndicator(
                     value: clampedProgress,
                     minHeight: 10,
-                    backgroundColor: Colors.grey[200],
+                    backgroundColor: colorScheme.outlineVariant.withValues(
+                      alpha: 0.45,
+                    ),
                     valueColor: AlwaysStoppedAnimation(accent),
                   ),
                 ),
-              const SizedBox(height: 10),
-              Row(
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
                 children: [
-                  Icon(
-                    Icons.groups_2_outlined,
-                    size: 16,
-                    color: Colors.grey[600],
+                  _ChallengeMetricPill(
+                    icon: Icons.groups_2_outlined,
+                    label: '$participantsCount participantes',
+                    color: mutedTextColor,
                   ),
-                  const SizedBox(width: 6),
-                  Text(
-                    '$participantsCount participants',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Colors.grey[700],
-                      fontWeight: FontWeight.w600,
-                    ),
+                  _ChallengeMetricPill(
+                    icon: isStepTracking
+                        ? Icons.directions_walk
+                        : Icons.edit_note,
+                    label: isStepTracking ? 'Por pasos' : 'Manual',
+                    color: accent,
                   ),
-                  const Spacer(),
-                  Text(
-                    _daysLeft(endDate),
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodySmall?.copyWith(color: Colors.grey[700]),
+                  _ChallengeMetricPill(
+                    icon: Icons.schedule,
+                    label: _daysLeft(endDate),
+                    color: mutedTextColor,
                   ),
                 ],
               ),
@@ -1724,6 +1997,9 @@ class _ChallengeCardState extends State<_ChallengeCard> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: isJoined ? Colors.red[400] : accent,
                     minimumSize: const Size(0, 44),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
                     textStyle: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                   child: _loading
@@ -1735,7 +2011,7 @@ class _ChallengeCardState extends State<_ChallengeCard> {
                             color: Colors.white,
                           ),
                         )
-                      : Text(isJoined ? 'Leave challenge' : 'Join challenge'),
+                      : Text(isJoined ? 'Salir del reto' : 'Unirme al reto'),
                 ),
               ),
               if (canReview) ...[
@@ -1745,7 +2021,12 @@ class _ChallengeCardState extends State<_ChallengeCard> {
                   child: OutlinedButton.icon(
                     onPressed: () => _openReviewDialog(title),
                     icon: const Icon(Icons.rate_review),
-                    label: const Text('Rate challenge'),
+                    label: const Text('Calificar reto'),
+                    style: OutlinedButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
                   ),
                 ),
               ],
