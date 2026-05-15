@@ -14,7 +14,7 @@ class DatabaseHelper {
   DatabaseHelper._internal();
 
   static const String _dbName = 'uniandes_sport.db';
-  static const int _dbVersion = 7;
+  static const int _dbVersion = 6;
 
   Database? _database;
 
@@ -83,31 +83,6 @@ class DatabaseHelper {
 
     // Tabla `coaches_cache` para almacenamiento offline-first y caché con TTL
     // de la lista de coaches y del coach destacado del mes.
-    await db.execute('''
-      CREATE TABLE coaches_cache(
-        id TEXT PRIMARY KEY,
-<<<<<<< HEAD
-        title TEXT NOT NULL,
-        sport TEXT NOT NULL,
-        progress REAL NOT NULL,
-        notes TEXT,
-        tracking_mode TEXT,
-        step_goal INTEGER,
-        rating_average REAL,
-        rating_count INTEGER,
-        participants_count INTEGER,
-        goal_label TEXT,
-        description TEXT,
-        difficulty TEXT,
-        reward TEXT,
-        created_by TEXT,
-        end_date TEXT,
-        status TEXT,
-        updated_at TEXT NOT NULL,
-        is_synced INTEGER NOT NULL
-      )
-    ''');
-
     await db.execute('''
       CREATE TABLE challenge_reviews(
         id TEXT PRIMARY KEY,
@@ -234,29 +209,6 @@ class DatabaseHelper {
     if (oldVersion < 6) {
       await _addColumnIfMissing(db, 'sync_queue', 'payload', 'TEXT');
     }
-
-    if (oldVersion < 7) {
-      await _addColumnIfMissing(
-        db,
-        'challenge_snapshots',
-        'rating_count',
-        'INTEGER',
-      );
-      await db.execute('''
-        CREATE TABLE IF NOT EXISTS challenge_reviews(
-          id TEXT PRIMARY KEY,
-          challenge_id TEXT NOT NULL,
-          user_id TEXT NOT NULL,
-          user_name TEXT NOT NULL,
-          rating INTEGER NOT NULL,
-          comment TEXT NOT NULL,
-          image_path TEXT,
-          image_url TEXT,
-          updated_at TEXT NOT NULL,
-          is_synced INTEGER NOT NULL
-        )
-      ''');
-    }
   }
 
   Future<void> _addColumnIfMissing(
@@ -268,22 +220,7 @@ class DatabaseHelper {
     try {
       await db.execute('ALTER TABLE $table ADD COLUMN $column $columnType');
     } catch (_) {
-      // Si la columna ya existe, SQLite lanza error y continuamos sin romper la app.
-        CREATE TABLE IF NOT EXISTS coaches_cache(
-          id TEXT PRIMARY KEY,
-          data TEXT NOT NULL,
-          is_coach_of_month INTEGER NOT NULL DEFAULT 0,
-          cached_at INTEGER NOT NULL
-        )
-      ''');
-    }
-    if (oldVersion < 4) {
-      // Índice retroactivo para installs que ya tenían coaches_cache
-      // en v3 sin índice.
-      await db.execute('''
-        CREATE INDEX IF NOT EXISTS idx_coaches_cache_coach_of_month
-          ON coaches_cache(is_coach_of_month)
-      ''');
+      // Si la columna ya existe, SQLite lanza error; ignoramos y continuamos.
     }
   }
 

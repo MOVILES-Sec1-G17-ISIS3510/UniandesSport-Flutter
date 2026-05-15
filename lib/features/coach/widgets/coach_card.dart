@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
+<<<<<<< HEAD
+import 'package:uniandessport_flutter/core/network/analytics_service.dart';
+import 'package:uniandessport_flutter/features/coach/models/coach_model.dart';
+=======
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:uniandessport_flutter/core/network/analytics_service.dart';
 import 'package:uniandessport_flutter/features/coach/models/coach_model.dart';
 import 'package:uniandessport_flutter/features/coach/services/favorite_coaches_service.dart';
+>>>>>>> aac6a6346603852f5f806105d16c150fd5feea31
 import 'package:uniandessport_flutter/features/coach/widgets/coach_dialog.dart';
 import 'package:uniandessport_flutter/features/coach/views/coach_map_page.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -179,6 +184,8 @@ class CoachCard extends StatelessWidget {
                 icon: const Icon(Icons.map_outlined),
               ),
               const SizedBox(width: 8),
+<<<<<<< HEAD
+=======
               // Favorito (Hive box reactivo): ValueListenableBuilder se
               // resuscribe al box `favorite_coaches` y el icono cambia
               // automáticamente cuando se hace toggle, sin setState.
@@ -210,6 +217,7 @@ class CoachCard extends StatelessWidget {
                 },
               ),
               const SizedBox(width: 8),
+>>>>>>> aac6a6346603852f5f806105d16c150fd5feea31
               Container(
                 decoration: BoxDecoration(
                   color: colorScheme.tertiaryContainer,

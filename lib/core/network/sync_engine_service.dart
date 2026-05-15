@@ -35,10 +35,14 @@ class SyncEngineService {
   /// Inicializa el escucha de conectividad. Llamar desde el arranque de la app (por ejemplo en main).
   void initialize() {
     _connectivitySub ??= Connectivity().onConnectivityChanged.listen((results) {
-      if (!_hasConnection(results)) {
+      final hasConnection = _hasConnection(results);
+      _isConnected = hasConnection;
+
+      if (!hasConnection) {
         return;
       }
-      processQueue();
+
+      processQueue(forceRetry: true);
     });
 
     _periodicSyncTimer ??= Timer.periodic(_periodicSyncInterval, (_) {
@@ -52,8 +56,11 @@ class SyncEngineService {
   Future<void> _trySyncPendingQueue() async {
     try {
       final connectivity = await Connectivity().checkConnectivity();
-      if (!_hasConnection(connectivity)) return;
-      await processQueue();
+      final hasConnection = _hasConnection(connectivity);
+      _isConnected = hasConnection;
+      if (!hasConnection) return;
+
+      await processQueue(forceRetry: true);
     } catch (_) {
       // Si falla la verificación de conectividad, no rompemos el ciclo.
     }
@@ -63,18 +70,23 @@ class SyncEngineService {
     return results.isNotEmpty && !results.contains(ConnectivityResult.none);
   }
 
-  Future<void> processQueue() async {
+  Future<void> processQueue({bool forceRetry = false}) async {
     if (_isProcessing) return;
     _isProcessing = true;
 
     try {
       final now = DateTime.now().millisecondsSinceEpoch;
 
-      // Solo procesar tareas que su timestamp sea <= now (las programadas para ahora o antes).
+      // Cuando la conexión vuelve, reintentamos de inmediato incluso si el último intento
+      // fue reprogramado con backoff por una desconexión temporal.
       final pending = await _dbHelper.query(
         'sync_queue',
-        where: '(status = ? OR status = ?) AND timestamp <= ?',
-        whereArgs: ['pending', 'failed', now],
+        where: forceRetry
+            ? '(status = ? OR status = ?)'
+            : '(status = ? OR status = ?) AND timestamp <= ?',
+        whereArgs: forceRetry
+            ? ['pending', 'failed']
+            : ['pending', 'failed', now],
         orderBy: 'timestamp ASC',
       );
 
@@ -558,16 +570,6 @@ class SyncEngineService {
         'updatedAt': FieldValue.serverTimestamp(),
       });
     });
-
-    await _dbHelper.update(
-      'challenge_reviews',
-      {
-        'is_synced': 1,
-        if (uploadedImageUrl != null) 'image_url': uploadedImageUrl,
-      },
-      'challenge_id = ? AND user_id = ?',
-      [challengeId, userId],
-    );
 
     return true;
   }

@@ -57,6 +57,19 @@ class _RetosPageState extends State<RetosPage>
   StreamSubscription<dynamic>? _connectivitySub;
   List<Map<String, dynamic>> _cachedChallengeRows = [];
 
+  final int _defaultStepGoal = 8000;
+
+  bool _isOfflineResult(dynamic result) {
+    if (result is List<ConnectivityResult>) {
+      if (result.isEmpty) return true;
+      return result.contains(ConnectivityResult.none);
+    }
+    if (result is ConnectivityResult) {
+      return result == ConnectivityResult.none;
+    }
+    return false;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -68,12 +81,13 @@ class _RetosPageState extends State<RetosPage>
     // Start connectivity check
     Connectivity().checkConnectivity().then((result) {
       setState(() {
-        _isOffline = _isConnectivityOffline(result);
+        _isOffline = _isOfflineResult(result);
+        _isCheckingConnectivity = false;
       });
     });
 
     _connectivitySub = Connectivity().onConnectivityChanged.listen((result) {
-      final nowOffline = _isConnectivityOffline(result);
+      final nowOffline = _isOfflineResult(result);
       if (mounted) {
         setState(() {
           _isOffline = nowOffline;
@@ -220,8 +234,20 @@ class _RetosPageState extends State<RetosPage>
   Future<void> _retryConnectivity() async {
     final connectivity = await Connectivity().checkConnectivity();
     if (mounted) {
-      setState(() => _isOffline = _isConnectivityOffline(connectivity));
+      setState(() {
+        _isOffline = _isOfflineResult(connectivity);
+      });
     }
+  }
+
+  bool _shouldTrackStepsByDefault({
+    String? sport,
+    String? goalText,
+    String? descriptionText,
+  }) {
+    final s = (sport ?? '').toLowerCase();
+    if (s.contains('run') || s == 'running') return true;
+    return false;
   }
 
   Widget _buildChallengeFilters(BuildContext context) {
@@ -320,25 +346,12 @@ class _RetosPageState extends State<RetosPage>
     );
   }
 
-  Widget _buildLiveChallengeList(
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+  Widget _buildUnifiedChallengeList(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> liveDocs,
   ) {
-    final filteredDocs = docs
+    final filteredDocs = liveDocs
         .where((doc) => _matchesChallengeFilters(doc.data()))
         .toList();
-    final rankedDocs = _recommendationEngine.rankChallenges(
-      challenges: filteredDocs,
-      profile: widget.profile,
-    );
-    final topRatedDocs = _recommendationEngine.topRatedChallenges(
-      challenges: filteredDocs,
-      maxResults: 5,
-    );
-    final recommendation = _recommendationEngine.buildRecommendation(
-      challenges: rankedDocs,
-      profile: widget.profile,
-    );
-    final recommendedId = recommendation?.challengeId;
 
     return RefreshIndicator(
       onRefresh: () async {
@@ -348,24 +361,13 @@ class _RetosPageState extends State<RetosPage>
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          if (_isOffline) ...[
-            const _OfflineConnectionBanner(),
-            const SizedBox(height: 14),
-          ],
+          if (_isOffline) ...[_OfflineConnectionBanner()],
           _buildChallengeFilters(context),
-          if (recommendation != null) ...[
-            const SizedBox(height: 14),
-            _ChallengeRecommendationBox(recommendation: recommendation),
-          ],
-          if (topRatedDocs.isNotEmpty) ...[
-            const SizedBox(height: 14),
-            _TopRatedChallengesSection(challengeDocs: topRatedDocs),
-          ],
-          const SizedBox(height: 14),
-          if (rankedDocs.isEmpty)
+          const SizedBox(height: 16),
+          if (filteredDocs.isEmpty)
             const _InfoBox(text: 'No challenges match these filters.')
           else
-            ...rankedDocs.map(
+            ...filteredDocs.map(
               (doc) => Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: _ChallengeCard(
@@ -373,229 +375,6 @@ class _RetosPageState extends State<RetosPage>
                   userId: widget.profile.uid,
                   stepSensorService: _stepSensorService,
                   ttlImageCache: _ttlImageCache,
-                  isRecommended: doc.id == recommendedId,
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _openOfflineChallengeDetails(Map<String, dynamic> challenge) {
-    final title = challenge['title']?.toString() ?? 'Challenge';
-    final challengeId = challenge['id']?.toString() ?? '';
-    final sport = challenge['sport']?.toString() ?? 'general';
-    final description = challenge['description']?.toString();
-    final goalLabel = challenge['goalLabel']?.toString();
-    final reward = challenge['reward']?.toString();
-    final difficulty = challenge['difficulty']?.toString();
-    final trackingMode = challenge['trackingMode']?.toString();
-    final stepGoal = (challenge['stepGoal'] as num?)?.toInt();
-    final ratingAverage =
-        (challenge['ratingAverage'] as num?)?.toDouble() ?? 0.0;
-    final ratingCount = (challenge['ratingCount'] as num?)?.toInt() ?? 0;
-
-    return showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(18, 18, 18, 24),
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const _OfflineConnectionBanner(),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Icon(
-                      _iconForCachedSport(sport),
-                      color: _accentForCachedSport(sport),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(_sportLabelForCachedSport(sport)),
-                    const Spacer(),
-                    IconButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(Icons.close),
-                    ),
-                  ],
-                ),
-                Text(
-                  title,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
-                ),
-                const SizedBox(height: 8),
-                _CachedRatingSummary(
-                  ratingAverage: ratingAverage,
-                  ratingCount: ratingCount,
-                ),
-                if (difficulty != null && difficulty.isNotEmpty) ...[
-                  const SizedBox(height: 6),
-                  Text('Difficulty: $difficulty'),
-                ],
-                if (trackingMode == 'steps') ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    stepGoal == null
-                        ? 'Tracking: Step sensor'
-                        : 'Tracking: Step sensor ($stepGoal steps goal)',
-                  ),
-                ],
-                const SizedBox(height: 14),
-                Text(
-                  'Description',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  (description != null && description.isNotEmpty)
-                      ? description
-                      : 'This challenge does not have a detailed description yet.',
-                ),
-                if (goalLabel != null && goalLabel.isNotEmpty) ...[
-                  const SizedBox(height: 14),
-                  Text(
-                    'Goal',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(goalLabel),
-                ],
-                if (reward != null && reward.isNotEmpty) ...[
-                  const SizedBox(height: 14),
-                  Text(
-                    'Reward',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(reward),
-                ],
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                      _openOfflineReviewDialog(challenge);
-                    },
-                    icon: const Icon(Icons.rate_review),
-                    label: const Text('Rate and review this challenge'),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  'Reviews',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                FutureBuilder<List<Map<String, dynamic>>>(
-                  future: _loadCachedReviews(challengeId),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting &&
-                        !snapshot.hasData) {
-                      return const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 6),
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      );
-                    }
-                    return _ReviewList(
-                      reviews: snapshot.data ?? const <Map<String, dynamic>>[],
-                      cache: _ttlImageCache,
-                    );
-                  },
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _openOfflineReviewDialog(Map<String, dynamic> challenge) async {
-    final challengeId = challenge['id']?.toString();
-    if (challengeId == null || challengeId.isEmpty) return;
-
-    await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        return ChallengeReviewDialog(
-          challengeId: challengeId,
-          challengeTitle: challenge['title']?.toString() ?? 'Challenge',
-        );
-      },
-    );
-    if (mounted) setState(() {});
-  }
-
-  Future<List<Map<String, dynamic>>> _loadCachedReviews(
-    String challengeId,
-  ) async {
-    final rows = await _localStorageService.loadChallengeReviewsFromSqlite(
-      challengeId,
-    );
-    return rows.map(_mapReviewRow).toList();
-  }
-
-  Map<String, dynamic> _mapReviewRow(Map<String, Object?> row) {
-    return {
-      'userName': row['user_name']?.toString() ?? 'Anonymous',
-      'comment': row['comment']?.toString() ?? '',
-      'rating': (row['rating'] as num?)?.toInt() ?? 0,
-      'imagePath': row['image_path']?.toString(),
-      'imageUrl': row['image_url']?.toString(),
-      'isSynced': (row['is_synced'] as int?) == 1,
-    };
-  }
-
-  Widget _buildOfflineChallengeList() {
-    if (_isLoadingCachedChallenges) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    final filteredRows = _cachedChallengeRows
-        .where(_matchesChallengeFilters)
-        .toList();
-
-    return RefreshIndicator(
-      onRefresh: () async {
-        await _retryConnectivity();
-        await _loadCachedChallenges();
-      },
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          const _OfflineConnectionBanner(),
-          const SizedBox(height: 14),
-          _buildChallengeFilters(context),
-          const SizedBox(height: 14),
-          if (filteredRows.isEmpty)
-            const _InfoBox(text: 'No cached challenges match these filters.')
-          else
-            ...filteredRows.map(
-              (challenge) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: _OfflineChallengeCard(
-                  challenge: challenge,
-                  onOpenDetails: () => _openOfflineChallengeDetails(challenge),
-                  onReview: () => _openOfflineReviewDialog(challenge),
                 ),
               ),
             ),
@@ -616,23 +395,35 @@ class _RetosPageState extends State<RetosPage>
             : () => _createChallengeSimple(context),
         child: const Icon(Icons.add),
       ),
-      body: _isOffline
-          ? _buildOfflineChallengeList()
+      body: _isCheckingConnectivity
+          ? const Center(child: CircularProgressIndicator())
           : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
               stream: _challengesStream,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting &&
                     !snapshot.hasData) {
+                  if (_cachedChallengeRows.isNotEmpty) {
+                    return _buildUnifiedChallengeList(
+                      snapshot.data?.docs ?? widget.challengeDocs,
+                    );
+                  }
                   return const Center(child: CircularProgressIndicator());
                 }
 
-                if (snapshot.hasError) {
+                if (_isOffline && _cachedChallengeRows.isEmpty) {
+                  return ListView(
+                    padding: const EdgeInsets.all(16),
+                    children: const [_InfoBox(text: 'Sin conexión')],
+                  );
+                }
+
+                if (snapshot.hasError && _cachedChallengeRows.isEmpty) {
                   return ListView(
                     padding: const EdgeInsets.all(16),
                     children: [
                       _InfoBox(
                         text:
-                            'Could not load challenges from Firebase: ${snapshot.error}',
+                            'Could not load challenges. Check your connection.',
                       ),
                     ],
                   );
@@ -644,7 +435,7 @@ class _RetosPageState extends State<RetosPage>
                   _cacheLiveChallenges(docs);
                 }
 
-                if (docs.isEmpty) {
+                if (docs.isEmpty && _cachedChallengeRows.isEmpty) {
                   return ListView(
                     padding: const EdgeInsets.all(16),
                     children: const [
@@ -653,82 +444,199 @@ class _RetosPageState extends State<RetosPage>
                   );
                 }
 
-                return _buildLiveChallengeList(docs);
+                return _buildUnifiedChallengeList(docs);
               },
             ),
     );
   }
 
   Future<void> _createChallengeSimple(BuildContext context) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final controller = TextEditingController();
+    final titleController = TextEditingController();
+    final goalController = TextEditingController();
+    final descriptionController = TextEditingController();
     final formKey = GlobalKey<FormState>();
+    String selectedSport = 'running';
+    bool useStepTracking = false;
 
     await showDialog<void>(
       context: context,
-      builder: (dctx) => AlertDialog(
-        title: const Text('Create challenge'),
-        content: Form(
-          key: formKey,
-          child: TextFormField(
-            controller: controller,
-            decoration: const InputDecoration(labelText: 'Title'),
-            validator: (v) => (v ?? '').trim().isEmpty ? 'Required' : null,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              if (!formKey.currentState!.validate()) return;
-              Navigator.of(dctx).pop();
-              setState(() => _isCreatingChallenge = true);
-              try {
-                final connectivity = await Connectivity().checkConnectivity();
-                final wasOfflineAtSubmit = _isConnectivityOffline(connectivity);
-                if (mounted) {
-                  setState(() => _isOffline = wasOfflineAtSubmit);
-                }
-
-                await _challengeRepository.createChallengeLocalFirst(
-                  title: controller.text.trim(),
-                  sport: 'running',
-                  description: '',
-                  goal: 'Complete the goal',
-                  endDate: DateTime.now().add(const Duration(days: 30)),
-                  createdBy: widget.profile.uid,
-                  useStepTracking: false,
-                  difficulty: null,
-                  reward: '',
-                );
-                await _loadCachedChallenges();
-                if (mounted) {
-                  messenger.showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        wasOfflineAtSubmit
-                            ? 'No hay conexión. El reto quedó encolado y se subirá cuando vuelva internet.'
-                            : 'Challenge created successfully.',
+      builder: (dctx) {
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            return AlertDialog(
+              title: const Text('Crear reto (offline-first)'),
+              content: SingleChildScrollView(
+                child: Form(
+                  key: formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextFormField(
+                        controller: titleController,
+                        maxLength: AppFieldLimits.challengeTitle,
+                        inputFormatters: [
+                          LengthLimitingTextInputFormatter(
+                            AppFieldLimits.challengeTitle,
+                          ),
+                        ],
+                        decoration: const InputDecoration(labelText: 'Nombre'),
+                        validator: (v) {
+                          final value = (v ?? '').trim();
+                          if (value.isEmpty) return 'El nombre es obligatorio';
+                          if (value.length <
+                              AppValidationRules.challengeTitleMinLength) {
+                            return 'Nombre muy corto';
+                          }
+                          return null;
+                        },
                       ),
-                    ),
-                  );
-                }
-              } catch (e) {
-                if (mounted) {
-                  messenger.showSnackBar(SnackBar(content: Text('Error: $e')));
-                }
-              } finally {
-                if (mounted) setState(() => _isCreatingChallenge = false);
-              }
-            },
-            child: const Text('Create'),
-          ),
-        ],
-      ),
+                      TextFormField(
+                        controller: goalController,
+                        maxLength: AppFieldLimits.challengeGoal,
+                        inputFormatters: [
+                          LengthLimitingTextInputFormatter(
+                            AppFieldLimits.challengeGoal,
+                          ),
+                        ],
+                        decoration: const InputDecoration(
+                          labelText: 'Info del reto',
+                          hintText: 'Qué se debe lograr',
+                        ),
+                        validator: (v) {
+                          final value = (v ?? '').trim();
+                          if (value.isEmpty)
+                            return 'La info del reto es obligatoria';
+                          if (value.length <
+                              AppValidationRules.challengeGoalMinLength) {
+                            return 'La info del reto es muy corta';
+                          }
+                          return null;
+                        },
+                      ),
+                      TextFormField(
+                        controller: descriptionController,
+                        maxLength: AppFieldLimits.challengeDescription,
+                        inputFormatters: [
+                          LengthLimitingTextInputFormatter(
+                            AppFieldLimits.challengeDescription,
+                          ),
+                        ],
+                        minLines: 2,
+                        maxLines: 4,
+                        decoration: const InputDecoration(
+                          labelText: 'Descripción',
+                          hintText: 'Describe reglas o contexto del reto',
+                        ),
+                        validator: (v) {
+                          final value = (v ?? '').trim();
+                          if (value.isEmpty)
+                            return 'La descripción es obligatoria';
+                          if (value.length <
+                              AppValidationRules
+                                  .challengeDescriptionMinLength) {
+                            return 'La descripción es muy corta';
+                          }
+                          return null;
+                        },
+                      ),
+                      DropdownButtonFormField<String>(
+                        initialValue: selectedSport,
+                        decoration: const InputDecoration(labelText: 'Deporte'),
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'running',
+                            child: Text('Running'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'soccer',
+                            child: Text('Soccer'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'calistenia',
+                            child: Text('Calisthenics'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'tennis',
+                            child: Text('Tennis'),
+                          ),
+                        ],
+                        onChanged: (value) {
+                          if (value == null) return;
+                          setDialogState(() => selectedSport = value);
+                        },
+                      ),
+                      SwitchListTile.adaptive(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Usar sensor de pasos'),
+                        subtitle: Text(
+                          useStepTracking
+                              ? 'Este reto sincronizará progreso con pasos.'
+                              : 'El progreso se actualizará manualmente.',
+                        ),
+                        value: useStepTracking,
+                        onChanged: (value) {
+                          setDialogState(() => useStepTracking = value);
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dctx).pop(),
+                  child: const Text('Cancelar'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    if (!formKey.currentState!.validate()) return;
+                    Navigator.of(dctx).pop();
+                    setState(() => _isCreatingChallenge = true);
+                    try {
+                      await _challengeRepository.createChallengeLocalFirst(
+                        title: titleController.text.trim(),
+                        sport: selectedSport,
+                        description: descriptionController.text.trim(),
+                        goal: goalController.text.trim(),
+                        endDate: DateTime.now().add(const Duration(days: 30)),
+                        createdBy: widget.profile.uid,
+                        useStepTracking: useStepTracking,
+                        stepGoal: useStepTracking ? _defaultStepGoal : null,
+                        difficulty: null,
+                        reward: null,
+                      );
+                      await _loadCachedChallenges();
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Reto creado localmente y encolado para sincronización.',
+                            ),
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(
+                          context,
+                        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+                      }
+                    } finally {
+                      if (mounted) setState(() => _isCreatingChallenge = false);
+                    }
+                  },
+                  child: const Text('Crear'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
+
+    titleController.dispose();
+    goalController.dispose();
+    descriptionController.dispose();
   }
 }
 
@@ -889,6 +797,32 @@ class _ChallengeCardState extends State<_ChallengeCard> {
   final SyncEngineService _syncEngine = SyncEngineService();
   bool _loading = false;
   bool _progressUpdating = false;
+  bool _loadingDeviceSteps = false;
+  int? _deviceSteps;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshDeviceSteps();
+  }
+
+  Future<void> _refreshDeviceSteps() async {
+    final data = widget.challengeDoc.data();
+    if (!_isStepTrackingMode(data)) return;
+
+    if (mounted) {
+      setState(() {
+        _loadingDeviceSteps = true;
+      });
+    }
+
+    final steps = await widget.stepSensorService.getCurrentTotalSteps();
+    if (!mounted) return;
+    setState(() {
+      _deviceSteps = steps;
+      _loadingDeviceSteps = false;
+    });
+  }
 
   bool _isStepTrackingMode(Map<String, dynamic> data) {
     final trackingMode = (data['trackingMode'] as String?)?.toLowerCase();
@@ -1395,6 +1329,7 @@ class _ChallengeCardState extends State<_ChallengeCard> {
       if (mounted) {
         setState(() => _progressUpdating = false);
       }
+      _refreshDeviceSteps();
     }
   }
 
@@ -1711,6 +1646,37 @@ class _ChallengeCardState extends State<_ChallengeCard> {
                         ),
                       ),
                     ),
+                    if (isStepTracking) ...[
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Icon(Icons.directions_walk, size: 16, color: accent),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              _loadingDeviceSteps
+                                  ? 'Leyendo pasos del dispositivo...'
+                                  : (_deviceSteps == null
+                                        ? 'No se pudieron leer pasos del dispositivo.'
+                                        : 'Pasos actuales del dispositivo: $_deviceSteps (disponible también offline)'),
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.onSurfaceVariant,
+                                  ),
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Actualizar pasos',
+                            onPressed: _loadingDeviceSteps
+                                ? null
+                                : _refreshDeviceSteps,
+                            icon: const Icon(Icons.refresh, size: 18),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
                 )
               else
@@ -1806,6 +1772,40 @@ class _InfoBox extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(text),
+    );
+  }
+}
+
+/// Widget banner que indica que no hay conexión disponible.
+class _OfflineConnectionBanner extends StatelessWidget {
+  const _OfflineConnectionBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF4D6),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE3B341)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.wifi_off, color: Color(0xFF8A5A00)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'No hay conexión. Los cambios se sincronizarán cuando vuelva internet.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: const Color(0xFF6B4700),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
