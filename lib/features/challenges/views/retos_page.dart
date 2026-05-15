@@ -7,6 +7,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../core/constants/app_field_limits.dart';
 import '../../../core/utils/step_sensor_service.dart';
 import '../../../core/services/ttl_image_cache_service.dart';
 import '../../../core/local_storage/retos_local_storage_service.dart';
@@ -44,6 +45,7 @@ class _RetosPageState extends State<RetosPage>
   bool _isCreatingChallenge = false;
   bool _isLoadingCachedChallenges = false;
   bool _isOffline = false;
+  bool _isCheckingConnectivity = true;
 
   // Services and caches
   late final ChallengeRecommendationEngine _recommendationEngine;
@@ -2015,38 +2017,6 @@ IconData _iconForCachedSport(String sport) {
       return Icons.sports_tennis;
     default:
       return Icons.emoji_events;
-  }
-}
-
-class _OfflineConnectionBanner extends StatelessWidget {
-  const _OfflineConnectionBanner();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFF4D6),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE3B341)),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.wifi_off, color: Color(0xFF8A5A00)),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'No hay conexión. Puedes ver retos cacheados, crear retos y escribir reviews; se sincronizarán cuando vuelva internet.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: const Color(0xFF6B4700),
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }
 

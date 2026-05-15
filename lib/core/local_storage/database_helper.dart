@@ -14,7 +14,7 @@ class DatabaseHelper {
   DatabaseHelper._internal();
 
   static const String _dbName = 'uniandes_sport.db';
-  static const int _dbVersion = 6;
+  static const int _dbVersion = 7;
 
   Database? _database;
 
@@ -81,8 +81,7 @@ class DatabaseHelper {
       )
     ''');
 
-    // Tabla `coaches_cache` para almacenamiento offline-first y caché con TTL
-    // de la lista de coaches y del coach destacado del mes.
+    // Tabla `challenge_reviews` para reseñas locales de retos.
     await db.execute('''
       CREATE TABLE challenge_reviews(
         id TEXT PRIMARY KEY,
@@ -96,7 +95,13 @@ class DatabaseHelper {
         updated_at TEXT NOT NULL,
         is_synced INTEGER NOT NULL
       )
-=======
+    ''');
+
+    // Tabla `coaches_cache` para almacenamiento offline-first y caché con TTL
+    // de la lista de coaches y del coach destacado del mes.
+    await db.execute('''
+      CREATE TABLE coaches_cache(
+        id TEXT PRIMARY KEY,
         data TEXT NOT NULL,
         is_coach_of_month INTEGER NOT NULL DEFAULT 0,
         cached_at INTEGER NOT NULL
@@ -109,7 +114,6 @@ class DatabaseHelper {
     await db.execute('''
       CREATE INDEX idx_coaches_cache_coach_of_month
         ON coaches_cache(is_coach_of_month)
->>>>>>> 1d8ff5875b3fd8a861d63beca74efefb3aa0ad52
     ''');
   }
 
@@ -208,6 +212,37 @@ class DatabaseHelper {
 
     if (oldVersion < 6) {
       await _addColumnIfMissing(db, 'sync_queue', 'payload', 'TEXT');
+    }
+
+    if (oldVersion < 7) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS challenge_reviews(
+          id TEXT PRIMARY KEY,
+          challenge_id TEXT NOT NULL,
+          user_id TEXT NOT NULL,
+          user_name TEXT NOT NULL,
+          rating INTEGER NOT NULL,
+          comment TEXT NOT NULL,
+          image_path TEXT,
+          image_url TEXT,
+          updated_at TEXT NOT NULL,
+          is_synced INTEGER NOT NULL
+        )
+      ''');
+
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS coaches_cache(
+          id TEXT PRIMARY KEY,
+          data TEXT NOT NULL,
+          is_coach_of_month INTEGER NOT NULL DEFAULT 0,
+          cached_at INTEGER NOT NULL
+        )
+      ''');
+
+      await db.execute('''
+        CREATE INDEX IF NOT EXISTS idx_coaches_cache_coach_of_month
+          ON coaches_cache(is_coach_of_month)
+      ''');
     }
   }
 
